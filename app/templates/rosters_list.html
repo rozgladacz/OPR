@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Rozpiski - OPR{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>Rozpiski</h2>
+  <a class="btn btn-primary" href="/rosters/new">Nowa rozpiska</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <h4>Moje</h4>
+    <div class="list-group">
+      {% for roster in mine %}
+      <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="/rosters/{{ roster.id }}">
+        <span>{{ roster.name }} – {{ roster.army.name }}</span>
+        <span class="badge bg-info">{{ roster.points_limit or 'brak' }} pkt</span>
+      </a>
+      {% else %}
+      <div class="list-group-item text-muted">Brak własnych rozpisek</div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <h4>Globalne</h4>
+    <div class="list-group">
+      {% for roster in global_items %}
+      <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="/rosters/{{ roster.id }}">
+        <span>{{ roster.name }} – {{ roster.army.name }}</span>
+        <span class="badge bg-info">{{ roster.points_limit or 'brak' }} pkt</span>
+      </a>
+      {% else %}
+      <div class="list-group-item text-muted">Brak globalnych rozpisek</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

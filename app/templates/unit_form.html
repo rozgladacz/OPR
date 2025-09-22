@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Edycja jednostki - {{ unit.name }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Edycja jednostki</h5>
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label" for="name">Nazwa</label>
+            <input class="form-control" id="name" name="name" value="{{ unit.name }}" required />
+          </div>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label" for="quality">Quality</label>
+              <input class="form-control" id="quality" name="quality" type="number" min="2" max="6" value="{{ unit.quality }}" required />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="defense">Defense</label>
+              <input class="form-control" id="defense" name="defense" type="number" min="2" max="6" value="{{ unit.defense }}" required />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="toughness">Toughness</label>
+              <input class="form-control" id="toughness" name="toughness" type="number" min="1" value="{{ unit.toughness }}" required />
+            </div>
+          </div>
+          <div class="mb-3 mt-3">
+            <label class="form-label" for="default_weapon_id">Domyślna broń</label>
+            <select class="form-select" id="default_weapon_id" name="default_weapon_id">
+              <option value="">-</option>
+              {% for weapon in weapons %}
+              <option value="{{ weapon.id }}" {% if unit.default_weapon_id == weapon.id %}selected{% endif %}>{{ weapon.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="flags">Flagi</label>
+            <input class="form-control" id="flags" name="flags" value="{{ unit.flags }}" />
+          </div>
+          <p class="text-muted">Zdolności jednostki zostaną rozbudowane w kolejnych iteracjach.</p>
+          <button class="btn btn-primary" type="submit">Zapisz</button>
+          <a class="btn btn-secondary" href="/armies/{{ army.id }}">Anuluj</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

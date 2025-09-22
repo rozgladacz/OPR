@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Do druku - {{ roster.name }}{% endblock %}
+{% block content %}
+<div class="print-header mb-4">
+  <h1>{{ roster.name }}</h1>
+  <p>Armia: {{ roster.army.name }} | Limit: {{ roster.points_limit or 'brak' }} | Suma: {{ total_cost }}</p>
+  <p>Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC</p>
+</div>
+
+<div class="row row-cols-1 row-cols-md-2 g-4">
+  {% for ru in roster.roster_units %}
+  <div class="col">
+    <div class="card roster-card h-100">
+      <div class="card-body">
+        <h5 class="card-title">{{ ru.unit.name }} × {{ ru.count }}</h5>
+        <p class="card-text">Q{{ ru.unit.quality }} / D{{ ru.unit.defense }} / T{{ ru.unit.toughness }}</p>
+        <p class="card-text">Broń: {{ ru.selected_weapon.name if ru.selected_weapon else ru.unit.default_weapon.name if ru.unit.default_weapon else '-' }}</p>
+        <p class="card-text">Koszt pozycji: {{ ru.cached_cost }}</p>
+        {% if ru.unit.flags %}
+        <p class="card-text"><strong>Flagi:</strong> {{ ru.unit.flags }}</p>
+        {% endif %}
+        {% if ru.unit.abilities %}
+        <p class="card-text"><strong>Zdolności:</strong>
+          {% for link in ru.unit.abilities %}
+            {{ link.ability.name }}{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="print-footer mt-4">
+  <h3>Suma punktów: {{ total_cost }}{% if roster.points_limit %} / {{ roster.points_limit }}{% endif %}</h3>
+</div>
+{% endblock %}

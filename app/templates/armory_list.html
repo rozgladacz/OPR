@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Zbrojownia - OPR{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>Zbrojownia</h2>
+  <a class="btn btn-primary" href="/armory/new">Nowa broń</a>
+</div>
+
+<h4>Moje</h4>
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>Nazwa</th>
+      <th>Zasięg</th>
+      <th>Ataki</th>
+      <th>AP</th>
+      <th>Koszt</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for weapon in mine %}
+    <tr>
+      <td>{{ weapon.name }}</td>
+      <td>{{ weapon.range }}</td>
+      <td>{{ weapon.attacks }}</td>
+      <td>{{ weapon.ap }}</td>
+      <td>{{ weapon.cached_cost or '-' }}</td>
+      <td>
+        <div class="btn-group btn-group-sm">
+          <a class="btn btn-outline-secondary" href="/armory/{{ weapon.id }}/edit">Edytuj</a>
+          <form method="post" action="/armory/{{ weapon.id }}/delete" onsubmit="return confirm('Usunąć broń?');">
+            <button class="btn btn-outline-danger" type="submit">Usuń</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="text-muted">Brak własnych wpisów</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h4>Globalne</h4>
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>Nazwa</th>
+      <th>Zasięg</th>
+      <th>Ataki</th>
+      <th>AP</th>
+      <th>Koszt</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for weapon in global_items %}
+    <tr>
+      <td>{{ weapon.name }}</td>
+      <td>{{ weapon.range }}</td>
+      <td>{{ weapon.attacks }}</td>
+      <td>{{ weapon.ap }}</td>
+      <td>{{ weapon.cached_cost or '-' }}</td>
+      <td>
+        <a class="btn btn-sm btn-outline-secondary" href="/armory/{{ weapon.id }}/edit">Podgląd</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="text-muted">Brak globalnych wpisów</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
