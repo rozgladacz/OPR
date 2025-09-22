@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Rozpiska {{ roster.name }} - OPR{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>Rozpiska: {{ roster.name }}</h2>
+  <div>
+    <a class="btn btn-outline-secondary" href="/rosters">Wróć</a>
+    <a class="btn btn-success" href="/rosters/{{ roster.id }}/print" target="_blank">Widok do druku</a>
+    <a class="btn btn-outline-success" href="/rosters/{{ roster.id }}/pdf">Pobierz PDF</a>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h5 class="card-title">Informacje</h5>
+    <form method="post" action="/rosters/{{ roster.id }}/update" class="row g-3 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label" for="name">Nazwa</label>
+        <input class="form-control" id="name" name="name" value="{{ roster.name }}" required />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Armia</label>
+        <input class="form-control" value="{{ roster.army.name }}" disabled />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="points_limit">Limit</label>
+        <input class="form-control" id="points_limit" name="points_limit" type="number" value="{{ roster.points_limit }}" />
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary" type="submit">Zapisz</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">Dodaj jednostkę</h5>
+        <form method="post" action="/rosters/{{ roster.id }}/units/add">
+          <div class="mb-3">
+            <label class="form-label" for="unit_id">Jednostka</label>
+            <select class="form-select" id="unit_id" name="unit_id" required>
+              {% for unit in available_units %}
+              <option value="{{ unit.id }}">{{ unit.name }} (Q{{ unit.quality }}/D{{ unit.defense }}/T{{ unit.toughness }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="count">Ilość</label>
+              <input class="form-control" id="count" name="count" type="number" min="1" value="1" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="selected_weapon_id">Broń</label>
+              <select class="form-select" id="selected_weapon_id" name="selected_weapon_id">
+                <option value="">Domyślna</option>
+                {% for weapon in weapons %}
+                <option value="{{ weapon.id }}">{{ weapon.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-success mt-3" type="submit">Dodaj</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">Twoja rozpiska</h5>
+        <p>Suma punktów: <strong>{{ total_cost }}</strong>{% if roster.points_limit %} / {{ roster.points_limit }}{% endif %}</p>
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Jednostka</th>
+              <th>Ilość</th>
+              <th>Broń</th>
+              <th>Koszt</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ru in roster.roster_units %}
+            <tr>
+              <td>{{ ru.unit.name }}</td>
+              <td>
+                <form method="post" action="/rosters/{{ roster.id }}/units/{{ ru.id }}/update" class="d-flex gap-2">
+                  <input class="form-control form-control-sm" name="count" type="number" min="1" value="{{ ru.count }}" />
+                  <select class="form-select form-select-sm" name="selected_weapon_id">
+                    <option value="">Domyślna</option>
+                    {% for weapon in weapons %}
+                    <option value="{{ weapon.id }}" {% if weapon.id == ru.selected_weapon_id %}selected{% endif %}>{{ weapon.name }}</option>
+                    {% endfor %}
+                  </select>
+                  <button class="btn btn-sm btn-primary" type="submit">Aktualizuj</button>
+                </form>
+              </td>
+              <td>{{ ru.selected_weapon.name if ru.selected_weapon else ru.unit.default_weapon.name if ru.unit.default_weapon else '-' }}</td>
+              <td>{{ ru.cached_cost }}</td>
+              <td>
+                <form method="post" action="/rosters/{{ roster.id }}/units/{{ ru.id }}/delete" onsubmit="return confirm('Usunąć pozycję?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Usuń</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-muted">Dodaj jednostki aby rozpocząć budowę rozpiski.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
