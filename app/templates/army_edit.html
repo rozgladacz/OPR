@@ -15,14 +15,9 @@
         <input class="form-control" id="name" name="name" value="{{ army.name }}" required />
       </div>
       <div class="col-md-4">
-        <label class="form-label" for="ruleset_id">Zestaw zasad</label>
-        <select class="form-select" id="ruleset_id" name="ruleset_id">
-          {% for ruleset in rulesets %}
-          <option value="{{ ruleset.id }}" {% if ruleset.id == army.ruleset_id %}selected{% endif %}>
-            {{ ruleset.name }}
-          </option>
-          {% endfor %}
-        </select>
+        <label class="form-label">Zestaw zasad</label>
+        <input class="form-control" value="{{ army.ruleset.name }}" disabled />
+        <div class="form-text">Wybór wariantu zasad będzie dostępny w przyszłości.</div>
       </div>
       <div class="col-md-3">
         <button class="btn btn-primary" type="submit">Zapisz</button>
@@ -39,7 +34,7 @@
       <th>Quality</th>
       <th>Defense</th>
       <th>Toughness</th>
-      <th>Domyślna broń</th>
+      <th>Domyślne bronie</th>
       <th>Koszt</th>
       <th></th>
     </tr>
@@ -51,7 +46,13 @@
       <td>{{ item.instance.quality }}</td>
       <td>{{ item.instance.defense }}</td>
       <td>{{ item.instance.toughness }}</td>
-      <td>{{ item.instance.default_weapon.name if item.instance.default_weapon }}</td>
+      <td>
+        {% if item.default_weapon_names %}
+        {{ item.default_weapon_names }}
+        {% else %}
+        -
+        {% endif %}
+      </td>
       <td>{{ item.cost }}</td>
       <td>
         <div class="btn-group btn-group-sm">
@@ -89,14 +90,20 @@
           <label class="form-label" for="toughness">Toughness</label>
           <input class="form-control" id="toughness" name="toughness" type="number" min="1" required />
         </div>
-        <div class="col-md-2">
-          <label class="form-label" for="default_weapon_id">Domyślna broń</label>
-          <select class="form-select" id="default_weapon_id" name="default_weapon_id">
-            <option value="">-</option>
+        <div class="col-md-4">
+          <label class="form-label" for="default_weapon_ids">Domyślne bronie</label>
+          <select
+            class="form-select"
+            id="default_weapon_ids"
+            name="default_weapon_ids"
+            multiple
+            size="6"
+          >
             {% for weapon in weapons %}
             <option value="{{ weapon.id }}">{{ weapon.name }}</option>
             {% endfor %}
           </select>
+          <div class="form-text">Przytrzymaj Ctrl (Windows) lub Command (macOS), aby wybrać wiele pozycji.</div>
         </div>
         <div class="col-12">
           <label class="form-label" for="flags">Flagi (np. good_shot,bad_shot)</label>

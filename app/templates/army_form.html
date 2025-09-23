@@ -12,12 +12,13 @@
             <input class="form-control" id="name" name="name" required />
           </div>
           <div class="mb-3">
-            <label class="form-label" for="ruleset_id">Zestaw zasad</label>
-            <select class="form-select" id="ruleset_id" name="ruleset_id" required>
-              {% for ruleset in rulesets %}
-              <option value="{{ ruleset.id }}">{{ ruleset.name }}</option>
-              {% endfor %}
-            </select>
+            <label class="form-label">Zestaw zasad</label>
+            <input
+              class="form-control"
+              value="{{ default_ruleset.name if default_ruleset else 'Domyślny' }}"
+              disabled
+            />
+            <div class="form-text">Wybór wariantu zasad będzie dostępny w przyszłości.</div>
           </div>
           <button class="btn btn-primary" type="submit">Utwórz</button>
           <a class="btn btn-secondary" href="/armies">Anuluj</a>

@@ -436,6 +436,20 @@ def weapon_cost(
     )
     return round(cost, 2)
 
+def unit_default_weapons(unit: models.Unit) -> list[models.Weapon]:
+    weapons: list[models.Weapon] = []
+    seen: set[int] = set()
+    for link in getattr(unit, "weapon_links", []):
+        if getattr(link, "is_default", True) and link.weapon is not None:
+            if link.weapon.id not in seen:
+                weapons.append(link.weapon)
+                seen.add(link.weapon.id)
+    if unit.default_weapon:
+        default_id = unit.default_weapon_id or getattr(unit.default_weapon, "id", None)
+        if default_id is None or default_id not in seen:
+            weapons.append(unit.default_weapon)
+            if default_id is not None:
+                seen.add(default_id)
 
 def ability_cost(ability_link: models.UnitAbility, unit_traits: Sequence[str] | None = None) -> float:
     ability = ability_link.ability
@@ -450,8 +464,8 @@ def unit_total_cost(unit: models.Unit) -> float:
     flags = parse_flags(unit.flags)
     unit_traits = flags_to_ability_list(flags)
     cost = base_model_cost(unit.quality, unit.defense, unit.toughness, unit_traits)
-    if unit.default_weapon:
-        cost += weapon_cost(unit.default_weapon, unit.quality, flags)
+    for weapon in unit_default_weapons(unit):
+        cost += weapon_cost(weapon, unit.quality, flags)
     cost += sum(ability_cost(link, unit_traits) for link in unit.abilities)
     return round(cost, 2)
 
@@ -466,9 +480,12 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
         unit_traits,
     )
 
-    weapon = roster_unit.selected_weapon or roster_unit.unit.default_weapon
-    if weapon:
-        unit_cost += weapon_cost(weapon, roster_unit.unit.quality, flags)
+    default_weapons = unit_default_weapons(roster_unit.unit)
+    if roster_unit.selected_weapon:
+        unit_cost += weapon_cost(roster_unit.selected_weapon, roster_unit.unit.quality, flags)
+    else:
+        for weapon in default_weapons:
+            unit_cost += weapon_cost(weapon, roster_unit.unit.quality, flags)
 
     unit_cost += sum(ability_cost(link, unit_traits) for link in roster_unit.unit.abilities)
 
