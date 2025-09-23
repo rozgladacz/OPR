@@ -456,21 +456,6 @@ def unit_default_weapons(unit: models.Unit | None) -> list[models.Weapon]:
                 seen.add(default_id)
     return weapons
 
-def unit_default_weapons(unit: models.Unit) -> list[models.Weapon]:
-    weapons: list[models.Weapon] = []
-    seen: set[int] = set()
-    for link in getattr(unit, "weapon_links", []):
-        if getattr(link, "is_default", True) and link.weapon is not None:
-            if link.weapon.id not in seen:
-                weapons.append(link.weapon)
-                seen.add(link.weapon.id)
-    if unit.default_weapon:
-        default_id = unit.default_weapon_id or getattr(unit.default_weapon, "id", None)
-        if default_id is None or default_id not in seen:
-            weapons.append(unit.default_weapon)
-            if default_id is not None:
-                seen.add(default_id)
-
 def ability_cost(ability_link: models.UnitAbility, unit_traits: Sequence[str] | None = None) -> float:
     ability = ability_link.ability
     if not ability:
