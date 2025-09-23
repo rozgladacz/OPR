@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import DB_URL
+from .services import costs
 
 logger = logging.getLogger(__name__)
 
@@ -56,25 +57,149 @@ def init_db() -> None:
         session.flush()
 
         if not session.execute(select(models.Weapon)).first():
-            rifle = models.Weapon(
-                name="Karabin",
-                range="24",
-                attacks=2,
-                ap=1,
-                tags="Ranged",
-                notes="Standardowy karabin piechoty",
-                owner_id=None,
-            )
-            sword = models.Weapon(
-                name="Miecz Energetyczny",
-                range="Walcz",
-                attacks=1,
-                ap=2,
-                tags="Melee",
-                notes="Energia tnąca",
-                owner_id=None,
-            )
-            session.add_all([rifle, sword])
+            weapon_specs = [
+                {"name": "Lekka broń ręczna", "range": "", "attacks": 1, "ap": -1, "tags": ""},
+                {"name": "Broń ręczna", "range": "", "attacks": 1, "ap": 0, "tags": ""},
+                {"name": "Piłomiecz", "range": "", "attacks": 2, "ap": 0, "tags": ""},
+                {"name": "Eviscertaor", "range": "", "attacks": 3, "ap": 0, "tags": "Impet"},
+                {"name": "Miecz energetyczny", "range": "", "attacks": 2, "ap": 2, "tags": ""},
+                {"name": "Rękawica energetyczna", "range": "", "attacks": 1, "ap": 2, "tags": "Deadly 3"},
+                {
+                    "name": "Piłorękawica",
+                    "range": "",
+                    "attacks": 1,
+                    "ap": 3,
+                    "tags": "Deadly 3, Rozrywająca",
+                },
+                {"name": "Ogryn-pałka", "range": "", "attacks": 3, "ap": 1, "tags": ""},
+                {"name": "Młot energetyczny", "range": "", "attacks": 1, "ap": 1, "tags": "Rozprysk 3"},
+                {"name": "Włócznia", "range": "", "attacks": 1, "ap": 0, "tags": "Impet"},
+                {"name": "Laspistol", "range": "12", "attacks": 1, "ap": 0, "tags": "Szturmowy"},
+                {"name": "Lasgun", "range": "24", "attacks": 1, "ap": 0, "tags": ""},
+                {"name": "Hellgun", "range": "24", "attacks": 1, "ap": 1, "tags": ""},
+                {"name": "Vollyegun", "range": "18", "attacks": 3, "ap": 1, "tags": ""},
+                {"name": "Lascanon", "range": "30", "attacks": 1, "ap": 2, "tags": "Deadly 3"},
+                {"name": "Multilaser", "range": "24", "attacks": 3, "ap": 1, "tags": ""},
+                {"name": "Meltagun", "range": "12", "attacks": 1, "ap": 3, "tags": "Deadly 3"},
+                {
+                    "name": "Bolt pistol",
+                    "range": "12",
+                    "attacks": 2,
+                    "ap": 1,
+                    "tags": "Szturmowy, Bez regeneracji, Rozrywający",
+                },
+                {
+                    "name": "Lekki bolter",
+                    "range": "18",
+                    "attacks": 2,
+                    "ap": 1,
+                    "tags": "Bez regeneracji, Rozrywający",
+                },
+                {
+                    "name": "Bolter",
+                    "range": "24",
+                    "attacks": 2,
+                    "ap": 1,
+                    "tags": "Bez regeneracji, Rozrywający",
+                },
+                {
+                    "name": "Ciężki bolter",
+                    "range": "30",
+                    "attacks": 4,
+                    "ap": 1,
+                    "tags": "Bez regeneracji, Rozrywający",
+                },
+                {
+                    "name": "Storm bolter",
+                    "range": "18",
+                    "attacks": 3,
+                    "ap": 1,
+                    "tags": "Szturmowy, Bez regeneracji, Rozrywający",
+                },
+                {
+                    "name": "Pistolet plazmowy",
+                    "range": "12",
+                    "attacks": 1,
+                    "ap": 3,
+                    "tags": "Szturmowy, Overcharge",
+                },
+                {
+                    "name": "Lekki karabin plazmowy",
+                    "range": "18",
+                    "attacks": 1,
+                    "ap": 3,
+                    "tags": "Overcharge",
+                },
+                {
+                    "name": "Karbin plazmowy",
+                    "range": "24",
+                    "attacks": 1,
+                    "ap": 3,
+                    "tags": "Overcharge",
+                },
+                {
+                    "name": "Działo plazmowe",
+                    "range": "30",
+                    "attacks": 1,
+                    "ap": 3,
+                    "tags": "Overcharge, Rozprysk 3",
+                },
+                {"name": "Lekki granatnik", "range": "18", "attacks": 1, "ap": -1, "tags": "Rozprysk 3"},
+                {"name": "Granatnik", "range": "24", "attacks": 1, "ap": -1, "tags": "Rozprysk 3"},
+                {
+                    "name": "Moździerz",
+                    "range": "30",
+                    "attacks": 1,
+                    "ap": 0,
+                    "tags": "Rozprysk 3, Indirect, Ciężki",
+                },
+                {
+                    "name": "Ręczny miotacz ognia",
+                    "range": "",
+                    "attacks": 1,
+                    "ap": -1,
+                    "tags": "Rozprysk 3, Reliable, No cover, No regen",
+                },
+                {
+                    "name": "Lekki miotacz ognia",
+                    "range": "12",
+                    "attacks": 1,
+                    "ap": -1,
+                    "tags": "Rozprysk 3, Reliable, No cover, No regen",
+                },
+                {
+                    "name": "Miotacz ognia",
+                    "range": "12",
+                    "attacks": 1,
+                    "ap": 0,
+                    "tags": "Rozprysk 3, Reliable, No cover, No regen",
+                },
+                {
+                    "name": "Ciężki miotacz ognia",
+                    "range": "12",
+                    "attacks": 1,
+                    "ap": 1,
+                    "tags": "Rozprysk 3, Reliable, No cover, No regen",
+                },
+                {"name": "Strzelba", "range": "12", "attacks": 2, "ap": -1, "tags": "Szturmowa"},
+                {"name": "Snajperka", "range": "30", "attacks": 1, "ap": 1, "tags": "Precyzyjna, Niezawodna"},
+                {"name": "Taranowanie", "range": "", "attacks": 1, "ap": -1, "tags": "Impet"},
+            ]
+
+            weapons: list[models.Weapon] = []
+            for spec in weapon_specs:
+                weapon = models.Weapon(
+                    name=spec["name"],
+                    range=spec["range"],
+                    attacks=spec["attacks"],
+                    ap=spec["ap"],
+                    tags=spec.get("tags") or None,
+                    owner_id=None,
+                )
+                weapon.cached_cost = costs.weapon_cost(weapon)
+                weapons.append(weapon)
+
+            session.add_all(weapons)
 
         session.flush()
 
@@ -83,8 +208,8 @@ def init_db() -> None:
             session.add(army)
             session.flush()
 
-            rifle = session.execute(select(models.Weapon).where(models.Weapon.name == "Karabin")).scalar_one()
-            sword = session.execute(select(models.Weapon).where(models.Weapon.name == "Miecz Energetyczny")).scalar_one()
+            rifle = session.execute(select(models.Weapon).where(models.Weapon.name == "Lasgun")).scalar_one()
+            sword = session.execute(select(models.Weapon).where(models.Weapon.name == "Miecz energetyczny")).scalar_one()
 
             unit1 = models.Unit(
                 name="Piechur OPR",

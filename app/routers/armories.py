@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -22,6 +24,16 @@ def list_weapons(
     current_user: models.User | None = Depends(get_current_user(optional=True)),
 ):
     weapons = db.execute(select(models.Weapon).order_by(models.Weapon.name)).scalars().all()
+    updated = False
+    for weapon in weapons:
+        recalculated = costs.weapon_cost(weapon)
+        if weapon.cached_cost is None or not math.isclose(weapon.cached_cost, recalculated, rel_tol=1e-9, abs_tol=1e-9):
+            weapon.cached_cost = recalculated
+            updated = True
+
+    if updated:
+        db.commit()
+
     mine, global_items = utils.split_owned(weapons, current_user)
     return templates.TemplateResponse(
         "armory_list.html",
