@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Sequence
 
 from sqlalchemy import select
@@ -68,7 +69,19 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
         parent_weapon = db.get(models.Weapon, parent_weapon_id)
         if not parent_weapon:
             continue
-        clone = models.Weapon(armory=armory, owner_id=armory.owner_id, parent=parent_weapon)
+        clone = models.Weapon(
+            armory=armory,
+            owner_id=armory.owner_id,
+            parent=parent_weapon,
+            name=None,
+            range=None,
+            attacks=None,
+            ap=None,
+            tags=None,
+            notes=None,
+        )
+        clone.cached_cost = None
+
         db.add(clone)
 
     variant_weapons = db.execute(
@@ -77,8 +90,50 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
             models.Weapon.parent_id.is_not(None),
         )
     ).scalars().all()
+
+    cleaned = False
     for weapon in variant_weapons:
         if weapon.parent_id is not None and db.get(models.Weapon, weapon.parent_id) is None:
             db.delete(weapon)
+            cleaned = True
+            continue
 
-    db.flush()
+        if not weapon.parent:
+            continue
+
+        parent = weapon.parent
+
+        if weapon.name is not None and weapon.name == parent.effective_name:
+            weapon.name = None
+            cleaned = True
+
+        if weapon.range is not None and weapon.range == parent.effective_range:
+            weapon.range = None
+            cleaned = True
+
+        if weapon.attacks is not None and math.isclose(
+            float(weapon.attacks),
+            parent.effective_attacks,
+            rel_tol=1e-9,
+            abs_tol=1e-9,
+        ):
+            weapon.attacks = None
+            cleaned = True
+
+        if weapon.ap is not None and weapon.ap == parent.effective_ap:
+            weapon.ap = None
+            cleaned = True
+
+        parent_tags = parent.effective_tags or ""
+        if weapon.tags is not None and (weapon.tags or "") == parent_tags:
+            weapon.tags = None
+            cleaned = True
+
+        parent_notes = parent.effective_notes or ""
+        if weapon.notes is not None and (weapon.notes or "") == parent_notes:
+            weapon.notes = None
+            cleaned = True
+
+    if cleaned:
+        db.flush()
+

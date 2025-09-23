@@ -2,94 +2,104 @@
 {% block title %}Zbrojownia {{ armory.name }} - OPR{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h2>Zbrojownia: {{ armory.name }}</h2>
-  <div class="btn-group">
-    <a class="btn btn-secondary" href="/armories">Wróć</a>
-    {% if can_edit %}
-    <a class="btn btn-primary" href="/armories/{{ armory.id }}/weapons/new">Nowa broń</a>
-    {% endif %}
+
+  <div class="d-flex align-items-center gap-2">
+    <h2 class="mb-0">Zbrojownia: {{ armory.name }}</h2>
+    <button
+      class="btn btn-outline-primary btn-sm"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#armory-manage"
+      aria-expanded="{{ 'true' if error else 'false' }}"
+      aria-controls="armory-manage"
+    >
+      Edytuj
+    </button>
   </div>
+  <a class="btn btn-secondary" href="/armories">Wróć</a>
 </div>
 
-<div class="card mb-4">
-  <div class="card-body">
-    <h5 class="card-title">Informacje o zbrojowni</h5>
-    <p class="mb-1">Typ: {% if armory.parent %}wariant{% else %}lista podstawowa{% endif %}</p>
-    <p class="mb-1">Właściciel: {% if armory.owner %}{{ armory.owner.username }}{% else %}Globalna{% endif %}</p>
-    {% if parent_chain %}
-    <p class="mb-1">Dziedziczy z:
-      {% for parent in parent_chain %}
-        {{ parent.name }}{% if not loop.last %} →{% endif %}
-      {% endfor %}
-    </p>
-    {% endif %}
-    {% if can_edit %}
-    <form class="row g-2 align-items-end mt-3" method="post" action="/armories/{{ armory.id }}/rename">
-      <div class="col-md-6">
-        <label class="form-label" for="armory-name">Nazwa</label>
-        <input class="form-control" id="armory-name" name="name" value="{{ armory.name }}" required />
-      </div>
-      <div class="col-md-3">
-        <button class="btn btn-primary" type="submit">Zapisz</button>
-      </div>
-    </form>
-    {% if error %}
-    <div class="alert alert-danger mt-3">{{ error }}</div>
-    {% endif %}
-    {% else %}
-    <div class="alert alert-info mt-3">Nie masz uprawnień do edycji tej zbrojowni.</div>
-    {% endif %}
+<div class="mb-3 text-muted">
+  <div>Typ: {% if armory.parent %}wariant{% else %}lista podstawowa{% endif %}</div>
+  <div>Właściciel: {% if armory.owner %}{{ armory.owner.username }}{% else %}Globalna{% endif %}</div>
+  {% if parent_chain %}
+  <div>
+    Dziedziczy z:
+    {% for parent in parent_chain %}
+      {{ parent.name }}{% if not loop.last %} →{% endif %}
+    {% endfor %}
   </div>
+  {% endif %}
 </div>
 
-<div class="row g-3 mb-4">
-  <div class="col-md-6">
-    <div class="card h-100">
-      <div class="card-body">
-        <h5 class="card-title">Utwórz kopię</h5>
-        <form method="post" action="/armories/{{ armory.id }}/copy">
-          <div class="mb-3">
-            <label class="form-label" for="copy-name">Nazwa kopii</label>
-            <input class="form-control" id="copy-name" name="name" value="{{ armory.name }} (kopia)" required />
-          </div>
-          {% if user and user.is_admin %}
-          <div class="form-check mb-3">
-            <input class="form-check-input" id="copy-global" name="is_global" type="checkbox" />
-            <label class="form-check-label" for="copy-global">Utwórz jako globalną</label>
-          </div>
+<div class="collapse mb-4{% if error %} show{% endif %}" id="armory-manage">
+  <div class="card">
+    <div class="card-body">
+      <div class="row g-4">
+        <div class="col-12 col-xl-4">
+          <h5 class="card-title">Informacje o zbrojowni</h5>
+          {% if can_edit %}
+          <form class="row g-2 align-items-end mt-1" method="post" action="/armories/{{ armory.id }}/rename">
+            <div class="col-sm-8">
+              <label class="form-label" for="armory-name">Nazwa</label>
+              <input class="form-control" id="armory-name" name="name" value="{{ armory.name }}" required />
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label d-none d-sm-block">&nbsp;</label>
+              <button class="btn btn-primary w-100" type="submit">Zapisz</button>
+            </div>
+          </form>
+          {% if error %}
+          <div class="alert alert-danger mt-3">{{ error }}</div>
           {% endif %}
-          <button class="btn btn-outline-primary" type="submit">Stwórz kopię</button>
-        </form>
+          {% else %}
+          <div class="alert alert-info mt-3">Nie masz uprawnień do edycji tej zbrojowni.</div>
+          {% endif %}
+        </div>
+        <div class="col-12 col-xl-4">
+          <h5 class="card-title">Utwórz kopię</h5>
+          <form method="post" action="/armories/{{ armory.id }}/copy">
+            <div class="mb-3">
+              <label class="form-label" for="copy-name">Nazwa kopii</label>
+              <input class="form-control" id="copy-name" name="name" value="{{ armory.name }} (kopia)" required />
+            </div>
+            {% if user and user.is_admin %}
+            <div class="form-check mb-3">
+              <input class="form-check-input" id="copy-global" name="is_global" type="checkbox" />
+              <label class="form-check-label" for="copy-global">Utwórz jako globalną</label>
+            </div>
+            {% endif %}
+            <button class="btn btn-outline-primary" type="submit">Stwórz kopię</button>
+          </form>
+        </div>
+        <div class="col-12 col-xl-4">
+          <h5 class="card-title">Utwórz wariant</h5>
+          <form method="post" action="/armories/{{ armory.id }}/variant">
+            <div class="mb-3">
+              <label class="form-label" for="variant-name">Nazwa wariantu</label>
+              <input class="form-control" id="variant-name" name="name" value="{{ armory.name }} - wariant" required />
+            </div>
+            {% if user and user.is_admin %}
+            <div class="form-check mb-3">
+              <input class="form-check-input" id="variant-global" name="is_global" type="checkbox" />
+              <label class="form-check-label" for="variant-global">Utwórz jako globalny wariant</label>
+            </div>
+            {% endif %}
+            <button class="btn btn-outline-primary" type="submit">Stwórz wariant</button>
+          </form>
+        </div>
       </div>
+      {% if can_delete %}
+      <hr class="my-4" />
+      <form method="post" action="/armories/{{ armory.id }}/delete" onsubmit="return confirm('Usunąć zbrojownię? Tej operacji nie można cofnąć.');">
+        <button class="btn btn-outline-danger" type="submit">Usuń zbrojownię</button>
+      </form>
+      {% endif %}
+
     </div>
   </div>
-  <div class="col-md-6">
-    <div class="card h-100">
-      <div class="card-body">
-        <h5 class="card-title">Utwórz wariant</h5>
-        <form method="post" action="/armories/{{ armory.id }}/variant">
-          <div class="mb-3">
-            <label class="form-label" for="variant-name">Nazwa wariantu</label>
-            <input class="form-control" id="variant-name" name="name" value="{{ armory.name }} - wariant" required />
-          </div>
-          {% if user and user.is_admin %}
-          <div class="form-check mb-3">
-            <input class="form-check-input" id="variant-global" name="is_global" type="checkbox" />
-            <label class="form-check-label" for="variant-global">Utwórz jako globalny wariant</label>
-          </div>
-          {% endif %}
-          <button class="btn btn-outline-primary" type="submit">Stwórz wariant</button>
-        </form>
-      </div>
-    </div>
-  </div>
 </div>
 
-{% if can_delete %}
-<form class="mb-4" method="post" action="/armories/{{ armory.id }}/delete" onsubmit="return confirm('Usunąć zbrojownię? Tej operacji nie można cofnąć.');">
-  <button class="btn btn-outline-danger" type="submit">Usuń zbrojownię</button>
-</form>
-{% endif %}
 
 <h4>Uzbrojenie</h4>
 <table class="table table-striped align-middle">
@@ -101,7 +111,13 @@
       <th>AP</th>
       <th>Zdolności</th>
       <th>Koszt (Q4)</th>
-      <th></th>
+
+      <th class="text-end">
+        {% if can_edit %}
+        <a class="btn btn-primary btn-sm" href="/armories/{{ armory.id }}/weapons/new">Nowa broń</a>
+        {% endif %}
+      </th>
+
     </tr>
   </thead>
   <tbody>
@@ -120,7 +136,9 @@
         {% endif %}
       </td>
       <td>
-        {{ item.instance.effective_attacks|round(2) }}
+
+        {{ "%.0f"|format(item.instance.effective_attacks) }}
+
         {% if item.instance.parent %}
         <div class="text-muted small">{% if item.overrides.attacks %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
         {% endif %}
