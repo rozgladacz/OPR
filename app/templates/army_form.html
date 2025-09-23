@@ -6,10 +6,30 @@
     <div class="card">
       <div class="card-body">
         <h5 class="card-title">Nowa armia</h5>
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
         <form method="post">
           <div class="mb-3">
             <label class="form-label" for="name">Nazwa</label>
             <input class="form-control" id="name" name="name" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="armory_id">Zbrojownia</label>
+            {% if armories %}
+            <select class="form-select" id="armory_id" name="armory_id" required>
+              {% for armory in armories %}
+              <option value="{{ armory.id }}" {% if selected_armory_id == armory.id %}selected{% endif %}>
+                {{ armory.name }}{% if armory.parent %} (wariant {{ armory.parent.name }}){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Wybierz zbrojownię, z której będzie korzystać armia.</div>
+            {% else %}
+            <div class="alert alert-warning mb-0">
+              Brak dostępnych zbrojowni. Utwórz listę uzbrojenia przed stworzeniem armii.
+            </div>
+            {% endif %}
           </div>
           <div class="mb-3">
             <label class="form-label">Zestaw zasad</label>
@@ -20,7 +40,7 @@
             />
             <div class="form-text">Wybór wariantu zasad będzie dostępny w przyszłości.</div>
           </div>
-          <button class="btn btn-primary" type="submit">Utwórz</button>
+          <button class="btn btn-primary" type="submit" {% if not armories %}disabled{% endif %}>Utwórz</button>
           <a class="btn btn-secondary" href="/armies">Anuluj</a>
         </form>
       </div>

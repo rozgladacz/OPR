@@ -420,15 +420,15 @@ def weapon_cost(
     unit_flags: dict | None = None,
 ) -> float:
     unit_traits = flags_to_ability_list(unit_flags)
-    range_value = normalize_range_value(weapon.range)
-    traits = split_traits(weapon.tags)
-    attacks_value = weapon.attacks if weapon.attacks is not None else 1.0
+    range_value = normalize_range_value(weapon.effective_range)
+    traits = split_traits(weapon.effective_tags)
+    attacks_value = weapon.effective_attacks
     cost = max(
         _weapon_cost(
             unit_quality,
             range_value,
             attacks_value,
-            weapon.ap or 0,
+            weapon.effective_ap,
             traits,
             unit_traits,
         ),

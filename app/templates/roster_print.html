@@ -14,7 +14,16 @@
       <div class="card-body">
         <h5 class="card-title">{{ ru.unit.name }} × {{ ru.count }}</h5>
         <p class="card-text">Q{{ ru.unit.quality }} / D{{ ru.unit.defense }} / T{{ ru.unit.toughness }}</p>
-        <p class="card-text">Broń: {{ ru.selected_weapon.name if ru.selected_weapon else ru.unit.default_weapon.name if ru.unit.default_weapon else '-' }}</p>
+        <p class="card-text">
+          Broń:
+          {% if ru.selected_weapon %}
+          {{ ru.selected_weapon.effective_name }}
+          {% elif ru.unit.default_weapon %}
+          {{ ru.unit.default_weapon.effective_name }}
+          {% else %}
+          -
+          {% endif %}
+        </p>
         <p class="card-text">Koszt pozycji: {{ ru.cached_cost }}</p>
         {% if ru.unit.flags %}
         <p class="card-text"><strong>Flagi:</strong> {{ ru.unit.flags }}</p>

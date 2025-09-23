@@ -10,16 +10,27 @@
   <div class="card-body">
     <h5 class="card-title">Informacje</h5>
     <form method="post" action="/armies/{{ army.id }}/update" class="row g-3 align-items-end">
-      <div class="col-md-5">
+      <div class="col-md-4">
         <label class="form-label" for="name">Nazwa</label>
         <input class="form-control" id="name" name="name" value="{{ army.name }}" required {% if not can_edit %}disabled{% endif %} />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Zbrojownia</label>
+        <input class="form-control" value="{{ army.armory.name }}" disabled />
+        <div class="form-text">
+          {% if army.armory.parent %}
+          Wariant z listy {{ army.armory.parent.name }}.
+          {% else %}
+          Zbrojownia określa dostępne uzbrojenie armii.
+          {% endif %}
+        </div>
       </div>
       <div class="col-md-4">
         <label class="form-label">Zestaw zasad</label>
         <input class="form-control" value="{{ army.ruleset.name }}" disabled />
         <div class="form-text">Wybór wariantu zasad będzie dostępny w przyszłości.</div>
       </div>
-      <div class="col-md-3">
+      <div class="col-12">
         <button class="btn btn-primary" type="submit" {% if not can_edit %}disabled{% endif %}>Zapisz</button>
       </div>
     </form>
@@ -110,7 +121,7 @@
             size="6"
           >
             {% for weapon in weapons %}
-            <option value="{{ weapon.id }}">{{ weapon.name }}</option>
+            <option value="{{ weapon.id }}">{{ weapon.effective_name }}</option>
             {% endfor %}
           </select>
           <div class="form-text">Przytrzymaj Ctrl (Windows) lub Command (macOS), aby wybrać wiele pozycji.</div>

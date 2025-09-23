@@ -1,127 +1,96 @@
 {% extends "base.html" %}
-{% block title %}Zbrojownia - OPR{% endblock %}
+{% block title %}Zbrojownie - OPR{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h2>Zbrojownia</h2>
-  <a class="btn btn-primary" href="/armory/new">Nowa broń</a>
+  <h2>Zbrojownie</h2>
+  <a class="btn btn-primary" href="/armories/new">Nowa zbrojownia</a>
 </div>
 
-<h4>Moje</h4>
-<table class="table table-striped">
-  <thead>
-    <tr>
-      <th>Nazwa</th>
-      <th>Zasięg</th>
-      <th>Ataki</th>
-      <th>AP</th>
-      <th>Zdolności</th>
-      <th>Koszt (Q4)</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for weapon in mine %}
-    <tr>
-      <td>{{ weapon.name }}</td>
-      <td>{{ weapon.range }}</td>
-      <td>{{ weapon.attacks|int }}</td>
-      <td>{{ weapon.ap }}</td>
-      <td>{{ weapon.tags or '-' }}</td>
-      <td>
-        {{ "%.2f"|format(weapon.cached_cost) if weapon.cached_cost is not none else '-' }}
-      </td>
-      <td>
-        <div class="btn-group btn-group-sm">
-          <a class="btn btn-outline-secondary" href="/armory/{{ weapon.id }}/edit">Edytuj</a>
-          <form method="post" action="/armory/{{ weapon.id }}/delete" onsubmit="return confirm('Usunąć broń?');">
-            <button class="btn btn-outline-danger" type="submit">Usuń</button>
-          </form>
-        </div>
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="7" class="text-muted">Brak własnych wpisów</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-<h4>Globalne</h4>
-<table class="table table-striped">
-  <thead>
-    <tr>
-      <th>Nazwa</th>
-      <th>Zasięg</th>
-      <th>Ataki</th>
-      <th>AP</th>
-      <th>Zdolności</th>
-      <th>Koszt (Q4)</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for weapon in global_items %}
-    <tr>
-      <td>{{ weapon.name }}</td>
-      <td>{{ weapon.range }}</td>
-      <td>{{ weapon.attacks|int }}</td>
-      <td>{{ weapon.ap }}</td>
-      <td>{{ weapon.tags or '-' }}</td>
-      <td>
-        {{ "%.2f"|format(weapon.cached_cost) if weapon.cached_cost is not none else '-' }}
-      </td>
-      <td>
-        {% if user and user.is_admin %}
-        <a class="btn btn-sm btn-outline-secondary" href="/armory/{{ weapon.id }}/edit">Edytuj</a>
+<div class="row g-4">
+  <div class="col-lg-6">
+    <h4>Moje zbrojownie</h4>
+    <table class="table table-striped align-middle">
+      <thead>
+        <tr>
+          <th>Nazwa</th>
+          <th>Typ</th>
+          <th>Bazowa</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for armory in mine %}
+        <tr>
+          <td>{{ armory.name }}</td>
+          <td>{% if armory.parent %}Wariant{% else %}Podstawowa{% endif %}</td>
+          <td>{% if armory.parent %}{{ armory.parent.name }}{% else %}-{% endif %}</td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-primary" href="/armories/{{ armory.id }}">Otwórz</a>
+          </td>
+        </tr>
         {% else %}
-        <span class="text-muted small">Tylko podgląd</span>
-        {% endif %}
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="7" class="text-muted">Brak globalnych wpisów</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% if user and user.is_admin %}
-<h4>Pozostałe wpisy użytkowników</h4>
-<table class="table table-striped">
-  <thead>
-    <tr>
-      <th>Nazwa</th>
-      <th>Właściciel</th>
-      <th>Zasięg</th>
-      <th>Ataki</th>
-      <th>AP</th>
-      <th>Zdolności</th>
-      <th>Koszt (Q4)</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for weapon in others %}
-    <tr>
-      <td>{{ weapon.name }}</td>
-      <td>{{ weapon.owner.username if weapon.owner else '-' }}</td>
-      <td>{{ weapon.range }}</td>
-      <td>{{ weapon.attacks|int }}</td>
-      <td>{{ weapon.ap }}</td>
-      <td>{{ weapon.tags or '-' }}</td>
-      <td>
-        {{ "%.2f"|format(weapon.cached_cost) if weapon.cached_cost is not none else '-' }}
-      </td>
-      <td>
-        <div class="btn-group btn-group-sm">
-          <a class="btn btn-outline-secondary" href="/armory/{{ weapon.id }}/edit">Edytuj</a>
-          <form method="post" action="/armory/{{ weapon.id }}/delete" onsubmit="return confirm('Usunąć broń?');">
-            <button class="btn btn-outline-danger" type="submit">Usuń</button>
-          </form>
-        </div>
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="8" class="text-muted">Brak wpisów innych użytkowników</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% endif %}
+        <tr><td colspan="4" class="text-muted">Brak własnych zbrojowni</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="col-lg-6">
+    <h4>Zbrojownie globalne</h4>
+    <table class="table table-striped align-middle">
+      <thead>
+        <tr>
+          <th>Nazwa</th>
+          <th>Typ</th>
+          <th>Bazowa</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for armory in global_items %}
+        <tr>
+          <td>{{ armory.name }}</td>
+          <td>{% if armory.parent %}Wariant{% else %}Podstawowa{% endif %}</td>
+          <td>{% if armory.parent %}{{ armory.parent.name }}{% else %}-{% endif %}</td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-primary" href="/armories/{{ armory.id }}">Otwórz</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="text-muted">Brak zbrojowni globalnych</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if user and user.is_admin %}
+  <div class="col-12">
+    <h4>Zbrojownie użytkowników</h4>
+    <table class="table table-striped align-middle">
+      <thead>
+        <tr>
+          <th>Nazwa</th>
+          <th>Właściciel</th>
+          <th>Typ</th>
+          <th>Bazowa</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for armory in others %}
+        <tr>
+          <td>{{ armory.name }}</td>
+          <td>{{ armory.owner.username if armory.owner else '-' }}</td>
+          <td>{% if armory.parent %}Wariant{% else %}Podstawowa{% endif %}</td>
+          <td>{% if armory.parent %}{{ armory.parent.name }}{% else %}-{% endif %}</td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-primary" href="/armories/{{ armory.id }}">Otwórz</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-muted">Brak zbrojowni innych użytkowników</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
 {% endblock %}
