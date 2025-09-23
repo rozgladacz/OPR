@@ -436,7 +436,6 @@ def weapon_cost(
     )
     return round(cost, 2)
 
-
 def unit_default_weapons(unit: models.Unit) -> list[models.Weapon]:
     weapons: list[models.Weapon] = []
     seen: set[int] = set()
@@ -451,8 +450,6 @@ def unit_default_weapons(unit: models.Unit) -> list[models.Weapon]:
             weapons.append(unit.default_weapon)
             if default_id is not None:
                 seen.add(default_id)
-    return weapons
-
 
 def ability_cost(ability_link: models.UnitAbility, unit_traits: Sequence[str] | None = None) -> float:
     ability = ability_link.ability
