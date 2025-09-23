@@ -1,0 +1,46 @@
+name: Merge preferring theirs
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Base branch (odbiorca zmian)
+        required: true
+        default: old-branch
+      head:
+        description: Head branch (źródło zmian)
+        required: true
+        default: new-branch
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.base }}
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch head
+        run: |
+          git fetch origin ${{ github.event.inputs.head }}:${{ github.event.inputs.head }}
+
+      - name: Merge preferring theirs
+        run: |
+          set -e
+          git merge -X theirs ${{ github.event.inputs.head }} || true
+          # Jeśli coś nadal jest w konflikcie, bierz 'theirs' globalnie:
+          if ! git diff --name-only --diff-filter=U --quiet; then
+            git checkout --theirs .
+            git add -A
+          fi
+          git commit -m "Merge '${{ github.event.inputs.head }}' into '${{ github.event.inputs.base }}' preferring theirs" || echo "No commit needed"
+          git push origin HEAD:${{ github.event.inputs.base }}
