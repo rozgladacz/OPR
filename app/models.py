@@ -116,9 +116,55 @@ class Unit(TimestampMixin, Base):
     army: Mapped[Army] = relationship(back_populates="units")
     owner: Mapped[Optional[User]] = relationship()
     default_weapon: Mapped[Optional[Weapon]] = relationship(back_populates="units", foreign_keys=[default_weapon_id])
+    weapon_links: Mapped[List["UnitWeapon"]] = relationship(
+        back_populates="unit", cascade="all, delete-orphan"
+    )
     parent: Mapped[Optional["Unit"]] = relationship(remote_side="Unit.id")
     abilities: Mapped[List["UnitAbility"]] = relationship(back_populates="unit", cascade="all, delete-orphan")
     roster_units: Mapped[List["RosterUnit"]] = relationship(back_populates="unit")
+
+    @property
+    def default_weapons(self) -> List[Weapon]:
+        weapons: list[Weapon] = []
+        seen: set[int] = set()
+        for link in getattr(self, "weapon_links", []):
+            if getattr(link, "is_default", True) and link.weapon is not None:
+                weapon_id = link.weapon.id
+                if weapon_id not in seen:
+                    weapons.append(link.weapon)
+                    seen.add(weapon_id)
+        if self.default_weapon:
+            default_id = self.default_weapon_id or getattr(self.default_weapon, "id", None)
+            if default_id is None or default_id not in seen:
+                weapons.append(self.default_weapon)
+                if default_id is not None:
+                    seen.add(default_id)
+        return weapons
+
+    @property
+    def default_weapon_ids(self) -> List[int]:
+        ids: list[int] = []
+        seen: set[int] = set()
+        for link in getattr(self, "weapon_links", []):
+            if getattr(link, "is_default", True) and link.weapon_id is not None:
+                if link.weapon_id not in seen:
+                    ids.append(link.weapon_id)
+                    seen.add(link.weapon_id)
+        if self.default_weapon_id and self.default_weapon_id not in seen:
+            ids.append(self.default_weapon_id)
+        return ids
+
+
+class UnitWeapon(TimestampMixin, Base):
+    __tablename__ = "unit_weapons"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"), nullable=False)
+    weapon_id: Mapped[int] = mapped_column(ForeignKey("weapons.id"), nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    unit: Mapped[Unit] = relationship(back_populates="weapon_links")
+    weapon: Mapped[Weapon] = relationship()
 
 
 class UnitAbility(TimestampMixin, Base):
@@ -163,6 +209,17 @@ class RosterUnit(TimestampMixin, Base):
     selected_weapon: Mapped[Optional[Weapon]] = relationship(back_populates="roster_units")
 
 
-for cls in [User, RuleSet, Ability, Weapon, Army, Unit, UnitAbility, Roster, RosterUnit]:
+for cls in [
+    User,
+    RuleSet,
+    Ability,
+    Weapon,
+    Army,
+    Unit,
+    UnitWeapon,
+    UnitAbility,
+    Roster,
+    RosterUnit,
+]:
     event.listen(cls, "before_insert", touch_timestamps)
     event.listen(cls, "before_update", touch_timestamps)

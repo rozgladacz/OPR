@@ -24,6 +24,32 @@ def _ensure_army_access(army: models.Army, user: models.User | None) -> None:
         raise HTTPException(status_code=403, detail="Brak dostępu do armii")
 
 
+def _get_default_ruleset(db: Session) -> models.RuleSet | None:
+    return (
+        db.execute(select(models.RuleSet).order_by(models.RuleSet.id))
+        .scalars()
+        .first()
+    )
+
+
+def _ordered_weapons(db: Session, weapon_ids: list[int]) -> list[models.Weapon]:
+    if not weapon_ids:
+        return []
+    weapons = (
+        db.execute(select(models.Weapon).where(models.Weapon.id.in_(weapon_ids)))
+        .scalars()
+        .all()
+    )
+    weapon_map = {weapon.id: weapon for weapon in weapons}
+    ordered: list[models.Weapon] = []
+    seen: set[int] = set()
+    for weapon_id in weapon_ids:
+        if weapon_id in weapon_map and weapon_id not in seen:
+            ordered.append(weapon_map[weapon_id])
+            seen.add(weapon_id)
+    return ordered
+
+
 @router.get("", response_class=HTMLResponse)
 def list_armies(
     request: Request,
@@ -49,13 +75,13 @@ def new_army_form(
     db: Session = Depends(get_db),
     current_user: models.User | None = Depends(get_current_user(optional=True)),
 ):
-    rulesets = db.execute(select(models.RuleSet)).scalars().all()
+    default_ruleset = _get_default_ruleset(db)
     return templates.TemplateResponse(
         "army_form.html",
         {
             "request": request,
             "user": current_user,
-            "rulesets": rulesets,
+            "default_ruleset": default_ruleset,
             "army": None,
             "error": None,
         },
@@ -66,11 +92,10 @@ def new_army_form(
 def create_army(
     request: Request,
     name: str = Form(...),
-    ruleset_id: int = Form(...),
     db: Session = Depends(get_db),
     current_user: models.User | None = Depends(get_current_user(optional=True)),
 ):
-    ruleset = db.get(models.RuleSet, ruleset_id)
+    ruleset = _get_default_ruleset(db)
     if not ruleset:
         raise HTTPException(status_code=404)
     army = models.Army(name=name, ruleset=ruleset, owner_id=current_user.id if current_user else None)
@@ -92,14 +117,16 @@ def view_army(
     _ensure_army_access(army, current_user)
 
     weapons = db.execute(select(models.Weapon).order_by(models.Weapon.name)).scalars().all()
-    rulesets = db.execute(select(models.RuleSet).order_by(models.RuleSet.name)).scalars().all()
-    units = [
-        {
-            "instance": unit,
-            "cost": costs.unit_total_cost(unit),
-        }
-        for unit in army.units
-    ]
+    units = []
+    for unit in army.units:
+        default_weapons = unit.default_weapons
+        units.append(
+            {
+                "instance": unit,
+                "cost": costs.unit_total_cost(unit),
+                "default_weapon_names": ", ".join(weapon.name for weapon in default_weapons),
+            }
+        )
     return templates.TemplateResponse(
         "army_edit.html",
         {
@@ -108,7 +135,6 @@ def view_army(
             "army": army,
             "units": units,
             "weapons": weapons,
-            "rulesets": rulesets,
             "error": None,
         },
     )
@@ -118,7 +144,6 @@ def view_army(
 def update_army(
     army_id: int,
     name: str = Form(...),
-    ruleset_id: int = Form(...),
     db: Session = Depends(get_db),
     current_user: models.User | None = Depends(get_current_user(optional=True)),
 ):
@@ -127,7 +152,6 @@ def update_army(
         raise HTTPException(status_code=404)
     _ensure_army_access(army, current_user)
     army.name = name
-    army.ruleset_id = ruleset_id
     db.commit()
     return RedirectResponse(url=f"/armies/{army.id}", status_code=303)
 
@@ -139,7 +163,7 @@ def add_unit(
     quality: int = Form(...),
     defense: int = Form(...),
     toughness: int = Form(...),
-    default_weapon_id: str | None = Form(None),
+    default_weapon_ids: list[str] = Form([]),
     flags: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User | None = Depends(get_current_user(optional=True)),
@@ -149,18 +173,23 @@ def add_unit(
         raise HTTPException(status_code=404)
     _ensure_army_access(army, current_user)
 
-    weapon_id = int(default_weapon_id) if default_weapon_id else None
-    weapon = db.get(models.Weapon, weapon_id) if weapon_id else None
+    weapon_ids = [int(weapon_id) for weapon_id in (default_weapon_ids or []) if weapon_id]
+    ordered_weapons = _ordered_weapons(db, weapon_ids)
     unit = models.Unit(
         name=name,
         quality=quality,
         defense=defense,
         toughness=toughness,
         flags=flags,
-        default_weapon=weapon,
         army=army,
         owner_id=current_user.id if current_user else None,
     )
+    if ordered_weapons:
+        unit.default_weapon = ordered_weapons[0]
+        unit.weapon_links = [
+            models.UnitWeapon(weapon=weapon, is_default=True)
+            for weapon in ordered_weapons
+        ]
     db.add(unit)
     db.commit()
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
@@ -188,6 +217,7 @@ def edit_unit_form(
             "army": army,
             "unit": unit,
             "weapons": weapons,
+            "default_weapon_ids": unit.default_weapon_ids,
             "error": None,
         },
     )
@@ -201,7 +231,7 @@ def update_unit(
     quality: int = Form(...),
     defense: int = Form(...),
     toughness: int = Form(...),
-    default_weapon_id: str | None = Form(None),
+    default_weapon_ids: list[str] = Form([]),
     flags: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User | None = Depends(get_current_user(optional=True)),
@@ -217,7 +247,13 @@ def update_unit(
     unit.defense = defense
     unit.toughness = toughness
     unit.flags = flags
-    unit.default_weapon_id = int(default_weapon_id) if default_weapon_id else None
+    weapon_ids = [int(weapon_id) for weapon_id in (default_weapon_ids or []) if weapon_id]
+    ordered_weapons = _ordered_weapons(db, weapon_ids)
+    unit.default_weapon = ordered_weapons[0] if ordered_weapons else None
+    existing_non_default = [link for link in unit.weapon_links if not link.is_default]
+    unit.weapon_links = existing_non_default + [
+        models.UnitWeapon(weapon=weapon, is_default=True) for weapon in ordered_weapons
+    ]
     db.commit()
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
 
