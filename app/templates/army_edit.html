@@ -12,7 +12,7 @@
     <form method="post" action="/armies/{{ army.id }}/update" class="row g-3 align-items-end">
       <div class="col-md-5">
         <label class="form-label" for="name">Nazwa</label>
-        <input class="form-control" id="name" name="name" value="{{ army.name }}" required />
+        <input class="form-control" id="name" name="name" value="{{ army.name }}" required {% if not can_edit %}disabled{% endif %} />
       </div>
       <div class="col-md-4">
         <label class="form-label">Zestaw zasad</label>
@@ -20,9 +20,14 @@
         <div class="form-text">Wybór wariantu zasad będzie dostępny w przyszłości.</div>
       </div>
       <div class="col-md-3">
-        <button class="btn btn-primary" type="submit">Zapisz</button>
+        <button class="btn btn-primary" type="submit" {% if not can_edit %}disabled{% endif %}>Zapisz</button>
       </div>
     </form>
+    {% if not can_edit %}
+    <div class="alert alert-info mt-3">
+      Jest to armia globalna. Tylko administrator może wprowadzać w niej zmiany.
+    </div>
+    {% endif %}
   </div>
 </div>
 
@@ -55,12 +60,16 @@
       </td>
       <td>{{ item.cost }}</td>
       <td>
+        {% if can_edit %}
         <div class="btn-group btn-group-sm">
           <a class="btn btn-outline-secondary" href="/armies/{{ army.id }}/units/{{ item.instance.id }}/edit">Edytuj</a>
           <form method="post" action="/armies/{{ army.id }}/units/{{ item.instance.id }}/delete" onsubmit="return confirm('Usunąć jednostkę?');">
             <button class="btn btn-outline-danger" type="submit">Usuń</button>
           </form>
         </div>
+        {% else %}
+        <span class="text-muted small">Tylko podgląd</span>
+        {% endif %}
       </td>
     </tr>
     {% else %}
@@ -69,6 +78,7 @@
   </tbody>
 </table>
 
+{% if can_edit %}
 <div class="card mt-4">
   <div class="card-body">
     <h5 class="card-title">Dodaj jednostkę</h5>
@@ -116,4 +126,5 @@
     </form>
   </div>
 </div>
+{% endif %}
 {% endblock %}

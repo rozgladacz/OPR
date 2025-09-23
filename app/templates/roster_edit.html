@@ -16,7 +16,7 @@
     <form method="post" action="/rosters/{{ roster.id }}/update" class="row g-3 align-items-end">
       <div class="col-md-5">
         <label class="form-label" for="name">Nazwa</label>
-        <input class="form-control" id="name" name="name" value="{{ roster.name }}" required />
+        <input class="form-control" id="name" name="name" value="{{ roster.name }}" required {% if not can_edit %}disabled{% endif %} />
       </div>
       <div class="col-md-3">
         <label class="form-label">Armia</label>
@@ -24,16 +24,22 @@
       </div>
       <div class="col-md-2">
         <label class="form-label" for="points_limit">Limit</label>
-        <input class="form-control" id="points_limit" name="points_limit" type="number" value="{{ roster.points_limit }}" />
+        <input class="form-control" id="points_limit" name="points_limit" type="number" value="{{ roster.points_limit }}" {% if not can_edit %}disabled{% endif %} />
       </div>
       <div class="col-md-2">
-        <button class="btn btn-primary" type="submit">Zapisz</button>
+        <button class="btn btn-primary" type="submit" {% if not can_edit %}disabled{% endif %}>Zapisz</button>
       </div>
     </form>
+    {% if not can_edit %}
+    <div class="alert alert-info mt-3">
+      Jest to rozpiska globalna. Modyfikacje są dostępne jedynie dla administratora.
+    </div>
+    {% endif %}
   </div>
 </div>
 
 <div class="row g-4">
+  {% if can_edit %}
   <div class="col-lg-5">
     <div class="card h-100">
       <div class="card-body">
@@ -67,7 +73,8 @@
       </div>
     </div>
   </div>
-  <div class="col-lg-7">
+  {% endif %}
+  <div class="{% if can_edit %}col-lg-7{% else %}col-12{% endif %}">
     <div class="card h-100">
       <div class="card-body">
         <h5 class="card-title">Twoja rozpiska</h5>
@@ -87,6 +94,7 @@
             <tr>
               <td>{{ ru.unit.name }}</td>
               <td>
+                {% if can_edit %}
                 <form method="post" action="/rosters/{{ roster.id }}/units/{{ ru.id }}/update" class="d-flex gap-2">
                   <input class="form-control form-control-sm" name="count" type="number" min="1" value="{{ ru.count }}" />
                   <select class="form-select form-select-sm" name="selected_weapon_id">
@@ -97,13 +105,20 @@
                   </select>
                   <button class="btn btn-sm btn-primary" type="submit">Aktualizuj</button>
                 </form>
+                {% else %}
+                {{ ru.count }}
+                {% endif %}
               </td>
               <td>{{ ru.selected_weapon.name if ru.selected_weapon else ru.unit.default_weapon.name if ru.unit.default_weapon else '-' }}</td>
               <td>{{ ru.cached_cost }}</td>
               <td>
+                {% if can_edit %}
                 <form method="post" action="/rosters/{{ roster.id }}/units/{{ ru.id }}/delete" onsubmit="return confirm('Usunąć pozycję?');">
                   <button class="btn btn-sm btn-outline-danger" type="submit">Usuń</button>
                 </form>
+                {% else %}
+                <span class="text-muted small">Tylko podgląd</span>
+                {% endif %}
               </td>
             </tr>
             {% else %}

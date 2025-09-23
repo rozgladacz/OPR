@@ -5,7 +5,7 @@ import math
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -23,7 +23,18 @@ def list_weapons(
     db: Session = Depends(get_db),
     current_user: models.User | None = Depends(get_current_user(optional=True)),
 ):
-    weapons = db.execute(select(models.Weapon).order_by(models.Weapon.name)).scalars().all()
+    if not current_user:
+        return RedirectResponse(url="/auth/login", status_code=303)
+
+    query = select(models.Weapon).order_by(models.Weapon.name)
+    if not current_user.is_admin:
+        query = query.where(
+            or_(
+                models.Weapon.owner_id == current_user.id,
+                models.Weapon.owner_id.is_(None),
+            )
+        )
+    weapons = db.execute(query).scalars().all()
     updated = False
     for weapon in weapons:
         recalculated = costs.weapon_cost(weapon)
@@ -34,7 +45,7 @@ def list_weapons(
     if updated:
         db.commit()
 
-    mine, global_items = utils.split_owned(weapons, current_user)
+    mine, global_items, others = utils.split_owned(weapons, current_user)
     return templates.TemplateResponse(
         "armory_list.html",
         {
@@ -42,23 +53,22 @@ def list_weapons(
             "user": current_user,
             "mine": mine,
             "global_items": global_items,
+            "others": others,
         },
     )
 
 
-def _ensure_access(weapon: models.Weapon, user: models.User | None) -> None:
-    if weapon.owner_id is None and user is None:
+def _ensure_edit_access(weapon: models.Weapon, user: models.User) -> None:
+    if user.is_admin:
         return
-    if user is None:
-        raise HTTPException(status_code=403, detail="Wymagane logowanie")
-    if not user.is_admin and weapon.owner_id not in (None, user.id):
+    if weapon.owner_id != user.id:
         raise HTTPException(status_code=403, detail="Brak uprawnień do edycji")
 
 
 @router.get("/new", response_class=HTMLResponse)
 def new_weapon_form(
     request: Request,
-    current_user: models.User | None = Depends(get_current_user(optional=True)),
+    current_user: models.User = Depends(get_current_user()),
 ):
     return templates.TemplateResponse(
         "armory_form.html",
@@ -76,7 +86,7 @@ def create_weapon(
     tags: str | None = Form(None),
     notes: str | None = Form(None),
     db: Session = Depends(get_db),
-    current_user: models.User | None = Depends(get_current_user(optional=True)),
+    current_user: models.User = Depends(get_current_user()),
 ):
     weapon = models.Weapon(
         name=name,
@@ -85,7 +95,7 @@ def create_weapon(
         ap=ap,
         tags=tags,
         notes=notes,
-        owner_id=current_user.id if current_user else None,
+        owner_id=current_user.id,
     )
     weapon.cached_cost = costs.weapon_cost(weapon)
     db.add(weapon)
@@ -98,12 +108,12 @@ def edit_weapon_form(
     weapon_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User | None = Depends(get_current_user(optional=True)),
+    current_user: models.User = Depends(get_current_user()),
 ):
     weapon = db.get(models.Weapon, weapon_id)
     if not weapon:
         raise HTTPException(status_code=404)
-    _ensure_access(weapon, current_user)
+    _ensure_edit_access(weapon, current_user)
     return templates.TemplateResponse(
         "armory_form.html",
         {"request": request, "user": current_user, "weapon": weapon, "error": None},
@@ -121,12 +131,12 @@ def update_weapon(
     tags: str | None = Form(None),
     notes: str | None = Form(None),
     db: Session = Depends(get_db),
-    current_user: models.User | None = Depends(get_current_user(optional=True)),
+    current_user: models.User = Depends(get_current_user()),
 ):
     weapon = db.get(models.Weapon, weapon_id)
     if not weapon:
         raise HTTPException(status_code=404)
-    _ensure_access(weapon, current_user)
+    _ensure_edit_access(weapon, current_user)
 
     weapon.name = name
     weapon.range = range
@@ -143,12 +153,12 @@ def update_weapon(
 def delete_weapon(
     weapon_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User | None = Depends(get_current_user(optional=True)),
+    current_user: models.User = Depends(get_current_user()),
 ):
     weapon = db.get(models.Weapon, weapon_id)
     if not weapon:
         raise HTTPException(status_code=404)
-    _ensure_access(weapon, current_user)
+    _ensure_edit_access(weapon, current_user)
     db.delete(weapon)
     db.commit()
     return RedirectResponse(url="/armory", status_code=303)

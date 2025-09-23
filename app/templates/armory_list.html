@@ -70,7 +70,11 @@
         {{ "%.2f"|format(weapon.cached_cost) if weapon.cached_cost is not none else '-' }}
       </td>
       <td>
-        <a class="btn btn-sm btn-outline-secondary" href="/armory/{{ weapon.id }}/edit">Podgląd</a>
+        {% if user and user.is_admin %}
+        <a class="btn btn-sm btn-outline-secondary" href="/armory/{{ weapon.id }}/edit">Edytuj</a>
+        {% else %}
+        <span class="text-muted small">Tylko podgląd</span>
+        {% endif %}
       </td>
     </tr>
     {% else %}
@@ -78,4 +82,46 @@
     {% endfor %}
   </tbody>
 </table>
+{% if user and user.is_admin %}
+<h4>Pozostałe wpisy użytkowników</h4>
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>Nazwa</th>
+      <th>Właściciel</th>
+      <th>Zasięg</th>
+      <th>Ataki</th>
+      <th>AP</th>
+      <th>Zdolności</th>
+      <th>Koszt (Q4)</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for weapon in others %}
+    <tr>
+      <td>{{ weapon.name }}</td>
+      <td>{{ weapon.owner.username if weapon.owner else '-' }}</td>
+      <td>{{ weapon.range }}</td>
+      <td>{{ weapon.attacks|int }}</td>
+      <td>{{ weapon.ap }}</td>
+      <td>{{ weapon.tags or '-' }}</td>
+      <td>
+        {{ "%.2f"|format(weapon.cached_cost) if weapon.cached_cost is not none else '-' }}
+      </td>
+      <td>
+        <div class="btn-group btn-group-sm">
+          <a class="btn btn-outline-secondary" href="/armory/{{ weapon.id }}/edit">Edytuj</a>
+          <form method="post" action="/armory/{{ weapon.id }}/delete" onsubmit="return confirm('Usunąć broń?');">
+            <button class="btn btn-outline-danger" type="submit">Usuń</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" class="text-muted">Brak wpisów innych użytkowników</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endif %}
 {% endblock %}
