@@ -423,7 +423,7 @@ def weapon_cost(
     range_value = normalize_range_value(weapon.range)
     traits = split_traits(weapon.tags)
     attacks_value = weapon.attacks if weapon.attacks is not None else 1.0
-    return max(
+    cost = max(
         _weapon_cost(
             unit_quality,
             range_value,
@@ -434,6 +434,7 @@ def weapon_cost(
         ),
         0.0,
     )
+    return round(cost, 2)
 
 
 def ability_cost(ability_link: models.UnitAbility, unit_traits: Sequence[str] | None = None) -> float:
