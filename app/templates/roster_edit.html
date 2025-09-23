@@ -63,7 +63,7 @@
               <select class="form-select" id="selected_weapon_id" name="selected_weapon_id">
                 <option value="">Domyślna</option>
                 {% for weapon in weapons %}
-                <option value="{{ weapon.id }}">{{ weapon.name }}</option>
+                <option value="{{ weapon.id }}">{{ weapon.effective_name }}</option>
                 {% endfor %}
               </select>
             </div>
@@ -100,7 +100,7 @@
                   <select class="form-select form-select-sm" name="selected_weapon_id">
                     <option value="">Domyślna</option>
                     {% for weapon in weapons %}
-                    <option value="{{ weapon.id }}" {% if weapon.id == ru.selected_weapon_id %}selected{% endif %}>{{ weapon.name }}</option>
+                    <option value="{{ weapon.id }}" {% if weapon.id == ru.selected_weapon_id %}selected{% endif %}>{{ weapon.effective_name }}</option>
                     {% endfor %}
                   </select>
                   <button class="btn btn-sm btn-primary" type="submit">Aktualizuj</button>
@@ -109,7 +109,15 @@
                 {{ ru.count }}
                 {% endif %}
               </td>
-              <td>{{ ru.selected_weapon.name if ru.selected_weapon else ru.unit.default_weapon.name if ru.unit.default_weapon else '-' }}</td>
+              <td>
+                {% if ru.selected_weapon %}
+                {{ ru.selected_weapon.effective_name }}
+                {% elif ru.unit.default_weapon %}
+                {{ ru.unit.default_weapon.effective_name }}
+                {% else %}
+                -
+                {% endif %}
+              </td>
               <td>{{ ru.cached_cost }}</td>
               <td>
                 {% if can_edit %}

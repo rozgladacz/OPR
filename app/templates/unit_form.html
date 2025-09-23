@@ -35,7 +35,7 @@
               size="8"
             >
               {% for weapon in weapons %}
-              <option value="{{ weapon.id }}" {% if weapon.id in default_weapon_ids %}selected{% endif %}>{{ weapon.name }}</option>
+              <option value="{{ weapon.id }}" {% if weapon.id in default_weapon_ids %}selected{% endif %}>{{ weapon.effective_name }}</option>
               {% endfor %}
             </select>
             <div class="form-text">Przytrzymaj Ctrl (Windows) lub Command (macOS), aby zaznaczyć wiele opcji.</div>

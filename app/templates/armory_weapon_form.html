@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{% if weapon %}Edycja broni{% else %}Nowa broń{% endif %} - OPR{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">{% if weapon %}Edycja broni{% else %}Nowa broń{% endif %}</h5>
+        {% if armory.parent %}
+        <div class="alert alert-info">
+          Ten wariant dziedziczy wartości z listy bazowej. Wprowadź nowe wartości, aby je nadpisać – pozostawienie wartości
+          zgodnych z bazą spowoduje korzystanie z oryginału.
+        </div>
+        {% endif %}
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label" for="name">Nazwa</label>
+            <input class="form-control" id="name" name="name" value="{{ form_values.name }}" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="range">Zasięg</label>
+            <input class="form-control" id="range" name="range" value="{{ form_values.range }}" />
+          </div>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label class="form-label" for="attacks">Ataki</label>
+                <input class="form-control" id="attacks" name="attacks" value="{{ form_values.attacks }}" />
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label class="form-label" for="ap">AP</label>
+                <input class="form-control" id="ap" name="ap" value="{{ form_values.ap }}" />
+              </div>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="tags">Zdolności</label>
+            <input class="form-control" id="tags" name="tags" value="{{ form_values.tags }}" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="notes">Notatki</label>
+            <textarea class="form-control" id="notes" name="notes" rows="3">{{ form_values.notes }}</textarea>
+          </div>
+          <button class="btn btn-primary" type="submit">Zapisz</button>
+          <a class="btn btn-secondary" href="/armories/{{ armory.id }}">Anuluj</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
