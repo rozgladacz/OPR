@@ -388,7 +388,8 @@ def _weapon_cost(
         elif norm in {"szturmowy", "szturmowa", "assault"}:
             assault = True
         elif norm in {"bez regeneracji", "bez regegenracji", "no regen", "no regeneration"}:
-            mult *= 1.1
+            # Brak regeneracji nie zwiększa kosztu broni – cecha przeniesiona z modelu.
+            continue
         elif norm in {"podkrecenie", "overcharge", "overclock"}:
             overcharge = True
 
