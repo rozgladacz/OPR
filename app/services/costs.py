@@ -435,6 +435,26 @@ def weapon_cost(
         0.0,
     )
     return round(cost, 2)
+  
+def unit_default_weapons(unit: models.Unit | None) -> list[models.Weapon]:
+    if unit is None:
+        return []
+
+    weapons: list[models.Weapon] = []
+    seen: set[int] = set()
+    links = getattr(unit, "weapon_links", None) or []
+    for link in links:
+        if getattr(link, "is_default", True) and link.weapon is not None:
+            if link.weapon.id not in seen:
+                weapons.append(link.weapon)
+                seen.add(link.weapon.id)
+    if unit.default_weapon:
+        default_id = unit.default_weapon_id or getattr(unit.default_weapon, "id", None)
+        if default_id is None or default_id not in seen:
+            weapons.append(unit.default_weapon)
+            if default_id is not None:
+                seen.add(default_id)
+    return weapons
 
 def unit_default_weapons(unit: models.Unit) -> list[models.Weapon]:
     weapons: list[models.Weapon] = []
