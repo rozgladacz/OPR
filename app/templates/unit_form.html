@@ -26,13 +26,19 @@
             </div>
           </div>
           <div class="mb-3 mt-3">
-            <label class="form-label" for="default_weapon_id">Domyślna broń</label>
-            <select class="form-select" id="default_weapon_id" name="default_weapon_id">
-              <option value="">-</option>
+            <label class="form-label" for="default_weapon_ids">Domyślne bronie</label>
+            <select
+              class="form-select"
+              id="default_weapon_ids"
+              name="default_weapon_ids"
+              multiple
+              size="8"
+            >
               {% for weapon in weapons %}
-              <option value="{{ weapon.id }}" {% if unit.default_weapon_id == weapon.id %}selected{% endif %}>{{ weapon.name }}</option>
+              <option value="{{ weapon.id }}" {% if weapon.id in default_weapon_ids %}selected{% endif %}>{{ weapon.name }}</option>
               {% endfor %}
             </select>
+            <div class="form-text">Przytrzymaj Ctrl (Windows) lub Command (macOS), aby zaznaczyć wiele opcji.</div>
           </div>
           <div class="mb-3">
             <label class="form-label" for="flags">Flagi</label>
