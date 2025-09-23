@@ -56,6 +56,20 @@ def init_db() -> None:
 
         session.flush()
 
+        default_armory = (
+            session.execute(
+                select(models.Armory)
+                .where(models.Armory.owner_id.is_(None))
+                .order_by(models.Armory.id)
+            )
+            .scalars()
+            .first()
+        )
+        if default_armory is None:
+            default_armory = models.Armory(name="Domyślna zbrojownia", owner_id=None)
+            session.add(default_armory)
+            session.flush()
+
         if not session.execute(select(models.Weapon)).first():
             weapon_specs = [
                 {"name": "Lekka broń ręczna", "range": "", "attacks": 1, "ap": -1, "tags": ""},
@@ -194,7 +208,8 @@ def init_db() -> None:
                     attacks=spec["attacks"],
                     ap=spec["ap"],
                     tags=spec.get("tags") or None,
-                    owner_id=None,
+                    owner_id=default_armory.owner_id,
+                    armory=default_armory,
                 )
                 weapon.cached_cost = costs.weapon_cost(weapon)
                 weapons.append(weapon)
@@ -204,7 +219,12 @@ def init_db() -> None:
         session.flush()
 
         if not session.execute(select(models.Army)).first():
-            army = models.Army(name="Siewcy Zagłady", ruleset=ruleset, owner_id=None)
+            army = models.Army(
+                name="Siewcy Zagłady",
+                ruleset=ruleset,
+                owner_id=None,
+                armory=default_armory,
+            )
             session.add(army)
             session.flush()
 

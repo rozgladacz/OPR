@@ -37,29 +37,44 @@ def _get_default_ruleset(db: Session) -> models.RuleSet | None:
     )
 
 
-def _visible_weapons(db: Session, user: models.User) -> list[models.Weapon]:
-    query = select(models.Weapon).order_by(models.Weapon.name)
+def _available_armories(db: Session, user: models.User) -> list[models.Armory]:
+    query = select(models.Armory).order_by(models.Armory.name)
     if not user.is_admin:
         query = query.where(
             or_(
-                models.Weapon.owner_id == user.id,
-                models.Weapon.owner_id.is_(None),
+                models.Armory.owner_id == user.id,
+                models.Armory.owner_id.is_(None),
             )
         )
     return db.execute(query).scalars().all()
 
 
-def _ordered_weapons(db: Session, weapon_ids: list[int], user: models.User) -> list[models.Weapon]:
+def _ensure_armory_access(armory: models.Armory, user: models.User) -> None:
+    if user.is_admin:
+        return
+    if armory.owner_id not in (None, user.id):
+        raise HTTPException(status_code=403, detail="Brak dostępu do zbrojowni")
+
+
+def _armory_weapons(db: Session, armory: models.Armory) -> list[models.Weapon]:
+    utils.ensure_armory_variant_sync(db, armory)
+    weapons = (
+        db.execute(
+            select(models.Weapon).where(models.Weapon.armory_id == armory.id)
+        ).scalars().all()
+    )
+    weapons.sort(key=lambda weapon: weapon.effective_name.casefold())
+    return weapons
+
+
+def _ordered_weapons(db: Session, armory: models.Armory, weapon_ids: list[int]) -> list[models.Weapon]:
     if not weapon_ids:
         return []
-    query = select(models.Weapon).where(models.Weapon.id.in_(weapon_ids))
-    if not user.is_admin:
-        query = query.where(
-            or_(
-                models.Weapon.owner_id == user.id,
-                models.Weapon.owner_id.is_(None),
-            )
-        )
+    utils.ensure_armory_variant_sync(db, armory)
+    query = select(models.Weapon).where(
+        models.Weapon.armory_id == armory.id,
+        models.Weapon.id.in_(weapon_ids),
+    )
     weapons = db.execute(query).scalars().all()
     weapon_map = {weapon.id: weapon for weapon in weapons}
     missing_ids = {weapon_id for weapon_id in weapon_ids if weapon_id not in weapon_map}
@@ -114,6 +129,8 @@ def new_army_form(
     if not current_user:
         return RedirectResponse(url="/auth/login", status_code=303)
     default_ruleset = _get_default_ruleset(db)
+    armories = _available_armories(db, current_user)
+    selected_armory_id = armories[0].id if armories else None
     return templates.TemplateResponse(
         "army_form.html",
         {
@@ -121,6 +138,8 @@ def new_army_form(
             "user": current_user,
             "default_ruleset": default_ruleset,
             "army": None,
+            "armories": armories,
+            "selected_armory_id": selected_armory_id,
             "error": None,
         },
     )
@@ -130,13 +149,58 @@ def new_army_form(
 def create_army(
     request: Request,
     name: str = Form(...),
+    armory_id: str = Form(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
     ruleset = _get_default_ruleset(db)
     if not ruleset:
         raise HTTPException(status_code=404)
-    army = models.Army(name=name, ruleset=ruleset, owner_id=current_user.id)
+    try:
+        armory_pk = int(armory_id)
+    except ValueError:
+        armory = None
+    else:
+        armory = db.get(models.Armory, armory_pk)
+
+    if not armory:
+        armories = _available_armories(db, current_user)
+        selected_id = armories[0].id if armories else None
+        return templates.TemplateResponse(
+            "army_form.html",
+            {
+                "request": request,
+                "user": current_user,
+                "default_ruleset": ruleset,
+                "army": None,
+                "armories": armories,
+                "selected_armory_id": selected_id,
+                "error": "Wybrana zbrojownia nie istnieje.",
+            },
+        )
+
+    if not current_user.is_admin and armory.owner_id not in (None, current_user.id):
+        armories = _available_armories(db, current_user)
+        selected_id = armories[0].id if armories else None
+        return templates.TemplateResponse(
+            "army_form.html",
+            {
+                "request": request,
+                "user": current_user,
+                "default_ruleset": ruleset,
+                "army": None,
+                "armories": armories,
+                "selected_armory_id": selected_id,
+                "error": "Brak uprawnień do wybranej zbrojowni.",
+            },
+        )
+
+    army = models.Army(
+        name=name,
+        ruleset=ruleset,
+        owner_id=current_user.id,
+        armory=armory,
+    )
     db.add(army)
     db.commit()
     return RedirectResponse(url=f"/armies/{army.id}", status_code=303)
@@ -156,8 +220,9 @@ def view_army(
         raise HTTPException(status_code=404)
     _ensure_army_view_access(army, current_user)
 
-    weapons = _visible_weapons(db, current_user)
     can_edit = current_user.is_admin or army.owner_id == current_user.id
+    weapons = _armory_weapons(db, army.armory)
+    available_armories = _available_armories(db, current_user) if can_edit else []
     units = []
     for unit in army.units:
         default_weapons = unit.default_weapons
@@ -165,7 +230,7 @@ def view_army(
             {
                 "instance": unit,
                 "cost": costs.unit_total_cost(unit),
-                "default_weapon_names": ", ".join(weapon.name for weapon in default_weapons),
+                "default_weapon_names": ", ".join(weapon.effective_name for weapon in default_weapons),
             }
         )
     return templates.TemplateResponse(
@@ -176,6 +241,8 @@ def view_army(
             "army": army,
             "units": units,
             "weapons": weapons,
+            "armories": available_armories,
+            "selected_armory_id": army.armory_id,
             "error": None,
             "can_edit": can_edit,
         },
@@ -216,7 +283,7 @@ def add_unit(
     _ensure_army_edit_access(army, current_user)
 
     weapon_ids = [int(weapon_id) for weapon_id in (default_weapon_ids or []) if weapon_id]
-    ordered_weapons = _ordered_weapons(db, weapon_ids, current_user)
+    ordered_weapons = _ordered_weapons(db, army.armory, weapon_ids)
     unit = models.Unit(
         name=name,
         quality=quality,
@@ -252,7 +319,7 @@ def edit_unit_form(
     if not army or not unit or unit.army_id != army.id:
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
-    weapons = _visible_weapons(db, current_user)
+    weapons = _armory_weapons(db, army.armory)
     return templates.TemplateResponse(
         "unit_form.html",
         {
@@ -292,12 +359,12 @@ def update_unit(
     unit.toughness = toughness
     unit.flags = flags
     weapon_ids = [int(weapon_id) for weapon_id in (default_weapon_ids or []) if weapon_id]
-    ordered_weapons = _ordered_weapons(db, weapon_ids, current_user)
+    ordered_weapons = _ordered_weapons(db, army.armory, weapon_ids)
     unit.default_weapon = ordered_weapons[0] if ordered_weapons else None
     existing_non_default = [link for link in unit.weapon_links if not link.is_default]
     unit.weapon_links = existing_non_default + [
-        models.UnitWeapon(weapon=weapon, is_default=True) for weapon in ordered_weapons
-    ]
+            models.UnitWeapon(weapon=weapon, is_default=True) for weapon in ordered_weapons
+        ]
     db.commit()
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
 
