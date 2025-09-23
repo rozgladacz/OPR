@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Nowa armia - OPR{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Nowa armia</h5>
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label" for="name">Nazwa</label>
+            <input class="form-control" id="name" name="name" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="ruleset_id">Zestaw zasad</label>
+            <select class="form-select" id="ruleset_id" name="ruleset_id" required>
+              {% for ruleset in rulesets %}
+              <option value="{{ ruleset.id }}">{{ ruleset.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button class="btn btn-primary" type="submit">Utwórz</button>
+          <a class="btn btn-secondary" href="/armies">Anuluj</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+jinja2
+sqlalchemy>=2.0
+alembic
+python-multipart
+passlib[bcrypt]
+reportlab
+openpyxl
+python-dotenv

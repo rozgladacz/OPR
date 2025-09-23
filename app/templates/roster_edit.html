@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Rozpiska {{ roster.name }} - OPR{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>Rozpiska: {{ roster.name }}</h2>
+  <div>
+    <a class="btn btn-outline-secondary" href="/rosters">Wróć</a>
+    <a class="btn btn-success" href="/rosters/{{ roster.id }}/print" target="_blank">Widok do druku</a>
+    <a class="btn btn-outline-success" href="/rosters/{{ roster.id }}/pdf">Pobierz PDF</a>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h5 class="card-title">Informacje</h5>
+    <form method="post" action="/rosters/{{ roster.id }}/update" class="row g-3 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label" for="name">Nazwa</label>
+        <input class="form-control" id="name" name="name" value="{{ roster.name }}" required />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Armia</label>
+        <input class="form-control" value="{{ roster.army.name }}" disabled />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="points_limit">Limit</label>
+        <input class="form-control" id="points_limit" name="points_limit" type="number" value="{{ roster.points_limit }}" />
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary" type="submit">Zapisz</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">Dostępne jednostki</h5>
+        <p class="text-muted">Kliknij „+”, aby dodać model z domyślną bronią.</p>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>Nazwa</th>
+                <th>Statystyki</th>
+                <th>Broń</th>
+                <th>Koszt</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in available_units %}
+              <tr>
+                <td>{{ entry.unit.name }}</td>
+                <td>Q{{ entry.unit.quality }}/D{{ entry.unit.defense }}/T{{ entry.unit.toughness }}</td>
+                <td>{{ entry.weapon_name }}</td>
+                <td>{{ entry.cost }}</td>
+                <td>
+                  <form method="post" action="/rosters/{{ roster.id }}/units/add" class="m-0">
+                    <input type="hidden" name="unit_id" value="{{ entry.unit.id }}" />
+                    <button class="btn btn-sm btn-success" type="submit" title="Dodaj jednostkę">+</button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-muted">Brak jednostek dostępnych dla tej armii.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">Twoja rozpiska</h5>
+        <p>Suma punktów: <strong>{{ total_cost }}</strong>{% if roster.points_limit %} / {{ roster.points_limit }}{% endif %}</p>
+        {% if roster_entries %}
+        {% for entry in roster_entries %}
+        <div class="border rounded p-3 mb-3">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <h6 class="mb-1">{{ entry.instance.unit.name }}</h6>
+              <div class="small text-muted">
+                Q{{ entry.instance.unit.quality }}/D{{ entry.instance.unit.defense }}/T{{ entry.instance.unit.toughness }}
+                | Podstawowa broń: {{ entry.base_weapon.name if entry.base_weapon else '-' }}
+              </div>
+            </div>
+            <div class="text-end">
+              <div class="small text-muted">Modele: {{ entry.instance.count }}</div>
+              <div><strong>{{ entry.instance.cached_cost }}</strong></div>
+            </div>
+          </div>
+          <div class="d-flex flex-wrap gap-2 align-items-end mt-3">
+            <form method="post" action="/rosters/{{ roster.id }}/units/{{ entry.instance.id }}/update" class="row g-2 align-items-end flex-grow-1">
+              <div class="col-sm-3">
+                <label class="form-label form-label-sm" for="count-{{ entry.instance.id }}">Ilość</label>
+                <input class="form-control form-control-sm" id="count-{{ entry.instance.id }}" name="count" type="number" min="1" value="{{ entry.instance.count }}" />
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label form-label-sm" for="weapon-{{ entry.instance.id }}">Broń</label>
+                <select class="form-select form-select-sm" id="weapon-{{ entry.instance.id }}" name="selected_weapon_id">
+                  <option value="">Domyślna</option>
+                  {% for weapon in weapons %}
+                  <option value="{{ weapon.id }}" {% if weapon.id == entry.instance.selected_weapon_id %}selected{% endif %}>{{ weapon.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-3">
+                <button class="btn btn-sm btn-primary w-100 mt-3 mt-sm-0" type="submit">Aktualizuj</button>
+              </div>
+            </form>
+            <form method="post" action="/rosters/{{ roster.id }}/units/{{ entry.instance.id }}/delete" class="ms-sm-2" onsubmit="return confirm('Usunąć pozycję?');">
+              <button class="btn btn-sm btn-outline-danger" type="submit">Usuń oddział</button>
+            </form>
+          </div>
+          <div class="row g-3 mt-3">
+            <div class="col-md-6">
+              <form method="post" action="/rosters/{{ roster.id }}/units/{{ entry.instance.id }}/weapons/add" class="row g-2 align-items-end">
+                <div class="col-7">
+                  <label class="form-label form-label-sm" for="extra-weapon-{{ entry.instance.id }}">Dodaj broń</label>
+                  <select class="form-select form-select-sm" id="extra-weapon-{{ entry.instance.id }}" name="weapon_id">
+                    {% for option in entry.weapon_options %}
+                    <option value="{{ option.id }}">
+                      {{ option.name }}
+                      ({{ '%+.2f'|format(option.delta) }} / model,
+                      {{ '%+.2f'|format(option.unit_delta) }} oddział)
+                    </option>
+                    {% endfor %}
+                  </select>
+                  <div class="form-text">
+                    W nawiasie podano zmianę kosztu dla jednego modelu i całego oddziału.
+                  </div>
+                </div>
+                <div class="col-3">
+                  <label class="form-label form-label-sm" for="extra-weapon-count-{{ entry.instance.id }}">Ilość</label>
+                  <input class="form-control form-control-sm" id="extra-weapon-count-{{ entry.instance.id }}" name="count" type="number" min="1" max="{{ entry.instance.count }}" value="1" />
+                </div>
+                <div class="col-2">
+                  <button class="btn btn-sm btn-outline-success w-100" type="submit">Dodaj</button>
+                </div>
+              </form>
+            </div>
+            <div class="col-md-6">
+              <form method="post" action="/rosters/{{ roster.id }}/units/{{ entry.instance.id }}/abilities/add" class="row g-2 align-items-end">
+                <div class="col-7">
+                  <label class="form-label form-label-sm" for="extra-ability-{{ entry.instance.id }}">Dodaj zdolność</label>
+                  <select class="form-select form-select-sm" id="extra-ability-{{ entry.instance.id }}" name="ability">
+                    {% for option in entry.ability_options %}
+                    <option value="{{ option.value }}">
+                      {{ option.label }}
+                      ({{ '%+.2f'|format(option.delta) }} / model,
+                      {{ '%+.2f'|format(option.unit_delta) }} oddział)
+                    </option>
+                    {% endfor %}
+                  </select>
+                  <div class="form-text">
+                    W nawiasie podano zmianę kosztu dla jednego modelu i całego oddziału.
+                  </div>
+                </div>
+                <div class="col-3">
+                  <label class="form-label form-label-sm" for="extra-ability-count-{{ entry.instance.id }}">Ilość</label>
+                  <input class="form-control form-control-sm" id="extra-ability-count-{{ entry.instance.id }}" name="count" type="number" min="1" max="{{ entry.instance.count }}" value="1" />
+                </div>
+                <div class="col-2">
+                  <button class="btn btn-sm btn-outline-primary w-100" type="submit">Dodaj</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div class="mt-3">
+            <h6 class="text-muted text-uppercase small">Wyposażenie dodatkowe</h6>
+            {% if entry.upgrades.weapon_upgrades or entry.upgrades.ability_upgrades %}
+            <ul class="list-unstyled mb-0">
+              {% for upgrade in entry.upgrades.weapon_upgrades %}
+              <li class="d-flex justify-content-between align-items-center py-1">
+                <span>Broń: {{ upgrade.name }} ×{{ upgrade.count }} ({{ '%+.2f'|format(upgrade.delta) }})</span>
+                <form method="post" action="/rosters/{{ roster.id }}/units/{{ entry.instance.id }}/upgrades/remove" class="m-0">
+                  <input type="hidden" name="kind" value="weapon" />
+                  <input type="hidden" name="index" value="{{ loop.index0 }}" />
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Usuń</button>
+                </form>
+              </li>
+              {% endfor %}
+              {% for upgrade in entry.upgrades.ability_upgrades %}
+              <li class="d-flex justify-content-between align-items-center py-1">
+                <span>Zdolność: {{ upgrade.ability }} ×{{ upgrade.count }} ({{ '%+.2f'|format(upgrade.delta) }})</span>
+                <form method="post" action="/rosters/{{ roster.id }}/units/{{ entry.instance.id }}/upgrades/remove" class="m-0">
+                  <input type="hidden" name="kind" value="ability" />
+                  <input type="hidden" name="index" value="{{ loop.index0 }}" />
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Usuń</button>
+                </form>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-muted mb-0">Brak dodatkowych opcji.</p>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="text-muted">Dodaj jednostki aby rozpocząć budowę rozpiski.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

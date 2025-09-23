@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Armia {{ army.name }} - OPR{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2>Armia: {{ army.name }}</h2>
+  <a class="btn btn-secondary" href="/armies">Wróć</a>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h5 class="card-title">Informacje</h5>
+    {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="/armies/{{ army.id }}/update" class="row g-3 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label" for="name">Nazwa</label>
+        <input class="form-control" id="name" name="name" value="{{ army.name }}" required />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="ruleset_id">Zestaw zasad</label>
+        <select class="form-select" id="ruleset_id" name="ruleset_id">
+          {% for ruleset in rulesets %}
+          <option value="{{ ruleset.id }}" {% if ruleset.id == army.ruleset_id %}selected{% endif %}>
+            {{ ruleset.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-primary" type="submit">Zapisz</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<h4>Jednostki</h4>
+<table class="table table-striped align-middle">
+  <thead>
+    <tr>
+      <th>Nazwa</th>
+      <th>Quality</th>
+      <th>Defense</th>
+      <th>Toughness</th>
+      <th>Domyślna broń</th>
+      <th>Koszt</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in units %}
+    <tr>
+      <td>{{ item.instance.name }}</td>
+      <td>{{ item.instance.quality }}</td>
+      <td>{{ item.instance.defense }}</td>
+      <td>{{ item.instance.toughness }}</td>
+      <td>{{ item.instance.default_weapon.name if item.instance.default_weapon }}</td>
+      <td>{{ item.cost }}</td>
+      <td>
+        <div class="btn-group btn-group-sm">
+          <a class="btn btn-outline-secondary" href="/armies/{{ army.id }}/units/{{ item.instance.id }}/edit">Edytuj</a>
+          <form method="post" action="/armies/{{ army.id }}/units/{{ item.instance.id }}/delete" onsubmit="return confirm('Usunąć jednostkę?');">
+            <button class="btn btn-outline-danger" type="submit">Usuń</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="text-muted">Brak jednostek</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="card mt-4">
+  <div class="card-body">
+    <h5 class="card-title">Dodaj jednostkę</h5>
+    <form method="post" action="/armies/{{ army.id }}/units/new">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label" for="unit-name">Nazwa</label>
+          <input class="form-control" id="unit-name" name="name" value="{{ new_unit.name if new_unit }}" required />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" for="quality">Quality</label>
+          <input
+            class="form-control"
+            id="quality"
+            name="quality"
+            type="number"
+            min="2"
+            max="6"
+            value="{{ new_unit.quality if new_unit else '' }}"
+            required
+          />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" for="defense">Defense</label>
+          <input
+            class="form-control"
+            id="defense"
+            name="defense"
+            type="number"
+            min="2"
+            max="6"
+            value="{{ new_unit.defense if new_unit else '' }}"
+            required
+          />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" for="toughness">Toughness</label>
+          <input
+            class="form-control"
+            id="toughness"
+            name="toughness"
+            type="number"
+            min="1"
+            value="{{ new_unit.toughness if new_unit else '' }}"
+            required
+          />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" for="default_weapon_id">Domyślna broń</label>
+          <select class="form-select" id="default_weapon_id" name="default_weapon_id">
+            <option value="">-</option>
+            {% for weapon in weapons %}
+            <option value="{{ weapon.id }}" {% if new_unit and new_unit.default_weapon_id|int == weapon.id %}selected{% endif %}>{{ weapon.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="flags">Zdolności</label>
+          <input
+            class="form-control"
+            id="flags"
+            name="flags"
+            value="{{ new_unit.flags if new_unit }}"
+            list="ability-options"
+            placeholder="Wybierz z listy"
+          />
+          <datalist id="ability-options">
+            {% for ability in available_abilities %}
+            <option value="{{ ability }}"></option>
+            {% endfor %}
+          </datalist>
+          <div class="form-text">Wpisuj nazwy zgodne z listą dostępnych zdolności.</div>
+        </div>
+        <div class="col-12">
+          <button class="btn btn-success" type="submit">Dodaj jednostkę</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
