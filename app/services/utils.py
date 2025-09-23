@@ -81,6 +81,7 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
             notes=None,
         )
         clone.cached_cost = None
+
         db.add(clone)
 
     variant_weapons = db.execute(
@@ -89,6 +90,7 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
             models.Weapon.parent_id.is_not(None),
         )
     ).scalars().all()
+
     cleaned = False
     for weapon in variant_weapons:
         if weapon.parent_id is not None and db.get(models.Weapon, weapon.parent_id) is None:
@@ -134,3 +136,4 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
 
     if cleaned:
         db.flush()
+
