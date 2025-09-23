@@ -1,3 +1,3 @@
-from . import armories, armies, auth, export, rosters
+from . import armories, armies, auth, export, rosters, users
 
-__all__ = ["armories", "armies", "auth", "export", "rosters"]
+__all__ = ["armories", "armies", "auth", "export", "rosters", "users"]
