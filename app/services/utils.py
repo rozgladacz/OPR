@@ -8,12 +8,16 @@ from .. import models
 def split_owned(items: Sequence, user: models.User | None):
     mine = []
     global_items = []
+    others = []
     for item in items:
-        if user and item.owner_id == user.id:
+        owner_id = getattr(item, "owner_id", None)
+        if user and owner_id == user.id:
             mine.append(item)
-        else:
+        elif owner_id is None:
             global_items.append(item)
-    return mine, global_items
+        elif user and user.is_admin:
+            others.append(item)
+    return mine, global_items, others
 
 
 def parse_flags(text: str | None) -> dict:

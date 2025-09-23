@@ -4,7 +4,7 @@ import io
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -14,7 +14,7 @@ from .. import models
 from ..db import get_db
 from ..security import get_current_user
 from ..services import costs
-from .rosters import _ensure_roster_access
+from .rosters import _ensure_roster_view_access
 
 router = APIRouter(prefix="/rosters", tags=["export"])
 templates = Jinja2Templates(directory="app/templates")
@@ -27,10 +27,12 @@ def roster_print(
     db: Session = Depends(get_db),
     current_user: models.User | None = Depends(get_current_user(optional=True)),
 ):
+    if not current_user:
+        return RedirectResponse(url="/auth/login", status_code=303)
     roster = db.get(models.Roster, roster_id)
     if not roster:
         raise HTTPException(status_code=404)
-    _ensure_roster_access(roster, current_user)
+    _ensure_roster_view_access(roster, current_user)
 
     costs.update_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
@@ -52,10 +54,12 @@ def roster_pdf(
     db: Session = Depends(get_db),
     current_user: models.User | None = Depends(get_current_user(optional=True)),
 ):
+    if not current_user:
+        return RedirectResponse(url="/auth/login", status_code=303)
     roster = db.get(models.Roster, roster_id)
     if not roster:
         raise HTTPException(status_code=404)
-    _ensure_roster_access(roster, current_user)
+    _ensure_roster_view_access(roster, current_user)
 
     costs.update_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
