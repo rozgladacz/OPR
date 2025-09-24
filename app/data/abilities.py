@@ -17,6 +17,8 @@ class AbilityDefinition:
 
     def display_name(self) -> str:
         if self.value_label:
+            if self.slug in {"aura", "rozkaz"}:
+                return f"{self.name}: {self.value_label}"
             return f"{self.name}({self.value_label})"
         return self.name
 
@@ -262,7 +264,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Aura",
         type="aura",
         description="Przydziel oddziałom w zasięgu wybraną zdolność. Wariant o zasięgu 12” jest dwukrotnie silniejszy.",
-        value_label="Efekt",
+        value_label="Zdolność",
         value_type="text",
     ),
     AbilityDefinition(
@@ -392,7 +394,7 @@ def display_with_value(definition: AbilityDefinition, value: str | None) -> str:
         ability_slug = slug_for_name(value_text) or value_text
         ability_def = find_definition(ability_slug) if ability_slug else None
         ability_label = ability_def.name if ability_def else value_text
-        return f"{definition.name}({ability_label})" if ability_label else definition.display_name()
+        return f"{definition.name}: {ability_label}" if ability_label else definition.display_name()
     if definition.slug == "aura":
         value_text = (value or "").strip()
         ability_ref = ""
@@ -407,12 +409,13 @@ def display_with_value(definition: AbilityDefinition, value: str | None) -> str:
         ability_slug = slug_for_name(ability_ref) or ability_ref
         ability_def = find_definition(ability_slug) if ability_slug else None
         ability_label = ability_def.name if ability_def else ability_ref
-        range_label = f"{aura_range}\"" if aura_range else ""
-        if ability_label and range_label:
-            return f"{definition.name}({range_label} – {ability_label})"
+        range_text = aura_range.strip() if aura_range else ""
+        normalized_range = range_text.replace("\"", "").replace("”", "").strip()
+        is_long_range = normalized_range == "12"
+        prefix = f"{definition.name}(12\")" if is_long_range else definition.name
         if ability_label:
-            return f"{definition.name}({ability_label})"
-        return definition.display_name()
+            return f"{prefix}: {ability_label}"
+        return definition.display_name() if not is_long_range else f"{prefix}: {definition.value_label or ''}".rstrip(": ")
     if not definition.value_label:
         return definition.name if not value else f"{definition.name} {value}".strip()
     value_text = (value or '').strip()

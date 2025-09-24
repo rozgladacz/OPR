@@ -3,7 +3,7 @@
 {% block title %}{% if weapon %}Edycja broni{% else %}Nowa broń{% endif %} - OPR{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-lg-6">
+  <div class="col-12 col-md-10 col-lg-10 col-xl-9 col-xxl-8">
     <div class="card">
       <div class="card-body">
         <h5 class="card-title">{% if weapon %}Edycja broni{% else %}Nowa broń{% endif %}</h5>
@@ -79,8 +79,10 @@
                 <select class="form-select ability-picker-value-select d-none"></select>
                 <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
               </div>
-              <div class="col-sm-2">
-                <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
+              <div class="col-sm-auto">
+                <div class="d-grid">
+                  <button class="btn btn-outline-primary ability-picker-add text-nowrap" type="button">Dodaj</button>
+                </div>
               </div>
             </div>
               <div class="ability-picker-list mt-2"></div>
@@ -92,13 +94,13 @@
             <label class="form-label" for="notes">Notatki</label>
             <textarea class="form-control" id="notes" name="notes" rows="3">{{ form_values.notes }}</textarea>
           </div>
-          {% if parent_defaults %}
-          <div class="d-flex justify-content-end mb-3">
-            <button class="btn btn-outline-secondary btn-sm" type="button" data-weapon-reset>Przywróć wartości domyślne</button>
+          <div class="d-flex flex-wrap justify-content-end gap-2">
+            {% if parent_defaults %}
+            <button class="btn btn-outline-secondary" type="button" data-weapon-reset>Przywróć wartości domyślne</button>
+            {% endif %}
+            <a class="btn btn-secondary" href="/armories/{{ armory.id }}">Anuluj</a>
+            <button class="btn btn-primary" type="submit">Zapisz</button>
           </div>
-          {% endif %}
-          <button class="btn btn-primary" type="submit">Zapisz</button>
-          <a class="btn btn-secondary" href="/armories/{{ armory.id }}">Anuluj</a>
         </form>
       </div>
     </div>

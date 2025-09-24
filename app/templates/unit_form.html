@@ -2,7 +2,7 @@
 {% block title %}Edycja jednostki - {{ unit.name }}{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-lg-6">
+  <div class="col-12 col-md-10 col-lg-10 col-xl-9 col-xxl-8">
     <div class="card">
       <div class="card-body">
         <h5 class="card-title">Edycja jednostki</h5>
@@ -50,8 +50,10 @@
                 <select class="form-select ability-picker-value-select d-none"></select>
                 <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
               </div>
-              <div class="col-sm-2">
-                <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
+              <div class="col-sm-auto">
+                <div class="d-grid">
+                  <button class="btn btn-outline-primary ability-picker-add text-nowrap" type="button">Dodaj</button>
+                </div>
               </div>
             </div>
             <div class="ability-picker-list mt-2"></div>
@@ -83,8 +85,10 @@
                 <select class="form-select ability-picker-value-select d-none"></select>
                 <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
               </div>
-              <div class="col-sm-2">
-                <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
+              <div class="col-sm-auto">
+                <div class="d-grid">
+                  <button class="btn btn-outline-primary ability-picker-add text-nowrap" type="button">Dodaj</button>
+                </div>
               </div>
             </div>
             <div class="ability-picker-list mt-2"></div>
@@ -116,8 +120,10 @@
                 <select class="form-select ability-picker-value-select d-none"></select>
                 <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
               </div>
-              <div class="col-sm-2">
-                <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
+              <div class="col-sm-auto">
+                <div class="d-grid">
+                  <button class="btn btn-outline-primary ability-picker-add text-nowrap" type="button">Dodaj</button>
+                </div>
               </div>
             </div>
             <div class="ability-picker-list mt-2"></div>
@@ -143,7 +149,7 @@
                 </div>
                 <div class="col-md-3">
                   <div class="form-check mb-2 mb-md-0">
-                    <input class="form-check-input weapon-picker-default" id="unit-weapon-default" type="checkbox" checked />
+                    <input class="form-check-input weapon-picker-default" id="unit-weapon-default" type="checkbox" />
                     <label class="form-check-label" for="unit-weapon-default">Domyślna</label>
                   </div>
                 </div>
@@ -151,8 +157,10 @@
                   <label class="form-label" for="unit-weapon-count">Ilość</label>
                   <input class="form-control weapon-picker-count" id="unit-weapon-count" type="number" min="1" value="1" />
                 </div>
-                <div class="col-md-2">
-                  <button class="btn btn-outline-primary w-100 weapon-picker-add" type="button">Dodaj</button>
+                <div class="col-md-auto">
+                  <div class="d-grid">
+                    <button class="btn btn-outline-primary weapon-picker-add text-nowrap" type="button">Dodaj</button>
+                  </div>
                 </div>
               </div>
               <div class="weapon-picker-list mt-3"></div>

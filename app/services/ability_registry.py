@@ -111,10 +111,15 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
             aura_choices: list[dict] = []
             for passive in passive_definitions:
                 for range_value in AURA_RANGE_OPTIONS:
+                    prefix = (
+                        f"{definition.name}(12\")"
+                        if int(range_value) == 12
+                        else definition.name
+                    )
                     aura_choices.append(
                         {
                             "value": f"{passive.slug}|{range_value}",
-                            "label": f'{passive.name} ({range_value}\")',
+                            "label": f"{prefix}: {passive.name}",
                             "description": passive.description,
                         }
                     )
