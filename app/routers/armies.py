@@ -72,6 +72,16 @@ def _armory_weapons(db: Session, armory: models.Armory) -> list[models.Weapon]:
     return weapons
 
 
+def _army_delete_reason(can_edit: bool, has_rosters: bool) -> str | None:
+    if can_edit and not has_rosters:
+        return None
+    if not can_edit:
+        return "Nie masz uprawnień do usunięcia tej armii."
+    if has_rosters:
+        return "Armia ma przypisane rozpiski – usuń je, aby móc ją usunąć."
+    return "Nie można usunąć tej armii."
+
+
 def _ordered_weapons(db: Session, armory: models.Armory, weapon_ids: list[int]) -> list[models.Weapon]:
     if not weapon_ids:
         return []
@@ -341,16 +351,27 @@ def view_army(
     _ensure_army_view_access(army, current_user)
 
     can_edit = current_user.is_admin or army.owner_id == current_user.id
-    can_delete = False
+    has_rosters = False
     if can_edit:
-        has_rosters = db.execute(
-            select(models.Roster.id).where(models.Roster.army_id == army.id)
-        ).first()
-        can_delete = not bool(has_rosters)
+        has_rosters = bool(
+            db.execute(
+                select(models.Roster.id).where(models.Roster.army_id == army.id)
+            ).first()
+        )
+    can_delete = can_edit and not has_rosters
+    delete_disabled_reason = _army_delete_reason(can_edit, has_rosters)
     weapons = _armory_weapons(db, army.armory)
 
     weapon_choices = [
-        {"id": weapon.id, "name": weapon.effective_name}
+        {
+            "id": weapon.id,
+            "name": weapon.effective_name,
+            "range": weapon.effective_range or "",
+            "attacks": weapon.display_attacks,
+            "ap": weapon.effective_ap,
+            "traits": weapon.effective_tags or "",
+            "notes": weapon.effective_notes or "",
+        }
         for weapon in weapons
     ]
     available_armories = _available_armories(db, current_user) if can_edit else []
@@ -396,6 +417,7 @@ def view_army(
             "error": None,
             "can_edit": can_edit,
             "can_delete": can_delete,
+            "army_delete_disabled_reason": delete_disabled_reason,
             "passive_definitions": PASSIVE_DEFINITIONS,
             "active_definitions": active_definitions,
             "aura_definitions": aura_definitions,
@@ -519,7 +541,15 @@ def edit_unit_form(
     weapons = _armory_weapons(db, army.armory)
 
     weapon_choices = [
-        {"id": weapon.id, "name": weapon.effective_name}
+        {
+            "id": weapon.id,
+            "name": weapon.effective_name,
+            "range": weapon.effective_range or "",
+            "attacks": weapon.display_attacks,
+            "ap": weapon.effective_ap,
+            "traits": weapon.effective_tags or "",
+            "notes": weapon.effective_notes or "",
+        }
         for weapon in weapons
     ]
     active_definitions = ability_registry.definition_payload(db, "active")
