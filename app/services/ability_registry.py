@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..data import abilities as ability_catalog
 
+AURA_RANGE_OPTIONS = (6, 12)
+
 
 def ability_slug(ability: models.Ability) -> str | None:
     if ability.config_json:
@@ -82,6 +84,7 @@ def sync_definitions(session: Session) -> None:
 def definition_payload(session: Session, ability_type: str) -> list[dict]:
     sync_definitions(session)
     definitions = ability_catalog.definitions_by_type(ability_type)
+    passive_definitions = ability_catalog.definitions_by_type("passive")
     records = (
         session.execute(
             select(models.Ability)
@@ -95,6 +98,27 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
     payload: list[dict] = []
     for definition in definitions:
         entry = ability_catalog.to_dict(definition)
+        if definition.slug == "rozkaz":
+            entry["value_choices"] = [
+                {
+                    "value": passive.slug,
+                    "label": passive.name,
+                    "description": passive.description,
+                }
+                for passive in passive_definitions
+            ]
+        elif definition.slug == "aura":
+            aura_choices: list[dict] = []
+            for passive in passive_definitions:
+                for range_value in AURA_RANGE_OPTIONS:
+                    aura_choices.append(
+                        {
+                            "value": f"{passive.slug}|{range_value}",
+                            "label": f'{passive.name} ({range_value}\")',
+                            "description": passive.description,
+                        }
+                    )
+            entry["value_choices"] = aura_choices
         ability = ability_by_slug.get(definition.slug)
         entry["ability_id"] = ability.id if ability else None
         payload.append(entry)
@@ -110,6 +134,7 @@ def unit_ability_payload(unit: models.Unit, ability_type: str) -> list[dict]:
         slug = ability_slug(ability) or ""
         definition = ability_catalog.find_definition(slug)
         value: str | None = None
+        is_default = None
         if link.params_json:
             try:
                 data = json.loads(link.params_json)
@@ -118,6 +143,10 @@ def unit_ability_payload(unit: models.Unit, ability_type: str) -> list[dict]:
             raw = data.get("value")
             if raw is not None:
                 value = str(raw)
+            if "default" in data:
+                is_default = bool(data["default"])
+            elif "is_default" in data:
+                is_default = bool(data["is_default"])
         label = (
             ability_catalog.display_with_value(definition, value)
             if definition
@@ -129,6 +158,8 @@ def unit_ability_payload(unit: models.Unit, ability_type: str) -> list[dict]:
                 "slug": slug,
                 "value": value or "",
                 "label": label,
+                "description": definition.description if definition else "",
+                "is_default": bool(is_default) if is_default is not None else False,
             }
         )
     return items
@@ -163,8 +194,14 @@ def build_unit_abilities(
         if ability is None:
             continue
         value = item.get("value")
+        default_flag = item.get("is_default")
         params = None
         if value not in (None, ""):
-            params = json.dumps({"value": value}, ensure_ascii=False)
+            payload = {"value": value}
+            if default_flag is not None:
+                payload["default"] = bool(default_flag)
+            params = json.dumps(payload, ensure_ascii=False)
+        elif default_flag is not None:
+            params = json.dumps({"default": bool(default_flag)}, ensure_ascii=False)
         result.append(models.UnitAbility(ability=ability, params_json=params))
     return result

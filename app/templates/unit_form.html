@@ -13,106 +13,115 @@
           </div>
           <div class="row g-3">
             <div class="col-12 col-md-4">
-              <label class="form-label" for="quality">Quality</label>
+              <label class="form-label" for="quality">Jakość</label>
               <input class="form-control" id="quality" name="quality" type="number" min="2" max="6" value="{{ unit.quality }}" required />
             </div>
             <div class="col-12 col-md-4">
-              <label class="form-label" for="defense">Defense</label>
+              <label class="form-label" for="defense">Obrona</label>
               <input class="form-control" id="defense" name="defense" type="number" min="2" max="6" value="{{ unit.defense }}" required />
             </div>
             <div class="col-12 col-md-4">
-              <label class="form-label" for="toughness">Toughness</label>
+              <label class="form-label" for="toughness">Wytrzymałość</label>
               <input class="form-control" id="toughness" name="toughness" type="number" min="1" value="{{ unit.toughness }}" required />
             </div>
           </div>
           <div class="mb-3 mt-3">
-            <label class="form-label" for="unit-passive-abilities">Zdolności pasywne</label>
-            <div
-              class="ability-picker"
-              data-ability-picker
-              data-definitions='{{ passive_definitions | tojson }}'
-              data-target-input="unit-passive-abilities"
-            >
-              <div class="row g-2 align-items-end">
-                <div class="col-sm-7">
-                  <select class="form-select ability-picker-select">
-                    <option value="">Wybierz zdolność</option>
-                    {% for ability in passive_definitions %}
-                    <option value="{{ ability.slug }}" data-requires-value="{{ 'true' if ability.requires_value else 'false' }}" data-value-type="{{ ability.value_type or '' }}">
-                      {{ ability.display_name }}
-                    </option>
-                    {% endfor %}
-                  </select>
-                </div>
-                <div class="col-sm-3 ability-picker-value d-none">
-                  <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
-                </div>
-                <div class="col-sm-2">
-                  <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
-                </div>
+          <label class="form-label" for="unit-passive-abilities">Zdolności pasywne</label>
+          <div
+            class="ability-picker"
+            data-ability-picker
+            data-definitions='{{ passive_definitions | tojson }}'
+            data-target-input="unit-passive-abilities"
+            data-default-toggle="true"
+            data-default-initial="true"
+          >
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-6">
+                <select class="form-select ability-picker-select">
+                  <option value="">Wybierz zdolność</option>
+                  {% for ability in passive_definitions %}
+                  <option value="{{ ability.slug }}" data-requires-value="{{ 'true' if ability.requires_value else 'false' }}" data-value-type="{{ ability.value_type or '' }}" title="{{ ability.description }}">
+                    {{ ability.display_name }}
+                  </option>
+                  {% endfor %}
+                </select>
               </div>
-              <div class="ability-picker-list mt-2"></div>
+              <div class="col-sm-4 ability-picker-value d-none">
+                <select class="form-select ability-picker-value-select d-none"></select>
+                <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
+              </div>
+              <div class="col-sm-2">
+                <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
+              </div>
             </div>
+            <div class="ability-picker-list mt-2"></div>
+          </div>
             <input type="hidden" id="unit-passive-abilities" name="passive_abilities" value='{{ passive_selected | tojson }}' />
           </div>
           <div class="mb-3">
-            <label class="form-label" for="unit-active-abilities">Zdolności aktywne</label>
-            <div
-              class="ability-picker"
-              data-ability-picker
-              data-definitions='{{ active_definitions | tojson }}'
-              data-target-input="unit-active-abilities"
-            >
-              <div class="row g-2 align-items-end">
-                <div class="col-sm-7">
-                  <select class="form-select ability-picker-select">
-                    <option value="">Wybierz zdolność</option>
-                    {% for ability in active_definitions %}
-                    <option value="{{ ability.slug }}" data-requires-value="{{ 'true' if ability.requires_value else 'false' }}" data-value-type="{{ ability.value_type or '' }}">
-                      {{ ability.display_name }}
-                    </option>
-                    {% endfor %}
-                  </select>
-                </div>
-                <div class="col-sm-3 ability-picker-value d-none">
-                  <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
-                </div>
-                <div class="col-sm-2">
-                  <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
-                </div>
+          <label class="form-label" for="unit-active-abilities">Zdolności aktywne</label>
+          <div
+            class="ability-picker"
+            data-ability-picker
+            data-definitions='{{ active_definitions | tojson }}'
+            data-target-input="unit-active-abilities"
+            data-default-toggle="true"
+            data-default-initial="false"
+          >
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-6">
+                <select class="form-select ability-picker-select">
+                  <option value="">Wybierz zdolność</option>
+                  {% for ability in active_definitions %}
+                  <option value="{{ ability.slug }}" data-requires-value="{{ 'true' if ability.requires_value else 'false' }}" data-value-type="{{ ability.value_type or '' }}" title="{{ ability.description }}">
+                    {{ ability.display_name }}
+                  </option>
+                  {% endfor %}
+                </select>
               </div>
-              <div class="ability-picker-list mt-2"></div>
+              <div class="col-sm-4 ability-picker-value d-none">
+                <select class="form-select ability-picker-value-select d-none"></select>
+                <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
+              </div>
+              <div class="col-sm-2">
+                <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
+              </div>
             </div>
+            <div class="ability-picker-list mt-2"></div>
+          </div>
             <input type="hidden" id="unit-active-abilities" name="active_abilities" value='{{ active_selected | tojson }}' />
           </div>
           <div class="mb-3">
-            <label class="form-label" for="unit-aura-abilities">Aury</label>
-            <div
-              class="ability-picker"
-              data-ability-picker
-              data-definitions='{{ aura_definitions | tojson }}'
-              data-target-input="unit-aura-abilities"
-            >
-              <div class="row g-2 align-items-end">
-                <div class="col-sm-7">
-                  <select class="form-select ability-picker-select">
-                    <option value="">Wybierz aurę</option>
-                    {% for ability in aura_definitions %}
-                    <option value="{{ ability.slug }}" data-requires-value="{{ 'true' if ability.requires_value else 'false' }}" data-value-type="{{ ability.value_type or '' }}">
-                      {{ ability.display_name }}
-                    </option>
-                    {% endfor %}
-                  </select>
-                </div>
-                <div class="col-sm-3 ability-picker-value d-none">
-                  <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
-                </div>
-                <div class="col-sm-2">
-                  <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
-                </div>
+          <label class="form-label" for="unit-aura-abilities">Aury</label>
+          <div
+            class="ability-picker"
+            data-ability-picker
+            data-definitions='{{ aura_definitions | tojson }}'
+            data-target-input="unit-aura-abilities"
+            data-default-toggle="true"
+            data-default-initial="false"
+          >
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-6">
+                <select class="form-select ability-picker-select">
+                  <option value="">Wybierz aurę</option>
+                  {% for ability in aura_definitions %}
+                  <option value="{{ ability.slug }}" data-requires-value="{{ 'true' if ability.requires_value else 'false' }}" data-value-type="{{ ability.value_type or '' }}" title="{{ ability.description }}">
+                    {{ ability.display_name }}
+                  </option>
+                  {% endfor %}
+                </select>
               </div>
-              <div class="ability-picker-list mt-2"></div>
+              <div class="col-sm-4 ability-picker-value d-none">
+                <select class="form-select ability-picker-value-select d-none"></select>
+                <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
+              </div>
+              <div class="col-sm-2">
+                <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
+              </div>
             </div>
+            <div class="ability-picker-list mt-2"></div>
+          </div>
             <input type="hidden" id="unit-aura-abilities" name="aura_abilities" value='{{ aura_selected | tojson }}' />
           </div>
           <div class="mb-3">

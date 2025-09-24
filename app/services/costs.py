@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from typing import Iterable, Sequence
 
 from .. import models
+from ..data import abilities as ability_catalog
 from .utils import parse_flags
 
 
@@ -27,12 +29,12 @@ DEFENSE_TABLE = {
 
 TOUGHNESS_SPECIAL = {1: 1.0, 2: 2.15, 3: 3.5}
 
-QUALITY_ROW_ABILITIES = {"nieustraszony", "stracency", "fearless", "expendable"}
+QUALITY_ROW_ABILITIES = {"nieustraszony", "stracency"}
 
 DEFENSE_ROW_ABILITIES = {
-    2: {"delikatny", "fragile"},
-    3: {"niewrazliwy", "invulnerable", "inv"},
-    4: {"regeneracja", "regen", "regeneration"},
+    2: {"delikatny"},
+    3: {"niewrazliwy"},
+    4: {"regeneracja"},
 }
 
 RANGE_TABLE = {0: 0.6, 12: 0.65, 18: 1.0, 24: 1.25, 30: 1.45, 36: 1.55}
@@ -46,10 +48,10 @@ BLAST_MULTIPLIER = {2: 1.95, 3: 2.8, 6: 4.3}
 DEADLY_MULTIPLIER = {2: 1.9, 3: 2.6, 6: 3.8}
 
 TRANSPORT_MULTIPLIERS = [
-    ({"samolot", "aircraft"}, 3.5),
-    ({"zasadzka", "ambush", "zwiadowca", "scout"}, 2.5),
-    ({"latajacy", "latajaca", "lata", "flying"}, 1.5),
-    ({"szybki", "szybka", "szybcy", "fast", "zwinny", "zwinna", "agile"}, 1.25),
+    ({"samolot"}, 3.5),
+    ({"zasadzka", "zwiadowca"}, 2.5),
+    ({"latajacy"}, 1.5),
+    ({"szybki", "zwinny"}, 1.25),
 ]
 
 
@@ -80,18 +82,21 @@ def flags_to_ability_list(flags: dict | None) -> list[str]:
         name = str(key).strip()
         if not name:
             continue
+        if name.endswith("?"):
+            name = name[:-1]
+        slug = ability_catalog.slug_for_name(name) or name
         if isinstance(value, bool):
             if value:
-                abilities.append(name)
+                abilities.append(slug)
             continue
         if value is None:
-            abilities.append(name)
+            abilities.append(slug)
             continue
         value_str = str(value).strip()
         if not value_str or value_str.casefold() in {"true", "yes"}:
-            abilities.append(name)
+            abilities.append(slug)
         else:
-            abilities.append(f"{name}({value_str})")
+            abilities.append(f"{slug}({value_str})")
     return abilities
 
 
@@ -160,74 +165,125 @@ def normalize_range_value(value: str | int | float | None) -> int:
     return int(round(numeric))
 
 
+def ability_identifier(text: str | None) -> str:
+    if text is None:
+        return ""
+    raw = str(text).strip()
+    if not raw:
+        return ""
+    base = raw
+    for separator in ("(", "=", ":"):
+        if separator in base:
+            base = base.split(separator, 1)[0].strip()
+    slug = ability_catalog.slug_for_name(base)
+    if slug:
+        return slug
+    return normalize_name(base)
+
+
 def passive_cost(ability_name: str, tou: float = 1.0, aura: bool = False) -> float:
+    slug = ability_identifier(ability_name)
     norm = normalize_name(ability_name)
-    if not norm:
+    key = slug or norm
+    if not key:
         return 0.0
 
     tou = float(tou)
 
-    if norm in {"zasadzka", "ambush"}:
+    if slug == "zasadzka":
         return 2.0 * tou
-    if norm in {"zwiadowca", "scout"}:
+    if slug == "zwiadowca":
         return 2.0 * tou
-    if norm in {"szybki", "szybka", "szybcy", "fast"}:
+    if slug == "szybki":
         return 1.0 * tou
-    if norm in {"wolny", "slow"}:
+    if slug == "wolny":
         return -1.0 * tou
-    if norm in {"harcownik", "skirmisher"}:
+    if slug == "harcownik":
         return 1.5 * tou
-    if norm in {"nieruchomy", "immobile"}:
+    if slug == "nieruchomy":
         return 2.5 * tou
-    if norm in {"zwinny", "agile"}:
+    if slug == "zwinny":
         return 0.5 * tou
-    if norm in {"niezgrabny", "niezgrabna", "clumsy"}:
+    if slug == "niezgrabny":
         return -0.5 * tou
-    if norm in {"latajacy", "latajaca", "lata", "flying"}:
+    if slug == "latajacy":
         return 1.0 * tou
-    if norm in {"samolot", "aircraft"}:
+    if slug == "samolot":
         return 3.0 * tou
-    if norm in {"kontra", "counter"}:
+    if slug == "kontra":
         return 2.0 * tou
-    if norm in {"maskowanie", "camouflage", "stealth"}:
+    if slug == "maskowanie":
         return 2.0 * tou
-    if norm in {"okopany", "fortified", "entrenched"}:
+    if slug == "okopany":
         return 1.0 * tou
-    if norm in {"tarcza", "shield"}:
+    if slug == "tarcza":
         return 1.25 * tou
-    if norm in {"straznik", "guardian", "overwatch"}:
+    if slug == "straznik":
         return 3.0 * tou
 
     if aura:
-        if norm in {"nieustraszony", "stracency", "fearless", "expendable"}:
+        if slug in {"nieustraszony", "stracency"}:
             return 1.5 * tou
-        if norm in {"delikatny", "fragile"}:
+        if slug == "delikatny":
             return 0.5 * tou
-        if norm in {"niewrazliwy", "invulnerable", "inv"}:
+        if slug == "niewrazliwy":
             return 2.0 * tou
-        if norm in {"regeneracja", "regen", "regeneration"}:
+        if slug == "regeneracja":
             return 3.5 * tou
-        if norm in {"furia", "furious"}:
+        if slug == "furia":
             return 3.0 * tou
-        if norm in {"nieustepliwy", "nieustepliwi", "relentless"}:
+        if slug == "nieustepliwy":
             return 3.5 * tou
 
-    if norm.startswith("strach") or norm.startswith("fear ") or norm.startswith("fear(") or norm == "fear":
-        value = extract_number(norm)
+    if slug == "strach":
+        value = extract_number(ability_name)
         return 0.75 * value
 
     return 0.0
 
 
-def ability_cost_from_name(name: str, unit_abilities: Sequence[str] | None = None) -> float:
+def _parse_aura_value(name: str, value: str | None) -> tuple[str, float]:
+    aura_range = 6.0
+    ability_ref = ""
+    if value:
+        parts = value.split("|", 1)
+        if len(parts) == 2:
+            ability_ref = parts[0].strip()
+            aura_range = extract_number(parts[1]) or 6.0
+        else:
+            ability_ref = value.strip()
+    if not ability_ref:
+        desc = normalize_name(name)
+        if desc.startswith("aura("):
+            match = re.match(r"aura\(([^)]+)\)\s*(.*)", desc)
+            if match:
+                aura_range = extract_number(match.group(1)) or 6.0
+                ability_ref = match.group(2).strip()
+        elif desc.startswith("aura:" ):
+            ability_ref = desc.split(":", 1)[1].strip()
+        else:
+            ability_ref = desc[4:].strip()
+    slug = ability_catalog.slug_for_name(ability_ref) or ability_identifier(ability_ref)
+    return slug, aura_range
+
+
+def ability_cost_from_name(
+    name: str,
+    value: str | None = None,
+    unit_abilities: Sequence[str] | None = None,
+) -> float:
     desc = normalize_name(name)
     if not desc:
         return 0.0
 
-    ability_set = {normalize_name(item) for item in unit_abilities or []}
+    ability_set: set[str] = set()
+    for item in unit_abilities or []:
+        identifier = ability_identifier(item)
+        if identifier:
+            ability_set.add(identifier)
 
     if desc.startswith("transport"):
-        capacity = extract_number(name)
+        capacity = extract_number(value or name)
         multiplier = 1.0
         for options, value in TRANSPORT_MULTIPLIERS:
             if ability_set & options:
@@ -235,37 +291,27 @@ def ability_cost_from_name(name: str, unit_abilities: Sequence[str] | None = Non
         return capacity * multiplier
 
     if desc.startswith("aura"):
-        aura_range = 0.0
-        ability_name = ""
-        if desc.startswith("aura("):
-            match = re.match(r"aura\(([^)]+)\)\s*(.*)", desc)
-            if match:
-                aura_range = extract_number(match.group(1))
-                ability_name = match.group(2).strip()
-        elif desc.startswith("aura:"):
-            ability_name = desc.split(":", 1)[1].strip()
-        else:
-            ability_name = desc[4:].strip()
-
-        cost = passive_cost(ability_name, 8.0, True)
+        ability_slug, aura_range = _parse_aura_value(name, value)
+        cost = passive_cost(ability_slug, 8.0, True)
         if abs(aura_range - 12.0) < 1e-6:
             cost *= 2.0
         return cost
 
     if desc.startswith("mag"):
-        return 8.0 * extract_number(name)
+        return 8.0 * extract_number(value or name)
 
-    if desc in {"przekaznik", "relay"}:
+    if desc == "przekaznik":
         return 4.0
 
-    if desc in {"latanie", "patching", "repair"}:
+    if desc == "latanie":
         return 20.0
 
-    if desc.startswith("rozkaz") or desc.startswith("order"):
-        ability_name = desc.split(":", 1)[1].strip() if ":" in desc else ""
-        return passive_cost(ability_name, 10.0, True)
+    if desc.startswith("rozkaz"):
+        ability_ref = value or (desc.split(":", 1)[1].strip() if ":" in desc else "")
+        ability_slug = ability_catalog.slug_for_name(ability_ref) or ability_identifier(ability_ref)
+        return passive_cost(ability_slug, 10.0, True)
 
-    if desc in {"radio", "vox"}:
+    if desc == "radio":
         return 3.0
 
     return 0.0
@@ -283,14 +329,15 @@ def base_model_cost(
     passive_total = 0.0
 
     for ability in ability_list:
-        norm = normalize_name(ability)
+        slug = ability_identifier(ability)
+        norm = slug or normalize_name(ability)
         if not norm:
             continue
-        if norm in QUALITY_ROW_ABILITIES:
+        if slug in QUALITY_ROW_ABILITIES:
             qua_row = 2
             continue
         matched_def_row = next(
-            (row for row, names in DEFENSE_ROW_ABILITIES.items() if norm in names),
+            (row for row, names in DEFENSE_ROW_ABILITIES.items() if slug in names),
             None,
         )
         if matched_def_row:
@@ -325,20 +372,24 @@ def _weapon_cost(
     mult = 1.0
     q = int(quality)
 
-    unit_set = {normalize_name(trait) for trait in unit_traits}
+    unit_set: set[str] = set()
+    for trait in unit_traits:
+        identifier = ability_identifier(trait)
+        if identifier:
+            unit_set.add(identifier)
     melee = range_value == 0
 
-    if melee and unit_set & {"furia", "furious"}:
+    if melee and "furia" in unit_set:
         chance += 0.65
-    if not melee and unit_set & {"nieustepliwy", "nieustepliwi", "relentless"}:
+    if not melee and "nieustepliwy" in unit_set:
         chance += 0.65
-    if not melee and unit_set & {"wojownik", "wojownicy", "fighter"}:
+    if not melee and "wojownik" in unit_set:
         mult *= 0.5
-    if melee and unit_set & {"strzelec", "strzelcy", "shooter"}:
+    if melee and "strzelec" in unit_set:
         mult *= 0.5
-    if not melee and unit_set & {"bad shot", "slabo strzela", "zle strzela"}:
+    if not melee and "zle_strzela" in unit_set:
         q = 5
-    if not melee and unit_set & {"good shot", "dobrze strzela"}:
+    if not melee and "dobrze_strzela" in unit_set:
         q = 4
 
     assault = False
@@ -463,7 +514,14 @@ def ability_cost(ability_link: models.UnitAbility, unit_traits: Sequence[str] | 
         return 0.0
     if ability.cost_hint is not None:
         return float(ability.cost_hint)
-    return ability_cost_from_name(ability.name or "", unit_traits)
+    value = None
+    if ability_link.params_json:
+        try:
+            data = json.loads(ability_link.params_json)
+        except json.JSONDecodeError:
+            data = {}
+        value = data.get("value")
+    return ability_cost_from_name(ability.name or "", value, unit_traits)
 
 
 def unit_total_cost(unit: models.Unit) -> float:

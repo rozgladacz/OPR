@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable, List, Sequence
+import re
+import unicodedata
 
 @dataclass(frozen=True)
 class AbilityDefinition:
@@ -11,6 +13,7 @@ class AbilityDefinition:
     description: str
     value_label: str | None = None
     value_type: str | None = None  # "number" or "text"
+    value_choices: Sequence[str] | None = None
 
     def display_name(self) -> str:
         if self.value_label:
@@ -250,10 +253,18 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Rozkaz",
         type="active",
         description="Raz na rundę możesz przerwać, aby odział w zasięgu 12” od teraz do końca aktywacji (nie)miał zdolność X.",
-        value_label="X",
+        value_label="Zdolność",
         value_type="text",
     ),
     # Aura abilities
+    AbilityDefinition(
+        slug="aura",
+        name="Aura",
+        type="aura",
+        description="Przydziel oddziałom w zasięgu wybraną zdolność. Wariant o zasięgu 12” jest dwukrotnie silniejszy.",
+        value_label="Efekt",
+        value_type="text",
+    ),
     AbilityDefinition(
         slug="radio",
         name="Radio",
@@ -262,20 +273,13 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
     ),
     # Weapon abilities
     AbilityDefinition(
-        slug="ap",
-        name="AP",
-        type="weapon",
-        description="Cele otrzymują -X do rzutów na obronę podczas blokowania trafień tą bronią.",
-        value_label="X",
-        value_type="number",
-    ),
-    AbilityDefinition(
         slug="rozprysk",
         name="Rozprysk",
         type="weapon",
         description="Przed wykonaniem testów obrony liczba trafień jest mnożona przez X, ale nie więcej, niż jest modeli w atakowanym oddziale.",
         value_label="X",
         value_type="number",
+        value_choices=("2", "3", "6"),
     ),
     AbilityDefinition(
         slug="zabojczy",
@@ -284,6 +288,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Zamiast jednej przydziel jednocześnie X ran.",
         value_label="X",
         value_type="number",
+        value_choices=("2", "3", "6"),
     ),
     AbilityDefinition(
         slug="niebezposredni",
@@ -382,6 +387,32 @@ def find_definition(slug: str) -> AbilityDefinition | None:
 
 
 def display_with_value(definition: AbilityDefinition, value: str | None) -> str:
+    if definition.slug == "rozkaz":
+        value_text = (value or "").strip()
+        ability_slug = slug_for_name(value_text) or value_text
+        ability_def = find_definition(ability_slug) if ability_slug else None
+        ability_label = ability_def.name if ability_def else value_text
+        return f"{definition.name}({ability_label})" if ability_label else definition.display_name()
+    if definition.slug == "aura":
+        value_text = (value or "").strip()
+        ability_ref = ""
+        aura_range = ""
+        if value_text:
+            parts = value_text.split("|", 1)
+            if len(parts) == 2:
+                ability_ref = parts[0].strip()
+                aura_range = parts[1].strip()
+            else:
+                ability_ref = value_text
+        ability_slug = slug_for_name(ability_ref) or ability_ref
+        ability_def = find_definition(ability_slug) if ability_slug else None
+        ability_label = ability_def.name if ability_def else ability_ref
+        range_label = f"{aura_range}\"" if aura_range else ""
+        if ability_label and range_label:
+            return f"{definition.name}({range_label} – {ability_label})"
+        if ability_label:
+            return f"{definition.name}({ability_label})"
+        return definition.display_name()
     if not definition.value_label:
         return definition.name if not value else f"{definition.name} {value}".strip()
     value_text = (value or '').strip()
@@ -400,6 +431,7 @@ def to_dict(definition: AbilityDefinition) -> dict:
         "value_label": definition.value_label,
         "value_type": definition.value_type,
         "requires_value": definition.value_label is not None,
+        "value_choices": list(definition.value_choices) if definition.value_choices else [],
     }
 
 
@@ -410,3 +442,29 @@ def iter_definitions(slugs: Iterable[str]) -> List[AbilityDefinition]:
         if definition:
             found.append(definition)
     return found
+
+
+def _normalize(text: str | None) -> str:
+    if not text:
+        return ""
+    value = unicodedata.normalize("NFKD", str(text))
+    value = "".join(ch for ch in value if not unicodedata.combining(ch))
+    value = value.replace("-", " ").replace("_", " ")
+    value = re.sub(r"\s+", " ", value.strip())
+    return value.casefold()
+
+
+def slug_for_name(text: str | None) -> str | None:
+    if not text:
+        return None
+    normalized = _normalize(text)
+    if not normalized:
+        return None
+    for definition in ABILITY_DEFINITIONS:
+        if normalized in {
+            _normalize(definition.slug),
+            _normalize(definition.name),
+            _normalize(definition.display_name()),
+        }:
+            return definition.slug
+    return None

@@ -79,10 +79,15 @@
         <div class="d-xl-none mt-2 small">
           <div class="mb-1">
             <span class="text-muted">Pasywne:</span>
-            {% if item.passive_labels %}
+            {% if item.passive_items %}
             <span class="d-inline-flex flex-wrap gap-1 align-items-center">
-              {% for label in item.passive_labels %}
-              <span class="badge text-bg-secondary">{{ label }}</span>
+              {% for ability in item.passive_items %}
+              <span class="badge text-bg-secondary d-inline-flex align-items-center gap-1" title="{{ ability.description }}">
+                <span>{{ ability.label or ability.slug }}</span>
+                {% if ability.is_default %}
+                <span class="small text-uppercase ms-1">Domyślna</span>
+                {% endif %}
+              </span>
               {% endfor %}
             </span>
             {% else %}
@@ -91,10 +96,15 @@
           </div>
           <div class="mb-1">
             <span class="text-muted">Aktywne:</span>
-            {% if item.active_labels %}
+            {% if item.active_items %}
             <span class="d-inline-flex flex-wrap gap-1 align-items-center">
-              {% for label in item.active_labels %}
-              <span class="badge text-bg-info text-dark">{{ label }}</span>
+              {% for ability in item.active_items %}
+              <span class="badge text-bg-info text-dark d-inline-flex align-items-center gap-1" title="{{ ability.description }}">
+                <span>{{ ability.label or ability.raw or ability.slug }}</span>
+                {% if ability.is_default %}
+                <span class="small text-uppercase ms-1">Domyślna</span>
+                {% endif %}
+              </span>
               {% endfor %}
             </span>
             {% else %}
@@ -103,10 +113,15 @@
           </div>
           <div>
             <span class="text-muted">Aury:</span>
-            {% if item.aura_labels %}
+            {% if item.aura_items %}
             <span class="d-inline-flex flex-wrap gap-1 align-items-center">
-              {% for label in item.aura_labels %}
-              <span class="badge text-bg-warning text-dark">{{ label }}</span>
+              {% for ability in item.aura_items %}
+              <span class="badge text-bg-warning text-dark d-inline-flex align-items-center gap-1" title="{{ ability.description }}">
+                <span>{{ ability.label or ability.raw or ability.slug }}</span>
+                {% if ability.is_default %}
+                <span class="small text-uppercase ms-1">Domyślna</span>
+                {% endif %}
+              </span>
               {% endfor %}
             </span>
             {% else %}
@@ -115,12 +130,20 @@
           </div>
         </div>
       </td>
-      <td>Q{{ item.instance.quality }} / D{{ item.instance.defense }} / T{{ item.instance.toughness }}</td>
+      <td>
+        Jakość {{ item.instance.quality }} / Obrona {{ item.instance.defense }} /
+        Wytrzymałość {{ item.instance.toughness }}
+      </td>
       <td class="d-none d-xl-table-cell">
-        {% if item.passive_labels %}
+        {% if item.passive_items %}
         <div class="d-flex flex-wrap gap-1">
-          {% for label in item.passive_labels %}
-          <span class="badge text-bg-secondary">{{ label }}</span>
+          {% for ability in item.passive_items %}
+          <span class="badge text-bg-secondary d-inline-flex align-items-center gap-1" title="{{ ability.description }}">
+            <span>{{ ability.label or ability.slug }}</span>
+            {% if ability.is_default %}
+            <span class="small text-uppercase ms-1">Domyślna</span>
+            {% endif %}
+          </span>
           {% endfor %}
         </div>
         {% else %}
@@ -128,10 +151,15 @@
         {% endif %}
       </td>
       <td class="d-none d-xxl-table-cell">
-        {% if item.active_labels %}
+        {% if item.active_items %}
         <div class="d-flex flex-wrap gap-1">
-          {% for label in item.active_labels %}
-          <span class="badge text-bg-info text-dark">{{ label }}</span>
+          {% for ability in item.active_items %}
+          <span class="badge text-bg-info text-dark d-inline-flex align-items-center gap-1" title="{{ ability.description }}">
+            <span>{{ ability.label or ability.raw or ability.slug }}</span>
+            {% if ability.is_default %}
+            <span class="small text-uppercase ms-1">Domyślna</span>
+            {% endif %}
+          </span>
           {% endfor %}
         </div>
         {% else %}
@@ -139,10 +167,15 @@
         {% endif %}
       </td>
       <td class="d-none d-xxl-table-cell">
-        {% if item.aura_labels %}
+        {% if item.aura_items %}
         <div class="d-flex flex-wrap gap-1">
-          {% for label in item.aura_labels %}
-          <span class="badge text-bg-warning text-dark">{{ label }}</span>
+          {% for ability in item.aura_items %}
+          <span class="badge text-bg-warning text-dark d-inline-flex align-items-center gap-1" title="{{ ability.description }}">
+            <span>{{ ability.label or ability.raw or ability.slug }}</span>
+            {% if ability.is_default %}
+            <span class="small text-uppercase ms-1">Domyślna</span>
+            {% endif %}
+          </span>
           {% endfor %}
         </div>
         {% else %}
@@ -181,16 +214,42 @@
           <input class="form-control" id="unit-name" name="name" required />
         </div>
         <div class="col-md-2">
-          <label class="form-label" for="quality">Quality</label>
-          <input class="form-control" id="quality" name="quality" type="number" min="2" max="6" required />
+          <label class="form-label" for="quality">Jakość</label>
+          <input
+            class="form-control"
+            id="quality"
+            name="quality"
+            type="number"
+            min="2"
+            max="6"
+            value="4"
+            required
+          />
         </div>
         <div class="col-md-2">
-          <label class="form-label" for="defense">Defense</label>
-          <input class="form-control" id="defense" name="defense" type="number" min="2" max="6" required />
+          <label class="form-label" for="defense">Obrona</label>
+          <input
+            class="form-control"
+            id="defense"
+            name="defense"
+            type="number"
+            min="2"
+            max="6"
+            value="4"
+            required
+          />
         </div>
         <div class="col-md-2">
-          <label class="form-label" for="toughness">Toughness</label>
-          <input class="form-control" id="toughness" name="toughness" type="number" min="1" required />
+          <label class="form-label" for="toughness">Wytrzymałość</label>
+          <input
+            class="form-control"
+            id="toughness"
+            name="toughness"
+            type="number"
+            min="1"
+            value="1"
+            required
+          />
         </div>
         <div class="col-12">
           <label class="form-label" for="unit-passive-abilities">Zdolności pasywne</label>
@@ -199,9 +258,11 @@
             data-ability-picker
             data-definitions='{{ passive_definitions | tojson }}'
             data-target-input="unit-passive-abilities"
+            data-default-toggle="true"
+            data-default-initial="true"
           >
             <div class="row g-2 align-items-end">
-              <div class="col-sm-7">
+              <div class="col-sm-6">
                 <select class="form-select ability-picker-select">
                   <option value="">Wybierz zdolność</option>
                   {% for ability in passive_definitions %}
@@ -209,13 +270,15 @@
                     value="{{ ability.slug }}"
                     data-requires-value="{{ 'true' if ability.requires_value else 'false' }}"
                     data-value-type="{{ ability.value_type or '' }}"
+                    title="{{ ability.description }}"
                   >
                     {{ ability.display_name }}
                   </option>
                   {% endfor %}
                 </select>
               </div>
-              <div class="col-sm-3 ability-picker-value d-none">
+              <div class="col-sm-4 ability-picker-value d-none">
+                <select class="form-select ability-picker-value-select d-none"></select>
                 <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
               </div>
               <div class="col-sm-2">
@@ -233,10 +296,12 @@
             data-ability-picker
             data-definitions='{{ active_definitions | tojson }}'
             data-target-input="unit-active-abilities"
+            data-default-toggle="true"
+            data-default-initial="false"
           >
 
             <div class="row g-2 align-items-end">
-              <div class="col-sm-7">
+              <div class="col-sm-6">
                 <select class="form-select ability-picker-select">
                   <option value="">Wybierz zdolność</option>
                   {% for ability in active_definitions %}
@@ -245,13 +310,15 @@
                     data-requires-value="{{ 'true' if ability.requires_value else 'false' }}"
                     data-value-type="{{ ability.value_type or '' }}"
                     data-ability-id="{{ ability.ability_id }}"
+                    title="{{ ability.description }}"
                   >
                     {{ ability.display_name }}
                   </option>
                   {% endfor %}
                 </select>
               </div>
-              <div class="col-sm-3 ability-picker-value d-none">
+              <div class="col-sm-4 ability-picker-value d-none">
+                <select class="form-select ability-picker-value-select d-none"></select>
                 <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
               </div>
               <div class="col-sm-2">
@@ -270,9 +337,11 @@
             data-ability-picker
             data-definitions='{{ aura_definitions | tojson }}'
             data-target-input="unit-aura-abilities"
+            data-default-toggle="true"
+            data-default-initial="false"
           >
             <div class="row g-2 align-items-end">
-              <div class="col-sm-7">
+              <div class="col-sm-6">
                 <select class="form-select ability-picker-select">
                   <option value="">Wybierz aurę</option>
                   {% for ability in aura_definitions %}
@@ -281,13 +350,15 @@
                     data-requires-value="{{ 'true' if ability.requires_value else 'false' }}"
                     data-value-type="{{ ability.value_type or '' }}"
                     data-ability-id="{{ ability.ability_id }}"
+                    title="{{ ability.description }}"
                   >
                     {{ ability.display_name }}
                   </option>
                   {% endfor %}
                 </select>
               </div>
-              <div class="col-sm-3 ability-picker-value d-none">
+              <div class="col-sm-4 ability-picker-value d-none">
+                <select class="form-select ability-picker-value-select d-none"></select>
                 <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
               </div>
               <div class="col-sm-2">

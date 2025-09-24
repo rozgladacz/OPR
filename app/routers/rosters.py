@@ -104,7 +104,11 @@ def create_roster(
         raise HTTPException(status_code=404)
     if not current_user.is_admin and army.owner_id not in (None, current_user.id):
         raise HTTPException(status_code=403, detail="Brak dostępu do armii")
-    limit_value = int(points_limit) if points_limit else None
+    if points_limit is None:
+        limit_value = 1000
+    else:
+        stripped_limit = points_limit.strip()
+        limit_value = int(stripped_limit) if stripped_limit else 1000
     roster = models.Roster(
         name=name,
         army=army,

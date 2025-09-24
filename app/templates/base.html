@@ -32,6 +32,13 @@
             <li class="nav-item"><a class="nav-link" href="/rosters">Rozpiski</a></li>
             <li class="nav-item"><a class="nav-link" href="/armies">Armie</a></li>
             <li class="nav-item"><a class="nav-link" href="/armories">Zbrojownie</a></li>
+            <li class="nav-item">
+              <a
+                class="nav-link"
+                href="{{ url_for('static', path='/docs/Moje_OPR.pdf') }}"
+                download
+              >Pobierz zasady</a>
+            </li>
             {% if user and user.is_admin %}
             <li class="nav-item"><a class="nav-link" href="/users">Użytkownicy</a></li>
             {% endif %}

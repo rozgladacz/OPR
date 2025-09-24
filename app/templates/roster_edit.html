@@ -56,7 +56,8 @@
                 data-default-summary="{{ entry.default_summary | e }}"
                 {% if loop.first %}selected{% endif %}
               >
-                {{ entry.unit.name }} (Q{{ entry.unit.quality }}/D{{ entry.unit.defense }}/T{{ entry.unit.toughness }})
+                {{ entry.unit.name }} (Jakość {{ entry.unit.quality }} / Obrona {{ entry.unit.defense }} /
+                Wytrzymałość {{ entry.unit.toughness }})
               </option>
               {% endfor %}
             </select>
@@ -111,7 +112,9 @@
             <tr>
               <td>
                 <div class="fw-semibold">{{ ru.unit.name }}</div>
-                <div class="text-muted small">Q{{ ru.unit.quality }} / D{{ ru.unit.defense }} / T{{ ru.unit.toughness }}</div>
+                <div class="text-muted small">
+                  Jakość {{ ru.unit.quality }} / Obrona {{ ru.unit.defense }} / Wytrzymałość {{ ru.unit.toughness }}
+                </div>
                 <div class="d-flex flex-wrap gap-1 mt-2">
                   {% for label in item.passive_labels %}
                   <span class="badge text-bg-secondary">{{ label }}</span>
