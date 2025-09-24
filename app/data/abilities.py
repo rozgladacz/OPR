@@ -1,0 +1,412 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Iterable, List, Sequence
+
+@dataclass(frozen=True)
+class AbilityDefinition:
+    slug: str
+    name: str
+    type: str
+    description: str
+    value_label: str | None = None
+    value_type: str | None = None  # "number" or "text"
+
+    def display_name(self) -> str:
+        if self.value_label:
+            return f"{self.name}({self.value_label})"
+        return self.name
+
+
+ABILITY_DEFINITIONS: List[AbilityDefinition] = [
+    # Passive abilities
+    AbilityDefinition(
+        slug="bohater",
+        name="Bohater",
+        type="passive",
+        description=(
+            "Może być dołączony do dowolnego oddziału. Może wykonywać testy przegrupowania za cały odział, "
+            "ale musi korzystać z jej obrony dopóki wszystkie inne modele nie zostaną zabite. Podczas sprawdzania "
+            "zdolności i rozmiaru traktowany jest jakby miał wytrzymałość mniejszą o 3, do minimum 1."
+        ),
+    ),
+    AbilityDefinition(
+        slug="zasadzka",
+        name="Zasadzka",
+        type="passive",
+        description=(
+            "Odział można odłożyć przed rozstawieniem. Na początku każdej rundy (poza pierwszą) można rozstawić go w dowolnym "
+            "miejscu w odległości ponad 9” od jednostek wroga. W tej rundzie nie może kontrolować punktów. Gracze na zmianę "
+            "rozmieszczają jednostki zasadzki, zaczynając od gracza, który dokonuje aktywacji jako następny."
+        ),
+    ),
+    AbilityDefinition(
+        slug="zwiadowca",
+        name="Zwiadowca",
+        type="passive",
+        description=(
+            "Można go odłożyć przed rozstawieniem. Rozstawia się po rozstawieniu wszystkich pozostałych jednostek, w odległości "
+            "do 12” od normalnie dozwolonej pozycji. Gracze na zmianę rozmieszczają jednostki zwiadowcy, zaczynając od gracza, "
+            "który dokonuje aktywacji jako następny."
+        ),
+    ),
+    AbilityDefinition(
+        slug="szybki",
+        name="Szybki",
+        type="passive",
+        description="Porusza się o +2”.",
+    ),
+    AbilityDefinition(
+        slug="wolny",
+        name="Wolny",
+        type="passive",
+        description="Porusza się o -2”.",
+    ),
+    AbilityDefinition(
+        slug="harcownik",
+        name="Harcownik",
+        type="passive",
+        description="Po ataku możesz się ruszyć o 2”.",
+    ),
+    AbilityDefinition(
+        slug="nieruchomy",
+        name="Nieruchomy",
+        type="passive",
+        description="Po rozstawieniu nie może się przemieszczać.",
+    ),
+    AbilityDefinition(
+        slug="zwinny",
+        name="Zwinny",
+        type="passive",
+        description="Ignoruje trudny teren.",
+    ),
+    AbilityDefinition(
+        slug="niezgrabny",
+        name="Niezgrabny",
+        type="passive",
+        description="Na trudnym i niebezpiecznym terenie wykonuje dodatkowy test trudnego terenu.",
+    ),
+    AbilityDefinition(
+        slug="latajacy",
+        name="Latający",
+        type="passive",
+        description="Ignoruje teren i jednostki podczas ruchu.",
+    ),
+    AbilityDefinition(
+        slug="samolot",
+        name="Samolot",
+        type="passive",
+        description=(
+            "Jest latający. Podczas ruchu musi przemieścić się dodatkowe 30” w jednej linii. Nie może być przyszpilony, "
+            "nie może kontrolować punktów, szarżować, ani być celem szarży. Nie blokuje ruchu ani widzenia innych jednostek. "
+            "Jednostki strzelające do niego mają -12” zasięgu i -1 do trafienia."
+        ),
+    ),
+    AbilityDefinition(
+        slug="strach",
+        name="Strach",
+        type="passive",
+        description="Ten model liczy się jako ten, który zadał +X ran podczas sprawdzania, kto wygrał walkę wręcz.",
+        value_label="X",
+        value_type="number",
+    ),
+    AbilityDefinition(
+        slug="nieustraszony",
+        name="Nieustraszony",
+        type="passive",
+        description="Wykonuje jeden test przegrupowania mniej.",
+    ),
+    AbilityDefinition(
+        slug="stracency",
+        name="Straceńcy",
+        type="passive",
+        description="Po nieudanym teście przegrupowania wykonaj test trudnego terenu zamiast normalnych konsekwencji.",
+    ),
+    AbilityDefinition(
+        slug="furia",
+        name="Furia",
+        type="passive",
+        description="Podczas szarży naturalne 6 dają dodatkowe zwykłe trafienie.",
+    ),
+    AbilityDefinition(
+        slug="nieustepliwy",
+        name="Nieustępliwy",
+        type="passive",
+        description="Jeżeli model się nie poruszył naturalne 6 dają dodatkowe zwykłe trafienie.",
+    ),
+    AbilityDefinition(
+        slug="kontra",
+        name="Kontra",
+        type="passive",
+        description="Może wykonać kontratak przed szarżującym odziałem, a ten ignoruje swoją zdolność Impet.",
+    ),
+    AbilityDefinition(
+        slug="regeneracja",
+        name="Regeneracja",
+        type="passive",
+        description="Podczas obrony, za każdą naturalną 6 możesz zignorować następną ranę przydzieloną podczas tego ataku.",
+    ),
+    AbilityDefinition(
+        slug="delikatny",
+        name="Delikatny",
+        type="passive",
+        description="Podczas testów obrony naturalna 6 nie oznacza automatycznego sukcesu.",
+    ),
+    AbilityDefinition(
+        slug="niewrazliwy",
+        name="Niewrażliwy",
+        type="passive",
+        description="Podczas testów obrony naturalna 5 daje automatyczny sukces.",
+    ),
+    AbilityDefinition(
+        slug="maskowanie",
+        name="Maskowanie",
+        type="passive",
+        description="Atakujący ma -1 do rzutów na trafienie, gdy jest dalej niż 6\".",
+    ),
+    AbilityDefinition(
+        slug="tarcza",
+        name="Tarcza",
+        type="passive",
+        description="Zawsze ma osłonę.",
+    ),
+    AbilityDefinition(
+        slug="okopany",
+        name="Okopany",
+        type="passive",
+        description="Jego premia za osłonę wzrasta do +2.",
+    ),
+    AbilityDefinition(
+        slug="transport",
+        name="Transport",
+        type="passive",
+        description=(
+            "Odziały o maksymalnej sumarycznej wytrzymałości X mogą być do niego przypisane. Mogą być w nich modele o wytrzymałości "
+            "do 3. Gdy aktywujesz taki odział, możesz zamiast ruchu rozstawić go tak, aby każdy jego model był do 3” od transportera. "
+            "Przestaje być przypisany i może wykonać akcję. Jeżeli nie zostanie rozstawiony, nie robi nic podczas swojej aktywacji. "
+            "Jeżeli transporter zostanie zniszczony, przed jego zdjęciem każdy odział do niego przypisany zostaje rozstawiony jak wyżej, "
+            "zostaje przyszpilony i wykonuje test jakości. W przypadku porażki zostaje wyczerpany i wykonuje test trudnego terenu. "
+            "Odział który spełnia warunki rozstawienia z transportera, jako akcję możesz zostać zdjęty z planszy i do niego przypisany."
+        ),
+        value_label="X",
+        value_type="number",
+    ),
+    AbilityDefinition(
+        slug="masywny",
+        name="Masywny",
+        type="passive",
+        description=(
+            "Są na nim wydzielone elementy o własnej wytrzymałości, które mogą zostać zniszczone wraz z przypisanymi do nich zdolnościami i "
+            "bronią. Wytrzymałość modelu jest równa początkowej sumie wytrzymałości jego elementów. Podczas przydzielania ran każdy element "
+            "traktowany jak jest jak osobny model, choć rany ponad maksimum nie przepadają. Nie może dołączyć do oddziału."
+        ),
+    ),
+    AbilityDefinition(
+        slug="straznik",
+        name="Strażnik",
+        type="passive",
+        description="Gdy wrogi odział zakończy ruch, możesz przerwać aby zaatakować. Następnie ten odział zostaje wyczerpany.",
+    ),
+    AbilityDefinition(
+        slug="dobrze_strzela",
+        name="Dobrze strzela",
+        type="passive",
+        description="Atakuje na dystans z jakością 4.",
+    ),
+    AbilityDefinition(
+        slug="zle_strzela",
+        name="Źle strzela",
+        type="passive",
+        description="Atakuje na dystans z jakością 5.",
+    ),
+    # Active abilities
+    AbilityDefinition(
+        slug="mag",
+        name="Mag",
+        type="active",
+        description=(
+            "Otrzymuje X żetonów mocy na początku każdej rundy, do maksymalnie 6. Magowie w oddziale współdzielą żetony. "
+            "Wydaj tyle żetonów, ile wynosi koszt czaru i rzuć kością. Przy wyniku 4+ rozstrzygnij jego efekt. Jedna próba na czar na aktywację. "
+            "Magowie znajdujący się w odległości do 18” i widzący maga mogą jednocześnie przed rzutem wydać dowolną liczbę żetonów mocy, "
+            "aby dać +/-1 do rzutu za każdy żeton."
+        ),
+        value_label="X",
+        value_type="number",
+    ),
+    AbilityDefinition(
+        slug="przekaznik",
+        name="Przekaźnik",
+        type="active",
+        description="Raz na rundę, gdy Mag w zasięgu 12” rzuca czar, może go rzucić z twojej pozycji z +1 do rzutu.",
+    ),
+    AbilityDefinition(
+        slug="latanie",
+        name="Łatanie",
+        type="active",
+        description="Oddział w zasięgu 2” odrzuca k3 znaczniki ran.",
+    ),
+    AbilityDefinition(
+        slug="rozkaz",
+        name="Rozkaz",
+        type="active",
+        description="Raz na rundę możesz przerwać, aby odział w zasięgu 12” od teraz do końca aktywacji (nie)miał zdolność X.",
+        value_label="X",
+        value_type="text",
+    ),
+    # Aura abilities
+    AbilityDefinition(
+        slug="radio",
+        name="Radio",
+        type="aura",
+        description="Jeżeli model w twoim oddziale wydaje rozkaz, może wybrać oddział odległy o 24” który też ma radio.",
+    ),
+    # Weapon abilities
+    AbilityDefinition(
+        slug="ap",
+        name="AP",
+        type="weapon",
+        description="Cele otrzymują -X do rzutów na obronę podczas blokowania trafień tą bronią.",
+        value_label="X",
+        value_type="number",
+    ),
+    AbilityDefinition(
+        slug="rozprysk",
+        name="Rozprysk",
+        type="weapon",
+        description="Przed wykonaniem testów obrony liczba trafień jest mnożona przez X, ale nie więcej, niż jest modeli w atakowanym oddziale.",
+        value_label="X",
+        value_type="number",
+    ),
+    AbilityDefinition(
+        slug="zabojczy",
+        name="Zabójczy",
+        type="weapon",
+        description="Zamiast jednej przydziel jednocześnie X ran.",
+        value_label="X",
+        value_type="number",
+    ),
+    AbilityDefinition(
+        slug="niebezposredni",
+        name="Niebezpośredni",
+        type="weapon",
+        description="Nie wymaga linii wzroku.",
+    ),
+    AbilityDefinition(
+        slug="ciezki",
+        name="Ciężki",
+        type="weapon",
+        description="-1 do ataku, jeżeli atakujący się poruszył.",
+    ),
+    AbilityDefinition(
+        slug="impet",
+        name="Impet",
+        type="weapon",
+        description="+1 do trafienia i +1 do AP podczas szarży.",
+    ),
+    AbilityDefinition(
+        slug="namierzanie",
+        name="Namierzanie",
+        type="weapon",
+        description="Ignoruje osłonę i negatywne modyfikatory do rzutów na trafienie i do zasięgu.",
+    ),
+    AbilityDefinition(
+        slug="zuzywalny",
+        name="Zużywalny",
+        type="weapon",
+        description="Można użyć tylko raz na grę.",
+    ),
+    AbilityDefinition(
+        slug="niezawodny",
+        name="Niezawodny",
+        type="weapon",
+        description="Atakuje z jakością 2+.",
+    ),
+    AbilityDefinition(
+        slug="rozrywajacy",
+        name="Rozrywający",
+        type="weapon",
+        description="Naturalne 6 na trafienie dają dodatkowe normalne trafienie.",
+    ),
+    AbilityDefinition(
+        slug="precyzyjny",
+        name="Precyzyjny",
+        type="weapon",
+        description="Atakujący rozdziela rany.",
+    ),
+    AbilityDefinition(
+        slug="zracy",
+        name="Żrący",
+        type="weapon",
+        description="W testach obrony nie ma automatycznych sukcesów.",
+    ),
+    AbilityDefinition(
+        slug="szturmowa",
+        name="Szturmowa",
+        type="weapon",
+        description="Można nią wykonywać ataki wręcz.",
+    ),
+    AbilityDefinition(
+        slug="bez_oslon",
+        name="Bez osłon",
+        type="weapon",
+        description="Ignoruje osłonę.",
+    ),
+    AbilityDefinition(
+        slug="bez_regeneracji",
+        name="Bez regeneracji",
+        type="weapon",
+        description="Ignoruje regenerację.",
+    ),
+    AbilityDefinition(
+        slug="podkrecenie",
+        name="Podkręcenie",
+        type="weapon",
+        description="Raz na grę może być użyta dodatkowy raz.",
+    ),
+]
+
+
+def all_definitions() -> Sequence[AbilityDefinition]:
+    return ABILITY_DEFINITIONS
+
+
+def definitions_by_type(ability_type: str) -> List[AbilityDefinition]:
+    return [ability for ability in ABILITY_DEFINITIONS if ability.type == ability_type]
+
+
+def find_definition(slug: str) -> AbilityDefinition | None:
+    for ability in ABILITY_DEFINITIONS:
+        if ability.slug == slug:
+            return ability
+    return None
+
+
+def display_with_value(definition: AbilityDefinition, value: str | None) -> str:
+    if not definition.value_label:
+        return definition.name if not value else f"{definition.name} {value}".strip()
+    value_text = (value or '').strip()
+    if not value_text:
+        return definition.display_name()
+    return f"{definition.name}({value_text})"
+
+
+def to_dict(definition: AbilityDefinition) -> dict:
+    return {
+        "slug": definition.slug,
+        "name": definition.name,
+        "display_name": definition.display_name(),
+        "type": definition.type,
+        "description": definition.description,
+        "value_label": definition.value_label,
+        "value_type": definition.value_type,
+        "requires_value": definition.value_label is not None,
+    }
+
+
+def iter_definitions(slugs: Iterable[str]) -> List[AbilityDefinition]:
+    found: List[AbilityDefinition] = []
+    for slug in slugs:
+        definition = find_definition(slug)
+        if definition:
+            found.append(definition)
+    return found

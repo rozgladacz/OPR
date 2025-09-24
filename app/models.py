@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import List, Optional
 
@@ -30,6 +31,7 @@ class User(TimestampMixin, Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     armies: Mapped[List["Army"]] = relationship(back_populates="owner")
+    armories: Mapped[List["Armory"]] = relationship(back_populates="owner")
     weapons: Mapped[List["Weapon"]] = relationship(back_populates="owner")
     rosters: Mapped[List["Roster"]] = relationship(back_populates="owner")
     abilities: Mapped[List["Ability"]] = relationship(
@@ -60,26 +62,122 @@ class Ability(TimestampMixin, Base):
 
     owner: Mapped[Optional[User]] = relationship(back_populates="abilities")
     unit_links: Mapped[List["UnitAbility"]] = relationship(back_populates="ability")
+
+
+class Armory(TimestampMixin, Base):
+    __tablename__ = "armories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("armories.id"), nullable=True)
+
+    owner: Mapped[Optional[User]] = relationship(back_populates="armories")
+    parent: Mapped[Optional["Armory"]] = relationship(remote_side="Armory.id", back_populates="variants")
+    variants: Mapped[List["Armory"]] = relationship(back_populates="parent")
+    weapons: Mapped[List["Weapon"]] = relationship(
+        back_populates="armory", cascade="all, delete-orphan"
+    )
+    armies: Mapped[List["Army"]] = relationship(back_populates="armory")
+
+
 class Weapon(TimestampMixin, Base):
     __tablename__ = "weapons"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(120), nullable=False)
-    range: Mapped[str] = mapped_column(String(50), nullable=False)
-    attacks: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
-    ap: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    range: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    attacks: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=1.0)
+    ap: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0)
     tags: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cached_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("weapons.id"), nullable=True)
+    armory_id: Mapped[int] = mapped_column(ForeignKey("armories.id"), nullable=False)
     army_id: Mapped[Optional[int]] = mapped_column(ForeignKey("armies.id"), nullable=True)
 
     owner: Mapped[Optional[User]] = relationship(back_populates="weapons", foreign_keys=[owner_id])
     parent: Mapped[Optional["Weapon"]] = relationship(remote_side="Weapon.id")
+    armory: Mapped[Armory] = relationship(back_populates="weapons")
     army: Mapped[Optional["Army"]] = relationship(back_populates="weapons")
     units: Mapped[List["Unit"]] = relationship(back_populates="default_weapon")
     roster_units: Mapped[List["RosterUnit"]] = relationship(back_populates="selected_weapon")
+
+    def _inherited_value(self, attr: str, default=None):
+        current: Weapon | None = self
+        visited: set[int] = set()
+        while current is not None:
+            identifier = getattr(current, "id", None)
+            if identifier is not None:
+                if identifier in visited:
+                    break
+                visited.add(identifier)
+            value = getattr(current, attr)
+            if value is not None:
+                return value
+            current = current.parent
+        return default
+
+    def inherits_from_parent(self) -> bool:
+        return self.parent_id is not None
+
+    def is_overriding(self, attr: str) -> bool:
+        if not self.parent:
+            return True
+        value = getattr(self, attr)
+        if value is None:
+            return False
+        parent_value = self.parent._inherited_value(attr)
+        return value != parent_value
+
+    @property
+    def effective_name(self) -> str:
+        value = self._inherited_value("name", "")
+        return value or ""
+
+    @property
+    def effective_range(self) -> str:
+        value = self._inherited_value("range", "")
+        return value or ""
+
+    @property
+    def effective_attacks(self) -> float:
+        value = self._inherited_value("attacks", 1.0)
+        return float(value if value is not None else 1.0)
+
+    @property
+    def display_attacks(self) -> int:
+        value = self.effective_attacks
+        if not math.isfinite(value):
+            return 0
+        return int(math.floor(value + 0.5))
+
+    @property
+    def effective_ap(self) -> int:
+        value = self._inherited_value("ap", 0)
+        return int(value if value is not None else 0)
+
+    @property
+    def effective_tags(self) -> Optional[str]:
+        return self._inherited_value("tags")
+
+    @property
+    def effective_notes(self) -> Optional[str]:
+        return self._inherited_value("notes")
+
+    @property
+    def effective_cached_cost(self) -> Optional[float]:
+        value = self._inherited_value("cached_cost")
+        return float(value) if value is not None else None
+
+    def has_overrides(self) -> bool:
+        if not self.parent:
+            return True
+        for attr in ("name", "range", "attacks", "ap", "tags", "notes"):
+            if getattr(self, attr) is not None:
+                return True
+        return False
 
 
 class Army(TimestampMixin, Base):
@@ -90,10 +188,12 @@ class Army(TimestampMixin, Base):
     parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("armies.id"), nullable=True)
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     ruleset_id: Mapped[int] = mapped_column(ForeignKey("rulesets.id"), nullable=False)
+    armory_id: Mapped[int] = mapped_column(ForeignKey("armories.id"), nullable=False)
 
     parent: Mapped[Optional["Army"]] = relationship(remote_side="Army.id")
     owner: Mapped[Optional[User]] = relationship(back_populates="armies")
     ruleset: Mapped[RuleSet] = relationship(back_populates="armies")
+    armory: Mapped[Armory] = relationship(back_populates="armies")
     units: Mapped[List["Unit"]] = relationship(back_populates="army", cascade="all, delete-orphan")
     weapons: Mapped[List[Weapon]] = relationship(back_populates="army")
     rosters: Mapped[List["Roster"]] = relationship(back_populates="army")
@@ -126,19 +226,14 @@ class Unit(TimestampMixin, Base):
     @property
     def default_weapons(self) -> List[Weapon]:
         weapons: list[Weapon] = []
-        seen: set[int] = set()
+        added = False
         for link in getattr(self, "weapon_links", []):
             if getattr(link, "is_default", True) and link.weapon is not None:
-                weapon_id = link.weapon.id
-                if weapon_id not in seen:
-                    weapons.append(link.weapon)
-                    seen.add(weapon_id)
-        if self.default_weapon:
-            default_id = self.default_weapon_id or getattr(self.default_weapon, "id", None)
-            if default_id is None or default_id not in seen:
-                weapons.append(self.default_weapon)
-                if default_id is not None:
-                    seen.add(default_id)
+                count = max(int(getattr(link, "default_count", 1) or 1), 1)
+                weapons.extend([link.weapon] * count)
+                added = True
+        if not added and self.default_weapon:
+            weapons.append(self.default_weapon)
         return weapons
 
     @property
@@ -154,6 +249,17 @@ class Unit(TimestampMixin, Base):
             ids.append(self.default_weapon_id)
         return ids
 
+    @property
+    def default_weapon_loadout(self) -> List[tuple[Weapon, int]]:
+        loadout: list[tuple[Weapon, int]] = []
+        for link in getattr(self, "weapon_links", []):
+            if getattr(link, "is_default", True) and link.weapon is not None:
+                count = max(int(getattr(link, "default_count", 1) or 1), 1)
+                loadout.append((link.weapon, count))
+        if not loadout and self.default_weapon:
+            loadout.append((self.default_weapon, 1))
+        return loadout
+
 
 class UnitWeapon(TimestampMixin, Base):
     __tablename__ = "unit_weapons"
@@ -162,6 +268,7 @@ class UnitWeapon(TimestampMixin, Base):
     unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"), nullable=False)
     weapon_id: Mapped[int] = mapped_column(ForeignKey("weapons.id"), nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    default_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     unit: Mapped[Unit] = relationship(back_populates="weapon_links")
     weapon: Mapped[Weapon] = relationship()
@@ -213,6 +320,7 @@ for cls in [
     User,
     RuleSet,
     Ability,
+    Armory,
     Weapon,
     Army,
     Unit,

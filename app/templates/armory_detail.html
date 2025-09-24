@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% extends "base.html" %}
+{% block title %}Zbrojownia {{ armory.name }} - OPR{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="d-flex align-items-center gap-2">
+    <h2 class="mb-0">Zbrojownia: {{ armory.name }}</h2>
+    <button
+      class="btn btn-outline-primary btn-sm"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#armory-manage"
+      aria-expanded="{{ 'true' if error else 'false' }}"
+      aria-controls="armory-manage"
+    >
+      Edytuj
+    </button>
+  </div>
+  <a class="btn btn-secondary" href="/armories">Wróć</a>
+</div>
+
+<div class="mb-3 text-muted">
+  <div>Typ: {% if armory.parent %}wariant{% else %}lista podstawowa{% endif %}</div>
+  <div>Właściciel: {% if armory.owner %}{{ armory.owner.username }}{% else %}Globalna{% endif %}</div>
+  {% if parent_chain %}
+  <div>
+    Dziedziczy z:
+    {% for parent in parent_chain %}
+      {{ parent.name }}{% if not loop.last %} →{% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="collapse mb-4{% if error %} show{% endif %}" id="armory-manage">
+  <div class="card">
+    <div class="card-body">
+      <div class="row g-4">
+        <div class="col-12 col-xl-4">
+          <h5 class="card-title">Informacje o zbrojowni</h5>
+          {% if can_edit %}
+          <form class="row g-2 align-items-end mt-1" method="post" action="/armories/{{ armory.id }}/rename">
+            <div class="col-sm-8">
+              <label class="form-label" for="armory-name">Nazwa</label>
+              <input class="form-control" id="armory-name" name="name" value="{{ armory.name }}" required />
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label d-none d-sm-block">&nbsp;</label>
+              <button class="btn btn-primary w-100" type="submit">Zapisz</button>
+            </div>
+          </form>
+          {% if error %}
+          <div class="alert alert-danger mt-3">{{ error }}</div>
+          {% endif %}
+          {% else %}
+          <div class="alert alert-info mt-3">Nie masz uprawnień do edycji tej zbrojowni.</div>
+          {% endif %}
+        </div>
+        <div class="col-12 col-xl-4">
+          <h5 class="card-title">Utwórz kopię</h5>
+          <form method="post" action="/armories/{{ armory.id }}/copy">
+            <div class="mb-3">
+              <label class="form-label" for="copy-name">Nazwa kopii</label>
+              <input class="form-control" id="copy-name" name="name" value="{{ armory.name }} (kopia)" required />
+            </div>
+            {% if user and user.is_admin %}
+            <div class="form-check mb-3">
+              <input class="form-check-input" id="copy-global" name="is_global" type="checkbox" />
+              <label class="form-check-label" for="copy-global">Utwórz jako globalną</label>
+            </div>
+            {% endif %}
+            <button class="btn btn-outline-primary" type="submit">Stwórz kopię</button>
+          </form>
+        </div>
+        <div class="col-12 col-xl-4">
+          <h5 class="card-title">Utwórz wariant</h5>
+          <form method="post" action="/armories/{{ armory.id }}/variant">
+            <div class="mb-3">
+              <label class="form-label" for="variant-name">Nazwa wariantu</label>
+              <input class="form-control" id="variant-name" name="name" value="{{ armory.name }} - wariant" required />
+            </div>
+            {% if user and user.is_admin %}
+            <div class="form-check mb-3">
+              <input class="form-check-input" id="variant-global" name="is_global" type="checkbox" />
+              <label class="form-check-label" for="variant-global">Utwórz jako globalny wariant</label>
+            </div>
+            {% endif %}
+            <button class="btn btn-outline-primary" type="submit">Stwórz wariant</button>
+          </form>
+        </div>
+      </div>
+      {% if can_delete %}
+      <hr class="my-4" />
+      <form method="post" action="/armories/{{ armory.id }}/delete" onsubmit="return confirm('Usunąć zbrojownię? Tej operacji nie można cofnąć.');">
+        <button class="btn btn-outline-danger" type="submit">Usuń zbrojownię</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<h4>Uzbrojenie</h4>
+<table class="table table-striped align-middle">
+  <thead>
+    <tr>
+      <th>Nazwa</th>
+      <th>Zasięg</th>
+      <th>Ataki</th>
+      <th>AP</th>
+      <th>Zdolności</th>
+      <th>Koszt (Q4)</th>
+      <th class="text-end">
+        {% if can_edit %}
+        <a class="btn btn-primary btn-sm" href="/armories/{{ armory.id }}/weapons/new">Nowa broń</a>
+        {% endif %}
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in weapons %}
+    <tr>
+      <td>
+        {{ item.instance.effective_name }}
+        {% if item.instance.parent %}
+        <div class="text-muted small">{% if item.overrides.name %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
+        {% endif %}
+      </td>
+      <td>
+        {{ item.instance.effective_range or '-' }}
+        {% if item.instance.parent %}
+        <div class="text-muted small">{% if item.overrides.range %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
+        {% endif %}
+      </td>
+      <td>
+        {{ item.instance.display_attacks }}
+        {% if item.instance.parent %}
+        <div class="text-muted small">{% if item.overrides.attacks %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
+        {% endif %}
+      </td>
+      <td>
+        {{ item.instance.effective_ap }}
+        {% if item.instance.parent %}
+        <div class="text-muted small">{% if item.overrides.ap %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
+        {% endif %}
+      </td>
+      <td>
+        {{ item.instance.effective_tags or '-' }}
+        {% if item.instance.parent %}
+        <div class="text-muted small">{% if item.overrides.tags %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
+        {% endif %}
+      </td>
+      <td>{{ "%.2f"|format(item.cost) }}</td>
+      <td class="text-end">
+        {% if can_edit %}
+        <div class="btn-group btn-group-sm">
+          <a class="btn btn-outline-secondary" href="/armories/{{ armory.id }}/weapons/{{ item.instance.id }}/edit">Edytuj</a>
+          <form method="post" action="/armories/{{ armory.id }}/weapons/{{ item.instance.id }}/delete" onsubmit="return confirm('Usunąć broń?');">
+            <button class="btn btn-outline-danger" type="submit">Usuń</button>
+          </form>
+        </div>
+        {% else %}
+        <span class="text-muted small">Tylko podgląd</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="text-muted">Brak uzbrojenia</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

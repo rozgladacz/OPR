@@ -1,8 +1,9 @@
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import DB_URL
@@ -27,8 +28,156 @@ def get_db() -> Generator:
         db.close()
 
 
+def _ensure_default_armory(connection) -> int:
+    result = connection.execute(
+        text(
+            "SELECT id FROM armories WHERE owner_id IS NULL ORDER BY id LIMIT 1"
+        )
+    ).scalar_one_or_none()
+    if result is not None:
+        return result
+
+    now = datetime.utcnow()
+    connection.execute(
+        text(
+            """
+            INSERT INTO armories (name, owner_id, parent_id, created_at, updated_at)
+            VALUES (:name, NULL, NULL, :created_at, :updated_at)
+            """
+        ),
+        {
+            "name": "Domyślna zbrojownia",
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    return connection.execute(
+        text(
+            "SELECT id FROM armories WHERE owner_id IS NULL ORDER BY id LIMIT 1"
+        )
+    ).scalar_one()
+
+
+def _rebuild_weapons_table(connection, default_armory_id: int) -> None:
+    from . import models
+
+    logger.info("Migrating weapons table to support armories and inheritance")
+    connection.execute(text("PRAGMA foreign_keys=OFF"))
+    try:
+        connection.execute(text("DROP TABLE IF EXISTS weapons_old"))
+        connection.execute(text("ALTER TABLE weapons RENAME TO weapons_old"))
+        models.Weapon.__table__.create(connection)
+        connection.execute(
+            text(
+                """
+                INSERT INTO weapons (
+                    id, name, range, attacks, ap, tags, notes, cached_cost,
+                    owner_id, parent_id, armory_id, army_id, created_at, updated_at
+                )
+                SELECT
+                    id, name, range, attacks, ap, tags, notes, cached_cost,
+                    owner_id, parent_id, :armory_id, army_id, created_at, updated_at
+                FROM weapons_old
+                """
+            ),
+            {"armory_id": default_armory_id},
+        )
+        connection.execute(text("DROP TABLE weapons_old"))
+    finally:
+        connection.execute(text("PRAGMA foreign_keys=ON"))
+
+
+def _rebuild_armies_table(connection, default_armory_id: int) -> None:
+    from . import models
+
+    logger.info("Migrating armies table to link armories")
+    connection.execute(text("PRAGMA foreign_keys=OFF"))
+    try:
+        connection.execute(text("DROP TABLE IF EXISTS armies_old"))
+        connection.execute(text("ALTER TABLE armies RENAME TO armies_old"))
+        models.Army.__table__.create(connection)
+        connection.execute(
+            text(
+                """
+                INSERT INTO armies (
+                    id, name, parent_id, owner_id, ruleset_id, armory_id, created_at, updated_at
+                )
+                SELECT
+                    id, name, parent_id, owner_id, ruleset_id, :armory_id, created_at, updated_at
+                FROM armies_old
+                """
+            ),
+            {"armory_id": default_armory_id},
+        )
+        connection.execute(text("DROP TABLE armies_old"))
+    finally:
+        connection.execute(text("PRAGMA foreign_keys=ON"))
+
+
+def _rebuild_unit_weapons_table(connection) -> None:
+    from . import models
+
+    logger.info("Migrating unit_weapons table to include default counts")
+    connection.execute(text("PRAGMA foreign_keys=OFF"))
+    try:
+        connection.execute(text("DROP TABLE IF EXISTS unit_weapons_old"))
+        connection.execute(text("ALTER TABLE unit_weapons RENAME TO unit_weapons_old"))
+        models.UnitWeapon.__table__.create(connection)
+        connection.execute(
+            text(
+                """
+                INSERT INTO unit_weapons (
+                    id, unit_id, weapon_id, is_default, default_count, created_at, updated_at
+                )
+                SELECT id, unit_id, weapon_id, is_default, 1, created_at, updated_at
+                FROM unit_weapons_old
+                """
+            )
+        )
+        connection.execute(text("DROP TABLE unit_weapons_old"))
+    finally:
+        connection.execute(text("PRAGMA foreign_keys=ON"))
+
+
+def _migrate_schema() -> None:
+    from sqlalchemy import inspect
+
+    if not DB_URL.startswith("sqlite"):
+        return
+
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        table_names = set(inspector.get_table_names())
+        if "armories" not in table_names:
+            return
+
+        default_armory_id = _ensure_default_armory(connection)
+
+        if "weapons" in table_names:
+            columns = inspector.get_columns("weapons")
+            column_names = {column["name"] for column in columns}
+            requires_armory_column = "armory_id" not in column_names
+            inheritance_columns = {"name", "range", "attacks", "ap"}
+            requires_nullable_update = any(
+                column["name"] in inheritance_columns and not column["nullable"]
+                for column in columns
+            )
+            if requires_armory_column or requires_nullable_update:
+                _rebuild_weapons_table(connection, default_armory_id)
+
+        if "armies" in table_names:
+            columns = inspector.get_columns("armies")
+            if "armory_id" not in {column["name"] for column in columns}:
+                _rebuild_armies_table(connection, default_armory_id)
+
+        if "unit_weapons" in table_names:
+            columns = inspector.get_columns("unit_weapons")
+            if "default_count" not in {column["name"] for column in columns}:
+                _rebuild_unit_weapons_table(connection)
+
+
 def init_db() -> None:
-    from sqlalchemy import select
+    from sqlalchemy import select, update
 
     from . import models
     from .security import hash_password
@@ -37,6 +186,7 @@ def init_db() -> None:
     first_start = db_path is not None and not db_path.exists()
 
     Base.metadata.create_all(bind=engine)
+    _migrate_schema()
 
     with SessionLocal() as session:
         admin = session.execute(select(models.User).where(models.User.username == "admin")).scalar_one_or_none()
@@ -55,6 +205,22 @@ def init_db() -> None:
             session.add(ruleset)
 
         session.flush()
+
+        default_armory = (
+            session.execute(
+                select(models.Armory)
+                .where(models.Armory.owner_id.is_(None))
+                .order_by(models.Armory.id)
+            )
+            .scalars()
+            .first()
+        )
+        if default_armory is None:
+            default_armory = models.Armory(name="Domyślna zbrojownia", owner_id=None)
+            session.add(default_armory)
+            session.flush()
+
+        ability_registry.sync_definitions(session)
 
         if not session.execute(select(models.Weapon)).first():
             weapon_specs = [
@@ -194,17 +360,34 @@ def init_db() -> None:
                     attacks=spec["attacks"],
                     ap=spec["ap"],
                     tags=spec.get("tags") or None,
-                    owner_id=None,
+                    owner_id=default_armory.owner_id,
+                    armory=default_armory,
                 )
                 weapon.cached_cost = costs.weapon_cost(weapon)
                 weapons.append(weapon)
 
             session.add_all(weapons)
 
+        session.execute(
+            update(models.Weapon)
+            .where(models.Weapon.armory_id.is_(None))
+            .values(armory_id=default_armory.id)
+        )
+        session.execute(
+            update(models.Army)
+            .where(models.Army.armory_id.is_(None))
+            .values(armory_id=default_armory.id)
+        )
+
         session.flush()
 
         if not session.execute(select(models.Army)).first():
-            army = models.Army(name="Siewcy Zagłady", ruleset=ruleset, owner_id=None)
+            army = models.Army(
+                name="Siewcy Zagłady",
+                ruleset=ruleset,
+                owner_id=None,
+                armory=default_armory,
+            )
             session.add(army)
             session.flush()
 

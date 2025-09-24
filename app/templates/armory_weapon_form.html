@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% extends "base.html" %}
+{% block title %}{% if weapon %}Edycja broni{% else %}Nowa broń{% endif %} - OPR{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">{% if weapon %}Edycja broni{% else %}Nowa broń{% endif %}</h5>
+        {% if armory.parent %}
+        <div class="alert alert-info">
+          Ten wariant dziedziczy wartości z listy bazowej. Wprowadź nowe wartości, aby je nadpisać – pozostawienie wartości
+          zgodnych z bazą spowoduje korzystanie z oryginału.
+        </div>
+        {% endif %}
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label" for="name">Nazwa</label>
+            <input class="form-control" id="name" name="name" value="{{ form_values.name }}" required />
+          </div>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label" for="range">Zasięg</label>
+              <input class="form-control" id="range" name="range" value="{{ form_values.range }}" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="attacks">Ataki</label>
+              <input class="form-control" id="attacks" name="attacks" value="{{ form_values.attacks }}" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="ap">AP</label>
+              <input class="form-control" id="ap" name="ap" value="{{ form_values.ap }}" />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="weapon-abilities">Zdolności</label>
+            <div
+              class="ability-picker"
+              data-ability-picker
+              data-definitions='{{ weapon_abilities | tojson }}'
+              data-target-input="weapon-abilities"
+            >
+              <div class="row g-2 align-items-end">
+                <div class="col-sm-7">
+                  <select class="form-select ability-picker-select">
+                    <option value="">Wybierz zdolność</option>
+                    {% for ability in weapon_abilities %}
+                    <option
+                      value="{{ ability.slug }}"
+                      data-requires-value="{{ 'true' if ability.requires_value else 'false' }}"
+                      data-value-type="{{ ability.value_type or '' }}"
+                    >
+                      {{ ability.display_name }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-sm-3 ability-picker-value d-none">
+                  <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
+                </div>
+                <div class="col-sm-2">
+                  <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
+                </div>
+              </div>
+              <div class="ability-picker-list mt-2"></div>
+            </div>
+            <input type="hidden" id="weapon-abilities" name="abilities" value='{{ form_values.abilities | tojson }}' />
+            <div class="form-text">Dodaj zdolności z listy. Wpisz wartość dla pozycji oznaczonych (X).</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="notes">Notatki</label>
+            <textarea class="form-control" id="notes" name="notes" rows="3">{{ form_values.notes }}</textarea>
+          </div>
+          <button class="btn btn-primary" type="submit">Zapisz</button>
+          <a class="btn btn-secondary" href="/armories/{{ armory.id }}">Anuluj</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
