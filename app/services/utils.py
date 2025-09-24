@@ -39,6 +39,7 @@ def parse_flags(text: str | None) -> dict:
     return result
 
 
+
 def passive_flags_to_payload(text: str | None) -> list[dict]:
     flags = parse_flags(text)
     payload: list[dict] = []
@@ -73,6 +74,7 @@ def passive_payload_to_flags(items: list[dict]) -> str:
         else:
             entries.append(f"{slug}={value}")
     return ",".join(entries)
+
 
 
 def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
@@ -118,6 +120,7 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
             notes=None,
         )
         clone.cached_cost = None
+        
         db.add(clone)
 
     variant_weapons = db.execute(
@@ -126,6 +129,7 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
             models.Weapon.parent_id.is_not(None),
         )
     ).scalars().all()
+
     cleaned = False
     for weapon in variant_weapons:
         if weapon.parent_id is not None and db.get(models.Weapon, weapon.parent_id) is None:

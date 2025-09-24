@@ -147,6 +147,7 @@ class Weapon(TimestampMixin, Base):
         return float(value if value is not None else 1.0)
 
     @property
+
     def display_attacks(self) -> int:
         value = self.effective_attacks
         if not math.isfinite(value):
@@ -154,6 +155,7 @@ class Weapon(TimestampMixin, Base):
         return int(math.floor(value + 0.5))
 
     @property
+
     def effective_ap(self) -> int:
         value = self._inherited_value("ap", 0)
         return int(value if value is not None else 0)

@@ -137,8 +137,6 @@ def _rebuild_unit_weapons_table(connection) -> None:
         connection.execute(text("DROP TABLE unit_weapons_old"))
     finally:
         connection.execute(text("PRAGMA foreign_keys=ON"))
-
-
 def _migrate_schema() -> None:
     from sqlalchemy import inspect
 
@@ -174,6 +172,7 @@ def _migrate_schema() -> None:
             columns = inspector.get_columns("unit_weapons")
             if "default_count" not in {column["name"] for column in columns}:
                 _rebuild_unit_weapons_table(connection)
+
 
 
 def init_db() -> None:
@@ -220,8 +219,9 @@ def init_db() -> None:
             session.add(default_armory)
             session.flush()
 
-        ability_registry.sync_definitions(session)
 
+        ability_registry.sync_definitions(session)
+        
         if not session.execute(select(models.Weapon)).first():
             weapon_specs = [
                 {"name": "Lekka broń ręczna", "range": "", "attacks": 1, "ap": -1, "tags": ""},

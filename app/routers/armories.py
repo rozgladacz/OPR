@@ -20,6 +20,7 @@ router = APIRouter(prefix="/armories", tags=["armories"])
 templates = Jinja2Templates(directory="app/templates")
 
 OVERRIDABLE_FIELDS = ("name", "range", "attacks", "ap", "tags", "notes")
+
 WEAPON_DEFINITIONS = ability_catalog.definitions_by_type("weapon")
 WEAPON_DEFINITION_MAP = {definition.slug: definition for definition in WEAPON_DEFINITIONS}
 WEAPON_DEFINITION_PAYLOAD = [ability_catalog.to_dict(definition) for definition in WEAPON_DEFINITIONS]
@@ -42,6 +43,7 @@ WEAPON_SYNONYMS = {
     "overcharge": "podkrecenie",
     "overclock": "podkrecenie",
 }
+
 
 
 def _ensure_armory_view_access(armory: models.Armory, user: models.User) -> None:
@@ -182,7 +184,6 @@ def _parse_ability_payload(text: str | None) -> list[dict]:
         )
     return result
 
-
 def _armory_weapons(db: Session, armory: models.Armory) -> list[models.Weapon]:
     weapons = (
         db.execute(
@@ -219,6 +220,7 @@ def _refresh_costs(db: Session, weapons: Iterable[models.Weapon]) -> None:
 
 def _weapon_form_values(weapon: models.Weapon | None) -> dict:
     if not weapon:
+
         return {
             "name": "",
             "range": "",
@@ -236,6 +238,7 @@ def _weapon_form_values(weapon: models.Weapon | None) -> dict:
         "tags": weapon.effective_tags or "",
         "notes": weapon.effective_notes or "",
         "abilities": _weapon_tags_payload(weapon.effective_tags),
+
     }
 
 
@@ -538,7 +541,9 @@ def new_weapon_form(
             "armory": armory,
             "weapon": None,
             "form_values": _weapon_form_values(None),
+
             "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+
             "error": None,
         },
     )
@@ -552,7 +557,9 @@ def create_weapon(
     range: str = Form(""),
     attacks: str = Form("1"),
     ap: str = Form("0"),
+
     abilities: str | None = Form(None),
+
     notes: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
@@ -561,7 +568,9 @@ def create_weapon(
     _ensure_armory_edit_access(armory, current_user)
 
     cleaned_name = name.strip()
+
     ability_items = _parse_ability_payload(abilities)
+
     if not cleaned_name:
         return templates.TemplateResponse(
             "armory_weapon_form.html",
@@ -575,6 +584,7 @@ def create_weapon(
                     "range": range,
                     "attacks": attacks,
                     "ap": ap,
+
                     "tags": _serialize_weapon_tags(ability_items),
                     "notes": notes or "",
                     "abilities": ability_items,
@@ -614,7 +624,9 @@ def create_weapon(
     if ap_value is None:
         ap_value = 0
 
+
     tags_text = _serialize_weapon_tags(ability_items)
+
     weapon = models.Weapon(
         armory=armory,
         owner_id=armory.owner_id,
@@ -622,7 +634,9 @@ def create_weapon(
         range=range.strip(),
         attacks=attacks_value,
         ap=ap_value,
+
         tags=tags_text or None,
+
         notes=(notes or "").strip() or None,
     )
     weapon.cached_cost = costs.weapon_cost(weapon)
@@ -658,7 +672,9 @@ def edit_weapon_form(
             "armory": armory,
             "weapon": weapon,
             "form_values": _weapon_form_values(weapon),
+
             "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+
             "error": None,
         },
     )
@@ -673,7 +689,9 @@ def update_weapon(
     range: str = Form(""),
     attacks: str = Form("1"),
     ap: str = Form("0"),
+
     abilities: str | None = Form(None),
+
     notes: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
@@ -683,7 +701,9 @@ def update_weapon(
     weapon = _get_weapon(db, armory, weapon_id)
 
     cleaned_name = name.strip()
+
     ability_items = _parse_ability_payload(abilities)
+
     if not cleaned_name:
         return templates.TemplateResponse(
             "armory_weapon_form.html",
@@ -697,11 +717,13 @@ def update_weapon(
                     "range": range,
                     "attacks": attacks,
                     "ap": ap,
+
                     "tags": _serialize_weapon_tags(ability_items),
                     "notes": notes or "",
                     "abilities": ability_items,
                 },
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+
                 "error": "Nazwa broni jest wymagana.",
             },
         )
@@ -727,6 +749,7 @@ def update_weapon(
                     "abilities": ability_items,
                 },
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+
                 "error": str(exc),
             },
         )

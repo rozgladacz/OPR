@@ -18,6 +18,7 @@
   <a class="btn btn-secondary" href="/armies">Wróć</a>
 </div>
 
+
 <div class="collapse mb-4" id="army-settings">
   <div class="card">
     <div class="card-body">
@@ -49,6 +50,7 @@
       {% if not can_edit %}
       <div class="alert alert-info mt-3">
         Jest to armia globalna. Tylko administrator może wprowadzać w niej zmiany.
+
       </div>
       {% endif %}
     </div>
@@ -232,6 +234,7 @@
             data-definitions='{{ active_definitions | tojson }}'
             data-target-input="unit-active-abilities"
           >
+
             <div class="row g-2 align-items-end">
               <div class="col-sm-7">
                 <select class="form-select ability-picker-select">
@@ -258,6 +261,7 @@
             <div class="ability-picker-list mt-2"></div>
           </div>
           <input type="hidden" id="unit-active-abilities" name="active_abilities" value="[]" />
+
         </div>
         <div class="col-12">
           <label class="form-label" for="unit-aura-abilities">Aury</label>

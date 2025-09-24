@@ -322,6 +322,7 @@ def view_army(
 
     can_edit = current_user.is_admin or army.owner_id == current_user.id
     weapons = _armory_weapons(db, army.armory)
+
     weapon_choices = [
         {"id": weapon.id, "name": weapon.effective_name}
         for weapon in weapons
@@ -329,6 +330,7 @@ def view_army(
     available_armories = _available_armories(db, current_user) if can_edit else []
     active_definitions = ability_registry.definition_payload(db, "active")
     aura_definitions = ability_registry.definition_payload(db, "aura")
+
     units = []
     for unit in army.units:
         passive_items = _passive_payload(unit)
@@ -346,10 +348,12 @@ def view_army(
             {
                 "instance": unit,
                 "cost": costs.unit_total_cost(unit),
+
                 "passive_labels": passive_labels,
                 "active_labels": [item.get("label") or item.get("raw") or "" for item in active_items],
                 "aura_labels": [item.get("label") or item.get("raw") or "" for item in aura_items],
                 "weapon_summary": weapon_summary,
+
             }
         )
     return templates.TemplateResponse(
@@ -360,7 +364,9 @@ def view_army(
             "army": army,
             "units": units,
             "weapons": weapons,
+
             "weapon_choices": weapon_choices,
+
             "armories": available_armories,
             "selected_armory_id": army.armory_id,
             "error": None,
@@ -407,12 +413,14 @@ def add_unit(
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
 
+
     weapon_entries = _parse_weapon_payload(db, army.armory, weapons)
     passive_items = _parse_selection_payload(passive_abilities)
     active_items = _parse_selection_payload(active_abilities)
     aura_items = _parse_selection_payload(aura_abilities)
     active_links = ability_registry.build_unit_abilities(db, active_items, "active")
     aura_links = ability_registry.build_unit_abilities(db, aura_items, "aura")
+
     unit = models.Unit(
         name=name,
         quality=quality,
@@ -459,12 +467,14 @@ def edit_unit_form(
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
     weapons = _armory_weapons(db, army.armory)
+
     weapon_choices = [
         {"id": weapon.id, "name": weapon.effective_name}
         for weapon in weapons
     ]
     active_definitions = ability_registry.definition_payload(db, "active")
     aura_definitions = ability_registry.definition_payload(db, "aura")
+
     return templates.TemplateResponse(
         "unit_form.html",
         {
@@ -511,6 +521,7 @@ def update_unit(
     unit.quality = quality
     unit.defense = defense
     unit.toughness = toughness
+
     passive_items = _parse_selection_payload(passive_abilities)
     unit.flags = utils.passive_payload_to_flags(passive_items)
     weapon_entries = _parse_weapon_payload(db, army.armory, weapons)
@@ -532,6 +543,7 @@ def update_unit(
     active_items = _parse_selection_payload(active_abilities)
     aura_items = _parse_selection_payload(aura_abilities)
     unit.abilities = ability_registry.build_unit_abilities(db, active_items, "active") + ability_registry.build_unit_abilities(db, aura_items, "aura")
+
     db.commit()
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
 

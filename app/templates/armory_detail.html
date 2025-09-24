@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+
 {% extends "base.html" %}
 {% block title %}Zbrojownia {{ armory.name }} - OPR{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
+
   <div class="d-flex align-items-center gap-2">
     <h2 class="mb-0">Zbrojownia: {{ armory.name }}</h2>
     <button
@@ -109,11 +111,13 @@
       <th>AP</th>
       <th>Zdolności</th>
       <th>Koszt (Q4)</th>
+
       <th class="text-end">
         {% if can_edit %}
         <a class="btn btn-primary btn-sm" href="/armories/{{ armory.id }}/weapons/new">Nowa broń</a>
         {% endif %}
       </th>
+
     </tr>
   </thead>
   <tbody>
@@ -132,7 +136,9 @@
         {% endif %}
       </td>
       <td>
+
         {{ item.instance.display_attacks }}
+
         {% if item.instance.parent %}
         <div class="text-muted small">{% if item.overrides.attacks %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
         {% endif %}

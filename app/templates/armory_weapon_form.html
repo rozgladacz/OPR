@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% extends "base.html" %}
+
 {% block title %}{% if weapon %}Edycja broni{% else %}Nowa broń{% endif %} - OPR{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
@@ -21,6 +21,7 @@
             <label class="form-label" for="name">Nazwa</label>
             <input class="form-control" id="name" name="name" value="{{ form_values.name }}" required />
           </div>
+         
           <div class="row g-3">
             <div class="col-md-4">
               <label class="form-label" for="range">Zasięg</label>
