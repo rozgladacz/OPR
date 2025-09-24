@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import DB_URL
-from .services import costs
+from .services import ability_registry, costs
 
 logger = logging.getLogger(__name__)
 
