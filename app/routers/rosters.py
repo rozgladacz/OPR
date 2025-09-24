@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..db import get_db
 from ..security import get_current_user
-from ..services import costs, utils
+from ..services import ability_registry, costs, utils
 
 router = APIRouter(prefix="/rosters", tags=["rosters"])
 templates = Jinja2Templates(directory="app/templates")
@@ -136,15 +136,37 @@ def edit_roster(
         .scalars()
         .all()
     )
-    weapon_query = select(models.Weapon).order_by(models.Weapon.name)
-    if not current_user.is_admin:
-        weapon_query = weapon_query.where(
-            or_(
-                models.Weapon.owner_id == current_user.id,
-                models.Weapon.owner_id.is_(None),
-            )
+    available_unit_options = [
+        {
+            "unit": unit,
+            "weapon_options": _unit_weapon_options(unit),
+            "default_summary": _default_loadout_summary(unit),
+        }
+        for unit in available_units
+    ]
+
+    roster_items = []
+    for roster_unit in roster.roster_units:
+        unit = roster_unit.unit
+        passive_labels = _passive_labels(unit)
+        active_labels = [
+            item.get("label") or item.get("raw") or ""
+            for item in ability_registry.unit_ability_payload(unit, "active")
+        ]
+        aura_labels = [
+            item.get("label") or item.get("raw") or ""
+            for item in ability_registry.unit_ability_payload(unit, "aura")
+        ]
+        roster_items.append(
+            {
+                "instance": roster_unit,
+                "passive_labels": passive_labels,
+                "active_labels": active_labels,
+                "aura_labels": aura_labels,
+                "default_summary": _default_loadout_summary(unit),
+                "weapon_options": _unit_weapon_options(unit),
+            }
         )
-    weapons = db.execute(weapon_query).scalars().all()
     total_cost = costs.roster_total(roster)
     can_edit = current_user.is_admin or roster.owner_id == current_user.id
 
@@ -154,8 +176,8 @@ def edit_roster(
             "request": request,
             "user": current_user,
             "roster": roster,
-            "available_units": available_units,
-            "weapons": weapons,
+            "available_units": available_unit_options,
+            "roster_items": roster_items,
             "total_cost": total_cost,
             "error": None,
             "can_edit": can_edit,
@@ -196,10 +218,16 @@ def add_roster_unit(
         raise HTTPException(status_code=404)
     _ensure_roster_edit_access(roster, current_user)
 
+    allowed_weapon_ids = _unit_allowed_weapon_ids(unit)
     weapon_id = int(selected_weapon_id) if selected_weapon_id else None
     weapon = db.get(models.Weapon, weapon_id) if weapon_id else None
+    if weapon_id and weapon_id not in allowed_weapon_ids:
+        weapon = None
+    if weapon and weapon.armory_id != roster.army.armory_id:
+        weapon = None
     if weapon and not current_user.is_admin and weapon.owner_id not in (None, current_user.id):
         raise HTTPException(status_code=403, detail="Brak dostępu do broni")
+    count = max(int(count), 1)
     roster_unit = models.RosterUnit(
         roster=roster,
         unit=unit,
@@ -227,13 +255,14 @@ def update_roster_unit(
         raise HTTPException(status_code=404)
     _ensure_roster_edit_access(roster, current_user)
 
-    roster_unit.count = count
+    roster_unit.count = max(int(count), 1)
+    allowed_weapon_ids = _unit_allowed_weapon_ids(roster_unit.unit)
     weapon_id = int(selected_weapon_id) if selected_weapon_id else None
     if weapon_id:
         weapon = db.get(models.Weapon, weapon_id)
-        if not weapon:
-            raise HTTPException(status_code=404)
-        if not current_user.is_admin and weapon.owner_id not in (None, current_user.id):
+        if not weapon or weapon.id not in allowed_weapon_ids or weapon.armory_id != roster.army.armory_id:
+            weapon_id = None
+        elif not current_user.is_admin and weapon.owner_id not in (None, current_user.id):
             raise HTTPException(status_code=403, detail="Brak dostępu do broni")
     roster_unit.selected_weapon_id = weapon_id
     roster_unit.cached_cost = costs.roster_unit_cost(roster_unit)
@@ -257,3 +286,47 @@ def delete_roster_unit(
     db.delete(roster_unit)
     db.commit()
     return RedirectResponse(url=f"/rosters/{roster.id}", status_code=303)
+def _default_loadout_summary(unit: models.Unit) -> str:
+    parts: list[str] = []
+    for weapon, count in unit.default_weapon_loadout:
+        label = f"{weapon.effective_name} x{count}" if count > 1 else weapon.effective_name
+        parts.append(label)
+    return ", ".join(parts) if parts else "-"
+
+
+def _unit_weapon_options(unit: models.Unit) -> list[dict]:
+    options: list[dict] = []
+    seen: set[int] = set()
+    for link in getattr(unit, "weapon_links", []):
+        if link.weapon_id is None or link.weapon is None:
+            continue
+        if link.weapon_id in seen:
+            continue
+        options.append(
+            {
+                "id": link.weapon_id,
+                "name": link.weapon.effective_name,
+                "is_default": bool(getattr(link, "is_default", False)),
+            }
+        )
+        seen.add(link.weapon_id)
+    if unit.default_weapon_id and unit.default_weapon_id not in seen and unit.default_weapon:
+        options.append(
+            {
+                "id": unit.default_weapon_id,
+                "name": unit.default_weapon.effective_name,
+                "is_default": True,
+            }
+        )
+    options.sort(key=lambda item: (not item["is_default"], item["name"].casefold()))
+    return options
+
+
+def _unit_allowed_weapon_ids(unit: models.Unit) -> set[int]:
+    options = _unit_weapon_options(unit)
+    return {option["id"] for option in options}
+
+
+def _passive_labels(unit: models.Unit) -> list[str]:
+    payload = utils.passive_flags_to_payload(unit.flags)
+    return [item.get("label") or item.get("slug") or "" for item in payload if item]

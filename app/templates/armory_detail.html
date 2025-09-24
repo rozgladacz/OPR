@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+
+{% extends "base.html" %}
 {% block title %}Zbrojownia {{ armory.name }} - OPR{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -95,11 +97,9 @@
         <button class="btn btn-outline-danger" type="submit">Usuń zbrojownię</button>
       </form>
       {% endif %}
-
     </div>
   </div>
 </div>
-
 
 <h4>Uzbrojenie</h4>
 <table class="table table-striped align-middle">
@@ -137,7 +137,7 @@
       </td>
       <td>
 
-        {{ "%.0f"|format(item.instance.effective_attacks) }}
+        {{ item.instance.display_attacks }}
 
         {% if item.instance.parent %}
         <div class="text-muted small">{% if item.overrides.attacks %}Nadpisano{% else %}Dziedziczone{% endif %}</div>

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -7,12 +9,15 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..data import abilities as ability_catalog
 from ..db import get_db
 from ..security import get_current_user
-from ..services import costs, utils
+from ..services import ability_registry, costs, utils
 
 router = APIRouter(prefix="/armies", tags=["armies"])
 templates = Jinja2Templates(directory="app/templates")
+
+PASSIVE_DEFINITIONS = [ability_catalog.to_dict(definition) for definition in ability_catalog.definitions_by_type("passive")]
 
 
 def _ensure_army_view_access(army: models.Army, user: models.User) -> None:
@@ -87,6 +92,101 @@ def _ordered_weapons(db: Session, armory: models.Armory, weapon_ids: list[int]) 
             ordered.append(weapon_map[weapon_id])
             seen.add(weapon_id)
     return ordered
+
+
+def _passive_payload(unit: models.Unit | None) -> list[dict]:
+    flags = unit.flags if unit else None
+    return utils.passive_flags_to_payload(flags)
+
+
+def _parse_selection_payload(text: str | None) -> list[dict]:
+    if not text:
+        return []
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
+    if not unit:
+        return []
+    payload: list[dict] = []
+    seen: set[int] = set()
+    for link in getattr(unit, "weapon_links", []):
+        if link.weapon_id is None:
+            continue
+        name = link.weapon.effective_name if link.weapon else ""
+        payload.append(
+            {
+                "weapon_id": link.weapon_id,
+                "name": name,
+                "is_default": bool(getattr(link, "is_default", True)),
+                "count": max(int(getattr(link, "default_count", 1) or 1), 1),
+            }
+        )
+        seen.add(link.weapon_id)
+    if (
+        getattr(unit, "default_weapon", None)
+        and unit.default_weapon_id
+        and unit.default_weapon_id not in seen
+    ):
+        payload.append(
+            {
+                "weapon_id": unit.default_weapon_id,
+                "name": unit.default_weapon.effective_name,
+                "is_default": True,
+                "count": 1,
+            }
+        )
+    return payload
+
+
+def _parse_weapon_payload(
+    db: Session, armory: models.Armory, text: str | None
+) -> list[tuple[models.Weapon, bool, int]]:
+    if not text:
+        return []
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    results: list[tuple[models.Weapon, bool, int]] = []
+    seen: set[int] = set()
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+        weapon_id = entry.get("weapon_id")
+        if weapon_id is None:
+            continue
+        try:
+            weapon_id = int(weapon_id)
+        except (TypeError, ValueError):
+            continue
+        if weapon_id in seen:
+            continue
+        weapon = db.get(models.Weapon, weapon_id)
+        if not weapon or weapon.armory_id != armory.id:
+            continue
+        count = entry.get("count", 1)
+        try:
+            count_value = int(count)
+        except (TypeError, ValueError):
+            count_value = 1
+        if count_value < 1:
+            count_value = 1
+        results.append(
+            (
+                weapon,
+                bool(entry.get("is_default", False)),
+                count_value,
+            )
+        )
+        seen.add(weapon_id)
+    return results
 
 
 @router.get("", response_class=HTMLResponse)
@@ -222,15 +322,38 @@ def view_army(
 
     can_edit = current_user.is_admin or army.owner_id == current_user.id
     weapons = _armory_weapons(db, army.armory)
+
+    weapon_choices = [
+        {"id": weapon.id, "name": weapon.effective_name}
+        for weapon in weapons
+    ]
     available_armories = _available_armories(db, current_user) if can_edit else []
+    active_definitions = ability_registry.definition_payload(db, "active")
+    aura_definitions = ability_registry.definition_payload(db, "aura")
+
     units = []
     for unit in army.units:
-        default_weapons = unit.default_weapons
+        passive_items = _passive_payload(unit)
+        passive_labels = [item.get("label") or item.get("slug") for item in passive_items if item]
+        active_items = ability_registry.unit_ability_payload(unit, "active")
+        aura_items = ability_registry.unit_ability_payload(unit, "aura")
+        loadout = unit.default_weapon_loadout
+        weapon_summary = ", ".join(
+            f"{weapon.effective_name} x{count}" if count > 1 else weapon.effective_name
+            for weapon, count in loadout
+        )
+        if not weapon_summary:
+            weapon_summary = "-"
         units.append(
             {
                 "instance": unit,
                 "cost": costs.unit_total_cost(unit),
-                "default_weapon_names": ", ".join(weapon.effective_name for weapon in default_weapons),
+
+                "passive_labels": passive_labels,
+                "active_labels": [item.get("label") or item.get("raw") or "" for item in active_items],
+                "aura_labels": [item.get("label") or item.get("raw") or "" for item in aura_items],
+                "weapon_summary": weapon_summary,
+
             }
         )
     return templates.TemplateResponse(
@@ -241,10 +364,16 @@ def view_army(
             "army": army,
             "units": units,
             "weapons": weapons,
+
+            "weapon_choices": weapon_choices,
+
             "armories": available_armories,
             "selected_armory_id": army.armory_id,
             "error": None,
             "can_edit": can_edit,
+            "passive_definitions": PASSIVE_DEFINITIONS,
+            "active_definitions": active_definitions,
+            "aura_definitions": aura_definitions,
         },
     )
 
@@ -272,8 +401,10 @@ def add_unit(
     quality: int = Form(...),
     defense: int = Form(...),
     toughness: int = Form(...),
-    default_weapon_ids: list[str] = Form([]),
-    flags: str | None = Form(None),
+    weapons: str | None = Form(None),
+    passive_abilities: str | None = Form(None),
+    active_abilities: str | None = Form(None),
+    aura_abilities: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -282,23 +413,39 @@ def add_unit(
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
 
-    weapon_ids = [int(weapon_id) for weapon_id in (default_weapon_ids or []) if weapon_id]
-    ordered_weapons = _ordered_weapons(db, army.armory, weapon_ids)
+
+    weapon_entries = _parse_weapon_payload(db, army.armory, weapons)
+    passive_items = _parse_selection_payload(passive_abilities)
+    active_items = _parse_selection_payload(active_abilities)
+    aura_items = _parse_selection_payload(aura_abilities)
+    active_links = ability_registry.build_unit_abilities(db, active_items, "active")
+    aura_links = ability_registry.build_unit_abilities(db, aura_items, "aura")
+
     unit = models.Unit(
         name=name,
         quality=quality,
         defense=defense,
         toughness=toughness,
-        flags=flags,
+        flags=utils.passive_payload_to_flags(passive_items),
         army=army,
         owner_id=army.owner_id if army.owner_id is not None else current_user.id,
     )
-    if ordered_weapons:
-        unit.default_weapon = ordered_weapons[0]
-        unit.weapon_links = [
-            models.UnitWeapon(weapon=weapon, is_default=True)
-            for weapon in ordered_weapons
-        ]
+    weapon_links: list[models.UnitWeapon] = []
+    default_assigned = False
+    for weapon, is_default, count in weapon_entries:
+        link = models.UnitWeapon(
+            weapon=weapon,
+            is_default=is_default,
+            default_count=count,
+        )
+        weapon_links.append(link)
+        if is_default and not default_assigned:
+            unit.default_weapon = weapon
+            default_assigned = True
+    if not default_assigned and weapon_entries:
+        unit.default_weapon = weapon_entries[0][0]
+    unit.weapon_links = weapon_links
+    unit.abilities = active_links + aura_links
     db.add(unit)
     db.commit()
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
@@ -320,6 +467,14 @@ def edit_unit_form(
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
     weapons = _armory_weapons(db, army.armory)
+
+    weapon_choices = [
+        {"id": weapon.id, "name": weapon.effective_name}
+        for weapon in weapons
+    ]
+    active_definitions = ability_registry.definition_payload(db, "active")
+    aura_definitions = ability_registry.definition_payload(db, "aura")
+
     return templates.TemplateResponse(
         "unit_form.html",
         {
@@ -328,7 +483,14 @@ def edit_unit_form(
             "army": army,
             "unit": unit,
             "weapons": weapons,
-            "default_weapon_ids": unit.default_weapon_ids,
+            "weapon_choices": weapon_choices,
+            "weapon_payload": _unit_weapon_payload(unit),
+            "passive_definitions": PASSIVE_DEFINITIONS,
+            "passive_selected": _passive_payload(unit),
+            "active_definitions": active_definitions,
+            "active_selected": ability_registry.unit_ability_payload(unit, "active"),
+            "aura_definitions": aura_definitions,
+            "aura_selected": ability_registry.unit_ability_payload(unit, "aura"),
             "error": None,
         },
     )
@@ -342,8 +504,10 @@ def update_unit(
     quality: int = Form(...),
     defense: int = Form(...),
     toughness: int = Form(...),
-    default_weapon_ids: list[str] = Form([]),
-    flags: str | None = Form(None),
+    weapons: str | None = Form(None),
+    passive_abilities: str | None = Form(None),
+    active_abilities: str | None = Form(None),
+    aura_abilities: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -357,14 +521,29 @@ def update_unit(
     unit.quality = quality
     unit.defense = defense
     unit.toughness = toughness
-    unit.flags = flags
-    weapon_ids = [int(weapon_id) for weapon_id in (default_weapon_ids or []) if weapon_id]
-    ordered_weapons = _ordered_weapons(db, army.armory, weapon_ids)
-    unit.default_weapon = ordered_weapons[0] if ordered_weapons else None
-    existing_non_default = [link for link in unit.weapon_links if not link.is_default]
-    unit.weapon_links = existing_non_default + [
-            models.UnitWeapon(weapon=weapon, is_default=True) for weapon in ordered_weapons
-        ]
+
+    passive_items = _parse_selection_payload(passive_abilities)
+    unit.flags = utils.passive_payload_to_flags(passive_items)
+    weapon_entries = _parse_weapon_payload(db, army.armory, weapons)
+    weapon_links: list[models.UnitWeapon] = []
+    default_assigned = False
+    for weapon, is_default, count in weapon_entries:
+        link = models.UnitWeapon(
+            weapon=weapon,
+            is_default=is_default,
+            default_count=count,
+        )
+        weapon_links.append(link)
+        if is_default and not default_assigned:
+            unit.default_weapon = weapon
+            default_assigned = True
+    if not default_assigned:
+        unit.default_weapon = weapon_entries[0][0] if weapon_entries else None
+    unit.weapon_links = weapon_links
+    active_items = _parse_selection_payload(active_abilities)
+    aura_items = _parse_selection_payload(aura_abilities)
+    unit.abilities = ability_registry.build_unit_abilities(db, active_items, "active") + ability_registry.build_unit_abilities(db, aura_items, "aura")
+
     db.commit()
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
 

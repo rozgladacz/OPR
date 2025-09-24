@@ -445,9 +445,10 @@ def unit_default_weapons(unit: models.Unit | None) -> list[models.Weapon]:
     links = getattr(unit, "weapon_links", None) or []
     for link in links:
         if getattr(link, "is_default", True) and link.weapon is not None:
-            if link.weapon.id not in seen:
+            count = max(int(getattr(link, "default_count", 1) or 1), 1)
+            for _ in range(count):
                 weapons.append(link.weapon)
-                seen.add(link.weapon.id)
+            seen.add(link.weapon.id)
     if unit.default_weapon:
         default_id = unit.default_weapon_id or getattr(unit.default_weapon, "id", None)
         if default_id is None or default_id not in seen:

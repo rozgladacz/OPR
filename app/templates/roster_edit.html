@@ -44,12 +44,20 @@
     <div class="card h-100">
       <div class="card-body">
         <h5 class="card-title">Dodaj jednostkę</h5>
-        <form method="post" action="/rosters/{{ roster.id }}/units/add">
+        {% if available_units %}
+        <form method="post" action="/rosters/{{ roster.id }}/units/add" data-roster-unit-form>
           <div class="mb-3">
             <label class="form-label" for="unit_id">Jednostka</label>
-            <select class="form-select" id="unit_id" name="unit_id" required>
-              {% for unit in available_units %}
-              <option value="{{ unit.id }}">{{ unit.name }} (Q{{ unit.quality }}/D{{ unit.defense }}/T{{ unit.toughness }})</option>
+            <select class="form-select" id="unit_id" name="unit_id" required data-roster-unit-select>
+              {% for entry in available_units %}
+              <option
+                value="{{ entry.unit.id }}"
+                data-weapons="{{ entry.weapon_options | tojson | e }}"
+                data-default-summary="{{ entry.default_summary | e }}"
+                {% if loop.first %}selected{% endif %}
+              >
+                {{ entry.unit.name }} (Q{{ entry.unit.quality }}/D{{ entry.unit.defense }}/T{{ entry.unit.toughness }})
+              </option>
               {% endfor %}
             </select>
           </div>
@@ -60,16 +68,24 @@
             </div>
             <div class="col-md-6">
               <label class="form-label" for="selected_weapon_id">Broń</label>
-              <select class="form-select" id="selected_weapon_id" name="selected_weapon_id">
-                <option value="">Domyślna</option>
-                {% for weapon in weapons %}
-                <option value="{{ weapon.id }}">{{ weapon.effective_name }}</option>
-                {% endfor %}
+
+              <select
+                class="form-select"
+                id="selected_weapon_id"
+                name="selected_weapon_id"
+                data-roster-weapon-select
+                data-placeholder="Domyślne wyposażenie"
+              >
+                <option value="">Domyślne wyposażenie</option>
               </select>
+              <div class="form-text" data-roster-default-summary>Domyślne wyposażenie: -</div>
             </div>
           </div>
           <button class="btn btn-success mt-3" type="submit">Dodaj</button>
         </form>
+        {% else %}
+        <div class="alert alert-info mb-0">Brak jednostek w wybranej armii.</div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -90,17 +106,42 @@
             </tr>
           </thead>
           <tbody>
-            {% for ru in roster.roster_units %}
+            {% for item in roster_items %}
+            {% set ru = item.instance %}
             <tr>
-              <td>{{ ru.unit.name }}</td>
+              <td>
+                <div class="fw-semibold">{{ ru.unit.name }}</div>
+                <div class="text-muted small">Q{{ ru.unit.quality }} / D{{ ru.unit.defense }} / T{{ ru.unit.toughness }}</div>
+                <div class="d-flex flex-wrap gap-1 mt-2">
+                  {% for label in item.passive_labels %}
+                  <span class="badge text-bg-secondary">{{ label }}</span>
+                  {% endfor %}
+                  {% for label in item.active_labels %}
+                  <span class="badge text-bg-info text-dark">{{ label }}</span>
+                  {% endfor %}
+                  {% for label in item.aura_labels %}
+                  <span class="badge text-bg-warning text-dark">{{ label }}</span>
+                  {% endfor %}
+                  {% if not item.passive_labels and not item.active_labels and not item.aura_labels %}
+                  <span class="text-muted small">Brak dodatkowych zdolności</span>
+                  {% endif %}
+                </div>
+              </td>
               <td>
                 {% if can_edit %}
-                <form method="post" action="/rosters/{{ roster.id }}/units/{{ ru.id }}/update" class="d-flex gap-2">
+                <form method="post" action="/rosters/{{ roster.id }}/units/{{ ru.id }}/update" class="d-flex flex-column flex-sm-row gap-2" data-roster-unit-form>
                   <input class="form-control form-control-sm" name="count" type="number" min="1" value="{{ ru.count }}" />
-                  <select class="form-select form-select-sm" name="selected_weapon_id">
-                    <option value="">Domyślna</option>
-                    {% for weapon in weapons %}
-                    <option value="{{ weapon.id }}" {% if weapon.id == ru.selected_weapon_id %}selected{% endif %}>{{ weapon.effective_name }}</option>
+
+                  <select
+                    class="form-select form-select-sm"
+                    name="selected_weapon_id"
+                    data-roster-weapon-select
+                    data-placeholder="Domyślne wyposażenie"
+                    data-selected="{{ ru.selected_weapon_id or '' }}"
+                  >
+                    <option value="">Domyślne wyposażenie{% if item.default_summary != '-' %} ({{ item.default_summary }}){% endif %}</option>
+                    {% for weapon in item.weapon_options %}
+                    <option value="{{ weapon.id }}" {% if weapon.id == ru.selected_weapon_id %}selected{% endif %}>{{ weapon.name }}</option>
                     {% endfor %}
                   </select>
                   <button class="btn btn-sm btn-primary" type="submit">Aktualizuj</button>
@@ -112,10 +153,10 @@
               <td>
                 {% if ru.selected_weapon %}
                 {{ ru.selected_weapon.effective_name }}
-                {% elif ru.unit.default_weapon %}
-                {{ ru.unit.default_weapon.effective_name }}
+
                 {% else %}
-                -
+                {{ item.default_summary }}
+
                 {% endif %}
               </td>
               <td>{{ ru.cached_cost }}</td>

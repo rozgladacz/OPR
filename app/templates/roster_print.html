@@ -8,33 +8,31 @@
 </div>
 
 <div class="row row-cols-1 row-cols-md-2 g-4">
-  {% for ru in roster.roster_units %}
+  {% for item in roster_items %}
+  {% set ru = item.instance %}
   <div class="col">
     <div class="card roster-card h-100">
       <div class="card-body">
         <h5 class="card-title">{{ ru.unit.name }} × {{ ru.count }}</h5>
         <p class="card-text">Q{{ ru.unit.quality }} / D{{ ru.unit.defense }} / T{{ ru.unit.toughness }}</p>
         <p class="card-text">
-          Broń:
+          Uzbrojenie:
           {% if ru.selected_weapon %}
           {{ ru.selected_weapon.effective_name }}
-          {% elif ru.unit.default_weapon %}
-          {{ ru.unit.default_weapon.effective_name }}
           {% else %}
-          -
+          {{ item.default_summary }}
           {% endif %}
         </p>
+        {% if item.passive_labels %}
+        <p class="card-text"><strong>Zdolności pasywne:</strong> {{ item.passive_labels | join(', ') }}</p>
+        {% endif %}
+        {% if item.active_labels %}
+        <p class="card-text"><strong>Zdolności aktywne:</strong> {{ item.active_labels | join(', ') }}</p>
+        {% endif %}
+        {% if item.aura_labels %}
+        <p class="card-text"><strong>Aury:</strong> {{ item.aura_labels | join(', ') }}</p>
+        {% endif %}
         <p class="card-text">Koszt pozycji: {{ ru.cached_cost }}</p>
-        {% if ru.unit.flags %}
-        <p class="card-text"><strong>Flagi:</strong> {{ ru.unit.flags }}</p>
-        {% endif %}
-        {% if ru.unit.abilities %}
-        <p class="card-text"><strong>Zdolności:</strong>
-          {% for link in ru.unit.abilities %}
-            {{ link.ability.name }}{% if not loop.last %}, {% endif %}
-          {% endfor %}
-        </p>
-        {% endif %}
       </div>
     </div>
   </div>

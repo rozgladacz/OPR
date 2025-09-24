@@ -2,43 +2,58 @@
 {% block title %}Armia {{ army.name }} - OPR{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h2>Armia: {{ army.name }}</h2>
+  <div class="d-flex align-items-center gap-2">
+    <h2 class="mb-0">Armia: {{ army.name }}</h2>
+    <button
+      class="btn btn-outline-primary btn-sm"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#army-settings"
+      aria-expanded="{{ 'true' if error else 'false' }}"
+      aria-controls="army-settings"
+    >
+      Edytuj
+    </button>
+  </div>
   <a class="btn btn-secondary" href="/armies">Wróć</a>
 </div>
 
-<div class="card mb-4">
-  <div class="card-body">
-    <h5 class="card-title">Informacje</h5>
-    <form method="post" action="/armies/{{ army.id }}/update" class="row g-3 align-items-end">
-      <div class="col-md-4">
-        <label class="form-label" for="name">Nazwa</label>
-        <input class="form-control" id="name" name="name" value="{{ army.name }}" required {% if not can_edit %}disabled{% endif %} />
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Zbrojownia</label>
-        <input class="form-control" value="{{ army.armory.name }}" disabled />
-        <div class="form-text">
-          {% if army.armory.parent %}
-          Wariant z listy {{ army.armory.parent.name }}.
-          {% else %}
-          Zbrojownia określa dostępne uzbrojenie armii.
-          {% endif %}
+
+<div class="collapse mb-4" id="army-settings">
+  <div class="card">
+    <div class="card-body">
+      <h5 class="card-title">Informacje o armii</h5>
+      <form method="post" action="/armies/{{ army.id }}/update" class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label" for="name">Nazwa</label>
+          <input class="form-control" id="name" name="name" value="{{ army.name }}" required {% if not can_edit %}disabled{% endif %} />
         </div>
+        <div class="col-md-4">
+          <label class="form-label">Zbrojownia</label>
+          <input class="form-control" value="{{ army.armory.name }}" disabled />
+          <div class="form-text">
+            {% if army.armory.parent %}
+            Wariant z listy {{ army.armory.parent.name }}.
+            {% else %}
+            Zbrojownia określa dostępne uzbrojenie armii.
+            {% endif %}
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Zestaw zasad</label>
+          <input class="form-control" value="{{ army.ruleset.name }}" disabled />
+        </div>
+        <div class="col-12">
+          <button class="btn btn-primary" type="submit" {% if not can_edit %}disabled{% endif %}>Zapisz</button>
+        </div>
+      </form>
+      {% if not can_edit %}
+      <div class="alert alert-info mt-3">
+        Jest to armia globalna. Tylko administrator może wprowadzać w niej zmiany.
+
       </div>
-      <div class="col-md-4">
-        <label class="form-label">Zestaw zasad</label>
-        <input class="form-control" value="{{ army.ruleset.name }}" disabled />
-        <div class="form-text">Wybór wariantu zasad będzie dostępny w przyszłości.</div>
-      </div>
-      <div class="col-12">
-        <button class="btn btn-primary" type="submit" {% if not can_edit %}disabled{% endif %}>Zapisz</button>
-      </div>
-    </form>
-    {% if not can_edit %}
-    <div class="alert alert-info mt-3">
-      Jest to armia globalna. Tylko administrator może wprowadzać w niej zmiany.
+      {% endif %}
     </div>
-    {% endif %}
   </div>
 </div>
 
@@ -47,10 +62,11 @@
   <thead>
     <tr>
       <th>Nazwa</th>
-      <th>Quality</th>
-      <th>Defense</th>
-      <th>Toughness</th>
-      <th>Domyślne bronie</th>
+      <th>Statystyki</th>
+      <th class="d-none d-xl-table-cell">Zdolności pasywne</th>
+      <th class="d-none d-xxl-table-cell">Zdolności aktywne</th>
+      <th class="d-none d-xxl-table-cell">Aury</th>
+      <th>Domyślne uzbrojenie</th>
       <th>Koszt</th>
       <th></th>
     </tr>
@@ -58,17 +74,82 @@
   <tbody>
     {% for item in units %}
     <tr>
-      <td>{{ item.instance.name }}</td>
-      <td>{{ item.instance.quality }}</td>
-      <td>{{ item.instance.defense }}</td>
-      <td>{{ item.instance.toughness }}</td>
       <td>
-        {% if item.default_weapon_names %}
-        {{ item.default_weapon_names }}
+        {{ item.instance.name }}
+        <div class="d-xl-none mt-2 small">
+          <div class="mb-1">
+            <span class="text-muted">Pasywne:</span>
+            {% if item.passive_labels %}
+            <span class="d-inline-flex flex-wrap gap-1 align-items-center">
+              {% for label in item.passive_labels %}
+              <span class="badge text-bg-secondary">{{ label }}</span>
+              {% endfor %}
+            </span>
+            {% else %}
+            <span class="text-muted">-</span>
+            {% endif %}
+          </div>
+          <div class="mb-1">
+            <span class="text-muted">Aktywne:</span>
+            {% if item.active_labels %}
+            <span class="d-inline-flex flex-wrap gap-1 align-items-center">
+              {% for label in item.active_labels %}
+              <span class="badge text-bg-info text-dark">{{ label }}</span>
+              {% endfor %}
+            </span>
+            {% else %}
+            <span class="text-muted">-</span>
+            {% endif %}
+          </div>
+          <div>
+            <span class="text-muted">Aury:</span>
+            {% if item.aura_labels %}
+            <span class="d-inline-flex flex-wrap gap-1 align-items-center">
+              {% for label in item.aura_labels %}
+              <span class="badge text-bg-warning text-dark">{{ label }}</span>
+              {% endfor %}
+            </span>
+            {% else %}
+            <span class="text-muted">-</span>
+            {% endif %}
+          </div>
+        </div>
+      </td>
+      <td>Q{{ item.instance.quality }} / D{{ item.instance.defense }} / T{{ item.instance.toughness }}</td>
+      <td class="d-none d-xl-table-cell">
+        {% if item.passive_labels %}
+        <div class="d-flex flex-wrap gap-1">
+          {% for label in item.passive_labels %}
+          <span class="badge text-bg-secondary">{{ label }}</span>
+          {% endfor %}
+        </div>
         {% else %}
-        -
+        <span class="text-muted">-</span>
         {% endif %}
       </td>
+      <td class="d-none d-xxl-table-cell">
+        {% if item.active_labels %}
+        <div class="d-flex flex-wrap gap-1">
+          {% for label in item.active_labels %}
+          <span class="badge text-bg-info text-dark">{{ label }}</span>
+          {% endfor %}
+        </div>
+        {% else %}
+        <span class="text-muted">-</span>
+        {% endif %}
+      </td>
+      <td class="d-none d-xxl-table-cell">
+        {% if item.aura_labels %}
+        <div class="d-flex flex-wrap gap-1">
+          {% for label in item.aura_labels %}
+          <span class="badge text-bg-warning text-dark">{{ label }}</span>
+          {% endfor %}
+        </div>
+        {% else %}
+        <span class="text-muted">-</span>
+        {% endif %}
+      </td>
+      <td>{{ item.weapon_summary }}</td>
       <td>{{ item.cost }}</td>
       <td>
         {% if can_edit %}
@@ -84,7 +165,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="text-muted">Brak jednostek</td></tr>
+    <tr><td colspan="8" class="text-muted">Brak jednostek</td></tr>
     {% endfor %}
   </tbody>
 </table>
@@ -111,24 +192,147 @@
           <label class="form-label" for="toughness">Toughness</label>
           <input class="form-control" id="toughness" name="toughness" type="number" min="1" required />
         </div>
-        <div class="col-md-4">
-          <label class="form-label" for="default_weapon_ids">Domyślne bronie</label>
-          <select
-            class="form-select"
-            id="default_weapon_ids"
-            name="default_weapon_ids"
-            multiple
-            size="6"
+        <div class="col-12">
+          <label class="form-label" for="unit-passive-abilities">Zdolności pasywne</label>
+          <div
+            class="ability-picker"
+            data-ability-picker
+            data-definitions='{{ passive_definitions | tojson }}'
+            data-target-input="unit-passive-abilities"
           >
-            {% for weapon in weapons %}
-            <option value="{{ weapon.id }}">{{ weapon.effective_name }}</option>
-            {% endfor %}
-          </select>
-          <div class="form-text">Przytrzymaj Ctrl (Windows) lub Command (macOS), aby wybrać wiele pozycji.</div>
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-7">
+                <select class="form-select ability-picker-select">
+                  <option value="">Wybierz zdolność</option>
+                  {% for ability in passive_definitions %}
+                  <option
+                    value="{{ ability.slug }}"
+                    data-requires-value="{{ 'true' if ability.requires_value else 'false' }}"
+                    data-value-type="{{ ability.value_type or '' }}"
+                  >
+                    {{ ability.display_name }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-3 ability-picker-value d-none">
+                <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
+              </div>
+              <div class="col-sm-2">
+                <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
+              </div>
+            </div>
+            <div class="ability-picker-list mt-2"></div>
+          </div>
+          <input type="hidden" id="unit-passive-abilities" name="passive_abilities" value="[]" />
         </div>
         <div class="col-12">
-          <label class="form-label" for="flags">Flagi (np. good_shot,bad_shot)</label>
-          <input class="form-control" id="flags" name="flags" />
+          <label class="form-label" for="unit-active-abilities">Zdolności aktywne</label>
+          <div
+            class="ability-picker"
+            data-ability-picker
+            data-definitions='{{ active_definitions | tojson }}'
+            data-target-input="unit-active-abilities"
+          >
+
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-7">
+                <select class="form-select ability-picker-select">
+                  <option value="">Wybierz zdolność</option>
+                  {% for ability in active_definitions %}
+                  <option
+                    value="{{ ability.slug }}"
+                    data-requires-value="{{ 'true' if ability.requires_value else 'false' }}"
+                    data-value-type="{{ ability.value_type or '' }}"
+                    data-ability-id="{{ ability.ability_id }}"
+                  >
+                    {{ ability.display_name }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-3 ability-picker-value d-none">
+                <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
+              </div>
+              <div class="col-sm-2">
+                <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
+              </div>
+            </div>
+            <div class="ability-picker-list mt-2"></div>
+          </div>
+          <input type="hidden" id="unit-active-abilities" name="active_abilities" value="[]" />
+
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="unit-aura-abilities">Aury</label>
+          <div
+            class="ability-picker"
+            data-ability-picker
+            data-definitions='{{ aura_definitions | tojson }}'
+            data-target-input="unit-aura-abilities"
+          >
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-7">
+                <select class="form-select ability-picker-select">
+                  <option value="">Wybierz aurę</option>
+                  {% for ability in aura_definitions %}
+                  <option
+                    value="{{ ability.slug }}"
+                    data-requires-value="{{ 'true' if ability.requires_value else 'false' }}"
+                    data-value-type="{{ ability.value_type or '' }}"
+                    data-ability-id="{{ ability.ability_id }}"
+                  >
+                    {{ ability.display_name }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-3 ability-picker-value d-none">
+                <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
+              </div>
+              <div class="col-sm-2">
+                <button class="btn btn-outline-primary w-100 ability-picker-add" type="button">Dodaj</button>
+              </div>
+            </div>
+            <div class="ability-picker-list mt-2"></div>
+          </div>
+          <input type="hidden" id="unit-aura-abilities" name="aura_abilities" value="[]" />
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="unit-weapons">Dostępne bronie</label>
+          <div
+            class="weapon-picker"
+            data-weapon-picker
+            data-weapons='{{ weapon_choices | tojson }}'
+            data-target-input="unit-weapons"
+          >
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-6 col-lg-5">
+                <select class="form-select weapon-picker-select">
+                  <option value="">Wybierz broń</option>
+                  {% for option in weapon_choices %}
+                  <option value="{{ option.id }}">{{ option.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-3 col-lg-2">
+                <div class="form-check mb-0">
+                  <input class="form-check-input weapon-picker-default" id="unit-weapon-default" type="checkbox" checked />
+                  <label class="form-check-label" for="unit-weapon-default">Domyślna</label>
+                </div>
+              </div>
+              <div class="col-sm-3 col-lg-3">
+                <label class="form-label" for="unit-weapon-count">Ilość</label>
+                <input class="form-control weapon-picker-count" id="unit-weapon-count" type="number" min="1" value="1" />
+              </div>
+              <div class="col-lg-2">
+                <button class="btn btn-outline-primary w-100 weapon-picker-add" type="button">Dodaj</button>
+              </div>
+            </div>
+            <div class="weapon-picker-list mt-3"></div>
+          </div>
+          <input type="hidden" id="unit-weapons" name="weapons" value="[]" />
+          <div class="form-text">Zaznacz, które bronie należą do domyślnego wyposażenia jednostki.</div>
         </div>
         <div class="col-12">
           <button class="btn btn-success" type="submit">Dodaj jednostkę</button>

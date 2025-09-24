@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import List, Optional
 
@@ -146,6 +147,15 @@ class Weapon(TimestampMixin, Base):
         return float(value if value is not None else 1.0)
 
     @property
+
+    def display_attacks(self) -> int:
+        value = self.effective_attacks
+        if not math.isfinite(value):
+            return 0
+        return int(math.floor(value + 0.5))
+
+    @property
+
     def effective_ap(self) -> int:
         value = self._inherited_value("ap", 0)
         return int(value if value is not None else 0)
@@ -218,19 +228,14 @@ class Unit(TimestampMixin, Base):
     @property
     def default_weapons(self) -> List[Weapon]:
         weapons: list[Weapon] = []
-        seen: set[int] = set()
+        added = False
         for link in getattr(self, "weapon_links", []):
             if getattr(link, "is_default", True) and link.weapon is not None:
-                weapon_id = link.weapon.id
-                if weapon_id not in seen:
-                    weapons.append(link.weapon)
-                    seen.add(weapon_id)
-        if self.default_weapon:
-            default_id = self.default_weapon_id or getattr(self.default_weapon, "id", None)
-            if default_id is None or default_id not in seen:
-                weapons.append(self.default_weapon)
-                if default_id is not None:
-                    seen.add(default_id)
+                count = max(int(getattr(link, "default_count", 1) or 1), 1)
+                weapons.extend([link.weapon] * count)
+                added = True
+        if not added and self.default_weapon:
+            weapons.append(self.default_weapon)
         return weapons
 
     @property
@@ -246,6 +251,17 @@ class Unit(TimestampMixin, Base):
             ids.append(self.default_weapon_id)
         return ids
 
+    @property
+    def default_weapon_loadout(self) -> List[tuple[Weapon, int]]:
+        loadout: list[tuple[Weapon, int]] = []
+        for link in getattr(self, "weapon_links", []):
+            if getattr(link, "is_default", True) and link.weapon is not None:
+                count = max(int(getattr(link, "default_count", 1) or 1), 1)
+                loadout.append((link.weapon, count))
+        if not loadout and self.default_weapon:
+            loadout.append((self.default_weapon, 1))
+        return loadout
+
 
 class UnitWeapon(TimestampMixin, Base):
     __tablename__ = "unit_weapons"
@@ -254,6 +270,7 @@ class UnitWeapon(TimestampMixin, Base):
     unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"), nullable=False)
     weapon_id: Mapped[int] = mapped_column(ForeignKey("weapons.id"), nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    default_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     unit: Mapped[Unit] = relationship(back_populates="weapon_links")
     weapon: Mapped[Weapon] = relationship()

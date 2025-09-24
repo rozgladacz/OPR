@@ -114,6 +114,29 @@ def _rebuild_armies_table(connection, default_armory_id: int) -> None:
         connection.execute(text("PRAGMA foreign_keys=ON"))
 
 
+def _rebuild_unit_weapons_table(connection) -> None:
+    from . import models
+
+    logger.info("Migrating unit_weapons table to include default counts")
+    connection.execute(text("PRAGMA foreign_keys=OFF"))
+    try:
+        connection.execute(text("DROP TABLE IF EXISTS unit_weapons_old"))
+        connection.execute(text("ALTER TABLE unit_weapons RENAME TO unit_weapons_old"))
+        models.UnitWeapon.__table__.create(connection)
+        connection.execute(
+            text(
+                """
+                INSERT INTO unit_weapons (
+                    id, unit_id, weapon_id, is_default, default_count, created_at, updated_at
+                )
+                SELECT id, unit_id, weapon_id, is_default, 1, created_at, updated_at
+                FROM unit_weapons_old
+                """
+            )
+        )
+        connection.execute(text("DROP TABLE unit_weapons_old"))
+    finally:
+        connection.execute(text("PRAGMA foreign_keys=ON"))
 def _migrate_schema() -> None:
     from sqlalchemy import inspect
 
@@ -144,6 +167,12 @@ def _migrate_schema() -> None:
             columns = inspector.get_columns("armies")
             if "armory_id" not in {column["name"] for column in columns}:
                 _rebuild_armies_table(connection, default_armory_id)
+
+        if "unit_weapons" in table_names:
+            columns = inspector.get_columns("unit_weapons")
+            if "default_count" not in {column["name"] for column in columns}:
+                _rebuild_unit_weapons_table(connection)
+
 
 
 def init_db() -> None:
@@ -190,6 +219,9 @@ def init_db() -> None:
             session.add(default_armory)
             session.flush()
 
+
+        ability_registry.sync_definitions(session)
+        
         if not session.execute(select(models.Weapon)).first():
             weapon_specs = [
                 {"name": "Lekka broń ręczna", "range": "", "attacks": 1, "ap": -1, "tags": ""},

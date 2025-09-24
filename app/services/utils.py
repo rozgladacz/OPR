@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..data import abilities as ability_catalog
 
 
 def split_owned(items: Sequence, user: models.User | None):
@@ -36,6 +37,44 @@ def parse_flags(text: str | None) -> dict:
         else:
             result[entry] = True
     return result
+
+
+
+def passive_flags_to_payload(text: str | None) -> list[dict]:
+    flags = parse_flags(text)
+    payload: list[dict] = []
+    for slug, value in flags.items():
+        slug_text = str(slug).strip()
+        if not slug_text:
+            continue
+        definition = ability_catalog.find_definition(slug_text)
+        payload.append(
+            {
+                "slug": slug_text,
+                "value": None if isinstance(value, bool) and value else ("" if value is None else str(value)),
+                "label": ability_catalog.display_with_value(
+                    definition, None if isinstance(value, bool) and value else (None if value is None else str(value))
+                )
+                if definition
+                else slug_text,
+            }
+        )
+    return payload
+
+
+def passive_payload_to_flags(items: list[dict]) -> str:
+    entries: list[str] = []
+    for item in items:
+        slug = str(item.get("slug", "")).strip()
+        if not slug:
+            continue
+        value = item.get("value")
+        if value is None or (isinstance(value, str) and not value.strip()):
+            entries.append(slug)
+        else:
+            entries.append(f"{slug}={value}")
+    return ",".join(entries)
+
 
 
 def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
@@ -81,7 +120,7 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
             notes=None,
         )
         clone.cached_cost = None
-
+        
         db.add(clone)
 
     variant_weapons = db.execute(
@@ -136,4 +175,3 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
 
     if cleaned:
         db.flush()
-
