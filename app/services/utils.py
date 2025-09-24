@@ -44,19 +44,31 @@ def passive_flags_to_payload(text: str | None) -> list[dict]:
     flags = parse_flags(text)
     payload: list[dict] = []
     for slug, value in flags.items():
-        slug_text = str(slug).strip()
-        if not slug_text:
+        raw_slug = str(slug).strip()
+        if not raw_slug:
             continue
+        is_default = True
+        slug_text = raw_slug
+        if raw_slug.endswith("?"):
+            slug_text = raw_slug[:-1]
+            is_default = False
         definition = ability_catalog.find_definition(slug_text)
         payload.append(
             {
                 "slug": slug_text,
-                "value": None if isinstance(value, bool) and value else ("" if value is None else str(value)),
+                "value": None
+                if isinstance(value, bool) and value
+                else ("" if value is None else str(value)),
                 "label": ability_catalog.display_with_value(
-                    definition, None if isinstance(value, bool) and value else (None if value is None else str(value))
+                    definition,
+                    None
+                    if isinstance(value, bool) and value
+                    else (None if value is None else str(value)),
                 )
                 if definition
                 else slug_text,
+                "description": definition.description if definition else "",
+                "is_default": is_default,
             }
         )
     return payload
@@ -69,10 +81,14 @@ def passive_payload_to_flags(items: list[dict]) -> str:
         if not slug:
             continue
         value = item.get("value")
+        is_default = item.get("is_default")
+        target_slug = slug
+        if isinstance(is_default, bool) and not is_default:
+            target_slug = f"{slug}?"
         if value is None or (isinstance(value, str) and not value.strip()):
-            entries.append(slug)
+            entries.append(target_slug)
         else:
-            entries.append(f"{slug}={value}")
+            entries.append(f"{target_slug}={value}")
     return ",".join(entries)
 
 

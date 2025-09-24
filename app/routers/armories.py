@@ -44,6 +44,11 @@ WEAPON_SYNONYMS = {
     "overclock": "podkrecenie",
 }
 
+RANGE_OPTIONS = []
+for value in sorted(costs.RANGE_TABLE.keys()):
+    label = "Wręcz" if value == 0 else f"{value}\""
+    RANGE_OPTIONS.append({"value": str(value), "label": label})
+
 
 
 def _ensure_armory_view_access(armory: models.Armory, user: models.User) -> None:
@@ -541,7 +546,8 @@ def new_weapon_form(
             "armory": armory,
             "weapon": None,
             "form_values": _weapon_form_values(None),
-
+            "range_options": RANGE_OPTIONS,
+            "parent_defaults": None,
             "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
 
             "error": None,
@@ -589,6 +595,8 @@ def create_weapon(
                     "notes": notes or "",
                     "abilities": ability_items,
                 },
+                "range_options": RANGE_OPTIONS,
+                "parent_defaults": None,
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
                 "error": "Nazwa broni jest wymagana.",
             },
@@ -672,6 +680,8 @@ def edit_weapon_form(
             "armory": armory,
             "weapon": weapon,
             "form_values": _weapon_form_values(weapon),
+            "range_options": RANGE_OPTIONS,
+            "parent_defaults": _weapon_form_values(weapon.parent) if weapon and weapon.parent else None,
 
             "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
 
@@ -722,6 +732,8 @@ def update_weapon(
                     "notes": notes or "",
                     "abilities": ability_items,
                 },
+                "range_options": RANGE_OPTIONS,
+                "parent_defaults": _weapon_form_values(weapon.parent) if weapon and weapon.parent else None,
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
 
                 "error": "Nazwa broni jest wymagana.",
@@ -748,6 +760,8 @@ def update_weapon(
                     "notes": notes or "",
                     "abilities": ability_items,
                 },
+                "range_options": RANGE_OPTIONS,
+                "parent_defaults": _weapon_form_values(weapon.parent) if weapon and weapon.parent else None,
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
 
                 "error": str(exc),

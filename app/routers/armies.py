@@ -333,8 +333,7 @@ def view_army(
 
     units = []
     for unit in army.units:
-        passive_items = _passive_payload(unit)
-        passive_labels = [item.get("label") or item.get("slug") for item in passive_items if item]
+        passive_items = [item for item in _passive_payload(unit) if item]
         active_items = ability_registry.unit_ability_payload(unit, "active")
         aura_items = ability_registry.unit_ability_payload(unit, "aura")
         loadout = unit.default_weapon_loadout
@@ -348,10 +347,9 @@ def view_army(
             {
                 "instance": unit,
                 "cost": costs.unit_total_cost(unit),
-
-                "passive_labels": passive_labels,
-                "active_labels": [item.get("label") or item.get("raw") or "" for item in active_items],
-                "aura_labels": [item.get("label") or item.get("raw") or "" for item in aura_items],
+                "passive_items": passive_items,
+                "active_items": active_items,
+                "aura_items": aura_items,
                 "weapon_summary": weapon_summary,
 
             }

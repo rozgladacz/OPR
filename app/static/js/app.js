@@ -7,9 +7,63 @@ function initAbilityPicker(root) {
   const selectEl = root.querySelector('.ability-picker-select');
   const valueContainer = root.querySelector('.ability-picker-value');
   const valueInput = root.querySelector('.ability-picker-value-input');
+  const valueSelect = root.querySelector('.ability-picker-value-select');
   const addButton = root.querySelector('.ability-picker-add');
   const listEl = root.querySelector('.ability-picker-list');
+  const allowDefaultToggle = root.dataset.defaultToggle === 'true';
+  const defaultInitial = root.dataset.defaultInitial === 'true';
   let items = [];
+
+  function getDefinition(slug) {
+    if (!slug) {
+      return null;
+    }
+    return definitionMap.get(slug) || null;
+  }
+
+  function formatLabel(definition, value, choiceLabel) {
+    const displayValue = (choiceLabel || value || '').toString().trim();
+    if (!definition) {
+      return displayValue;
+    }
+    if (definition.slug === 'aura') {
+      return displayValue ? `${definition.name}(${displayValue})` : definition.display_name;
+    }
+    if (definition.slug === 'rozkaz') {
+      return displayValue ? `${definition.name}(${displayValue})` : definition.display_name;
+    }
+    if (definition.requires_value) {
+      return displayValue ? `${definition.name}(${displayValue})` : definition.display_name;
+    }
+    return definition.name;
+  }
+
+  function descriptionFor(item) {
+    if (item.description) {
+      return item.description;
+    }
+    const definition = getDefinition(item.slug);
+    return definition ? definition.description : '';
+  }
+
+  function normalizeEntry(entry) {
+    const slug = entry.slug || '';
+    const definition = getDefinition(slug);
+    const rawValue = entry.value !== undefined && entry.value !== null ? String(entry.value) : '';
+    const rawLabel = entry.raw !== undefined && entry.raw !== null ? String(entry.raw) : '';
+    const label = entry.label || formatLabel(definition, rawValue, rawLabel);
+    const abilityId = entry.ability_id ?? (definition && Object.prototype.hasOwnProperty.call(definition, 'ability_id') ? definition.ability_id : null);
+    const isDefault = allowDefaultToggle ? Boolean(entry.is_default ?? defaultInitial) : false;
+    return {
+      slug,
+      value: rawValue,
+      raw: rawLabel || rawValue || label,
+      label: label || rawLabel || rawValue,
+      ability_id: abilityId,
+      is_default: isDefault,
+      description: entry.description || descriptionFor({ slug }),
+    };
+  }
 
   function parseInitial() {
     if (!hiddenInput || !hiddenInput.value) {
@@ -19,13 +73,7 @@ function initAbilityPicker(root) {
     try {
       const parsed = JSON.parse(hiddenInput.value);
       if (Array.isArray(parsed)) {
-        items = parsed.map((entry) => ({
-          slug: entry.slug || '',
-          value: entry.value ?? '',
-          label: entry.label || '',
-          raw: entry.raw || '',
-          ability_id: entry.ability_id ?? null,
-        }));
+        items = parsed.map((entry) => normalizeEntry(entry || {}));
       }
     } catch (err) {
       console.warn('Nie udało się odczytać wybranych zdolności', err);
@@ -34,35 +82,18 @@ function initAbilityPicker(root) {
   }
 
   function updateHidden() {
-    if (hiddenInput) {
-      const safeItems = items.map((entry) => ({
-        slug: entry.slug,
-        value: entry.value,
-        label: entry.label,
-        raw: entry.raw,
-        ability_id: entry.ability_id ?? null,
-      }));
-      hiddenInput.value = JSON.stringify(safeItems);
+    if (!hiddenInput) {
+      return;
     }
-  }
-
-  function formatLabel(definition, value) {
-    if (!definition) {
-      return value ? `${value}` : '';
-    }
-    const trimmed = typeof value === 'string' ? value.trim() : value;
-    if (definition.requires_value) {
-      if (!trimmed) {
-        return definition.display_name;
-      }
-      return `${definition.name}(${trimmed})`;
-    }
-    return definition.name;
-  }
-
-  function descriptionFor(item) {
-    const definition = definitionMap.get(item.slug);
-    return definition ? definition.description : '';
+    const safeItems = items.map((entry) => ({
+      slug: entry.slug,
+      value: entry.value,
+      label: entry.label,
+      raw: entry.raw,
+      ability_id: entry.ability_id ?? null,
+      is_default: entry.is_default ?? false,
+    }));
+    hiddenInput.value = JSON.stringify(safeItems);
   }
 
   function renderList() {
@@ -78,47 +109,125 @@ function initAbilityPicker(root) {
       return;
     }
     const wrapper = document.createElement('div');
-    wrapper.className = 'd-flex flex-wrap gap-2';
+    wrapper.className = 'd-flex flex-column gap-2';
     items.forEach((item, index) => {
-      const badge = document.createElement('span');
-      badge.className = 'badge text-bg-secondary d-flex align-items-center gap-2';
-      const labelSpan = document.createElement('span');
+      const row = document.createElement('div');
+      row.className = 'border rounded p-2 d-flex flex-wrap align-items-center gap-2';
+
+      const labelSpan = document.createElement('div');
+      labelSpan.className = 'flex-grow-1';
       labelSpan.textContent = item.label || item.raw || item.slug;
       const desc = descriptionFor(item);
       if (desc) {
-        badge.title = desc;
+        labelSpan.title = desc;
       }
+
+      row.appendChild(labelSpan);
+
+      if (allowDefaultToggle) {
+        const defaultWrapper = document.createElement('div');
+        defaultWrapper.className = 'form-check mb-0';
+        const defaultInput = document.createElement('input');
+        defaultInput.type = 'checkbox';
+        defaultInput.className = 'form-check-input';
+        defaultInput.id = `ability-default-${index}-${Math.random().toString(16).slice(2)}`;
+        defaultInput.checked = Boolean(item.is_default);
+        defaultInput.addEventListener('change', () => {
+          item.is_default = defaultInput.checked;
+          updateHidden();
+        });
+        const defaultLabel = document.createElement('label');
+        defaultLabel.className = 'form-check-label small';
+        defaultLabel.setAttribute('for', defaultInput.id);
+        defaultLabel.textContent = 'Domyślna';
+        defaultWrapper.appendChild(defaultInput);
+        defaultWrapper.appendChild(defaultLabel);
+        row.appendChild(defaultWrapper);
+      }
+
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
-      removeBtn.className = 'btn-close btn-close-white btn-close-sm';
-      removeBtn.setAttribute('aria-label', 'Usuń');
+      removeBtn.className = 'btn btn-outline-danger btn-sm';
+      removeBtn.textContent = 'Usuń';
       removeBtn.addEventListener('click', () => {
         items.splice(index, 1);
         updateHidden();
         renderList();
       });
-      badge.appendChild(labelSpan);
-      badge.appendChild(removeBtn);
-      wrapper.appendChild(badge);
+      row.appendChild(removeBtn);
+
+      wrapper.appendChild(row);
     });
     listEl.appendChild(wrapper);
+  }
+
+  function resetValueInputs() {
+    if (valueInput) {
+      valueInput.value = '';
+      valueInput.classList.remove('is-invalid');
+      valueInput.type = 'text';
+    }
+    if (valueSelect) {
+      valueSelect.value = '';
+    }
+  }
+
+  function populateValueChoices(definition) {
+    if (!valueSelect) {
+      return;
+    }
+    valueSelect.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = definition.value_label ? `Wybierz (${definition.value_label})` : 'Wybierz wartość';
+    valueSelect.appendChild(placeholder);
+    (definition.value_choices || []).forEach((choice) => {
+      const option = document.createElement('option');
+      if (typeof choice === 'string') {
+        option.value = choice;
+        option.textContent = choice;
+      } else if (choice && typeof choice === 'object') {
+        option.value = choice.value ?? '';
+        option.textContent = choice.label || choice.value || '';
+        if (choice.description) {
+          option.title = choice.description;
+        }
+      }
+      valueSelect.appendChild(option);
+    });
   }
 
   function handleSelectChange() {
     if (!selectEl || !valueContainer) {
       return;
     }
+    resetValueInputs();
     const slug = selectEl.value;
-    const definition = definitionMap.get(slug);
+    const definition = getDefinition(slug);
     if (definition && definition.requires_value) {
       valueContainer.classList.remove('d-none');
-      if (valueInput) {
-        valueInput.placeholder = definition.value_label ? `Wartość (${definition.value_label})` : 'Wartość';
+      if (definition.value_choices && definition.value_choices.length > 0 && valueSelect) {
+        valueSelect.classList.remove('d-none');
+        populateValueChoices(definition);
+        if (valueInput) {
+          valueInput.classList.add('d-none');
+        }
+      } else {
+        if (valueSelect) {
+          valueSelect.classList.add('d-none');
+          valueSelect.innerHTML = '';
+        }
+        if (valueInput) {
+          valueInput.classList.remove('d-none');
+          valueInput.placeholder = definition.value_label ? `Wartość (${definition.value_label})` : 'Wartość';
+          valueInput.type = definition.value_type === 'number' ? 'number' : 'text';
+        }
       }
     } else {
       valueContainer.classList.add('d-none');
-      if (valueInput) {
-        valueInput.value = '';
+      if (valueSelect) {
+        valueSelect.classList.add('d-none');
+        valueSelect.innerHTML = '';
       }
     }
   }
@@ -145,36 +254,47 @@ function initAbilityPicker(root) {
     if (!slug) {
       return;
     }
-    const definition = definitionMap.get(slug);
-    const rawValue = valueInput ? valueInput.value || '' : '';
-    if (!validateValue(definition, rawValue)) {
-      if (valueInput) {
-        valueInput.classList.add('is-invalid');
-        valueInput.addEventListener(
-          'input',
-          () => valueInput.classList.remove('is-invalid'),
-          { once: true }
-        );
+    const definition = getDefinition(slug);
+    let rawValue = '';
+    let choiceLabel = '';
+    if (definition && definition.requires_value) {
+      if (definition.value_choices && definition.value_choices.length > 0 && valueSelect) {
+        rawValue = valueSelect.value || '';
+        const option = valueSelect.selectedOptions[0];
+        choiceLabel = option ? option.textContent.trim() : '';
+        if (!rawValue) {
+          return;
+        }
+      } else if (valueInput) {
+        rawValue = valueInput.value || '';
+        if (!validateValue(definition, rawValue)) {
+          valueInput.classList.add('is-invalid');
+          valueInput.addEventListener(
+            'input',
+            () => valueInput.classList.remove('is-invalid'),
+            { once: true }
+          );
+          return;
+        }
       }
-      return;
     }
-    const label = definition ? formatLabel(definition, rawValue) : (selectEl.selectedOptions[0]?.textContent || slug);
-    const entry = {
+    const label = definition
+      ? formatLabel(definition, rawValue, choiceLabel)
+      : selectEl.selectedOptions[0]?.textContent || slug;
+    const entry = normalizeEntry({
       slug: definition ? definition.slug : '__custom__',
       value: rawValue.trim(),
-      label: label,
-      raw: definition ? label : label,
+      raw: choiceLabel,
+      label,
       ability_id: definition && Object.prototype.hasOwnProperty.call(definition, 'ability_id')
         ? definition.ability_id
         : null,
-    };
+      is_default: allowDefaultToggle ? defaultInitial : false,
+    });
     items.push(entry);
     updateHidden();
     renderList();
     selectEl.value = '';
-    if (valueInput) {
-      valueInput.value = '';
-    }
     handleSelectChange();
   }
 
@@ -188,11 +308,199 @@ function initAbilityPicker(root) {
   parseInitial();
   renderList();
   handleSelectChange();
+
+  root.abilityPicker = {
+    setItems(newItems) {
+      items = Array.isArray(newItems) ? newItems.map((entry) => normalizeEntry(entry || {})) : [];
+      updateHidden();
+      renderList();
+    },
+  };
 }
 
 function initAbilityPickers() {
   document.querySelectorAll('[data-ability-picker]').forEach((element) => {
     initAbilityPicker(element);
+  });
+}
+
+function initRangePicker(root) {
+  const selectEl = root.querySelector('.range-picker-select');
+  const customInput = root.querySelector('.range-picker-custom');
+  const hiddenInput = root.querySelector('.range-picker-value');
+  const initialValue = root.dataset.selected || '';
+
+  const normalizeForOption = (raw) => {
+    if (raw === undefined || raw === null) {
+      return '';
+    }
+    const text = String(raw).trim();
+    if (!text) {
+      return '';
+    }
+    const lowered = text.toLowerCase();
+    if (lowered === 'none' || lowered === 'null' || lowered === 'undefined') {
+      return '';
+    }
+    if (['wręcz', 'wrecz', 'melee', 'm'].includes(lowered)) {
+      return '0';
+    }
+    const numericMatch = lowered.match(/^(\d+)(?:["”])?$/);
+    if (numericMatch) {
+      return numericMatch[1];
+    }
+    return text;
+  };
+
+  const showCustom = () => {
+    if (customInput) {
+      customInput.classList.remove('d-none');
+    }
+  };
+
+  const hideCustom = () => {
+    if (customInput) {
+      customInput.classList.add('d-none');
+      customInput.value = '';
+    }
+  };
+
+  const syncHidden = (value) => {
+    const text = value !== undefined && value !== null ? String(value) : '';
+    if (hiddenInput) {
+      hiddenInput.value = text;
+    }
+    root.dataset.selected = text;
+  };
+
+  const setValue = (rawValue) => {
+    const textValue = rawValue !== undefined && rawValue !== null ? String(rawValue).trim() : '';
+    if (!textValue) {
+      if (selectEl) {
+        selectEl.value = '';
+      }
+      hideCustom();
+      syncHidden('');
+      return;
+    }
+    if (textValue.toLowerCase() === '__custom__') {
+      if (selectEl) {
+        selectEl.value = '__custom__';
+      }
+      showCustom();
+      if (customInput && !customInput.value) {
+        customInput.focus();
+      }
+      syncHidden(customInput ? customInput.value || '' : '');
+      return;
+    }
+    const normalized = normalizeForOption(textValue);
+    if (!normalized) {
+      if (selectEl) {
+        selectEl.value = '';
+      }
+      hideCustom();
+      syncHidden('');
+      return;
+    }
+    if (selectEl && normalized !== '__custom__') {
+      const option = Array.from(selectEl.options || []).find((opt) => opt.value === normalized);
+      if (option && normalized !== '__custom__') {
+        selectEl.value = normalized;
+        hideCustom();
+        syncHidden(normalized);
+        return;
+      }
+    }
+    if (selectEl) {
+      selectEl.value = '__custom__';
+    }
+    showCustom();
+    if (customInput) {
+      customInput.value = textValue;
+    }
+    syncHidden(textValue);
+  };
+
+  if (selectEl) {
+    selectEl.addEventListener('change', () => {
+      const value = selectEl.value;
+      if (value === '__custom__') {
+        showCustom();
+        if (customInput && !customInput.value) {
+          customInput.focus();
+        }
+        syncHidden(customInput ? customInput.value : '');
+      } else {
+        hideCustom();
+        syncHidden(value);
+      }
+    });
+  }
+
+  if (customInput) {
+    customInput.addEventListener('input', () => {
+      syncHidden(customInput.value || '');
+    });
+  }
+
+  setValue(initialValue);
+  root.rangePicker = {
+    setValue,
+  };
+}
+
+function initRangePickers() {
+  document.querySelectorAll('[data-range-picker]').forEach((element) => {
+    initRangePicker(element);
+  });
+}
+
+function initWeaponDefaults() {
+  document.querySelectorAll('form[data-defaults]').forEach((form) => {
+    const defaultsData = form.dataset.defaults;
+    if (!defaultsData) {
+      return;
+    }
+    let defaults = null;
+    try {
+      defaults = JSON.parse(defaultsData);
+    } catch (err) {
+      defaults = null;
+    }
+    if (!defaults) {
+      return;
+    }
+    const resetButton = form.querySelector('[data-weapon-reset]');
+    if (!resetButton) {
+      return;
+    }
+    resetButton.addEventListener('click', () => {
+      const nameInput = form.querySelector('#name');
+      if (nameInput) {
+        nameInput.value = defaults.name || '';
+      }
+      const rangePicker = form.querySelector('[data-range-picker]');
+      if (rangePicker && rangePicker.rangePicker && typeof rangePicker.rangePicker.setValue === 'function') {
+        rangePicker.rangePicker.setValue(defaults.range || '');
+      }
+      const attacksInput = form.querySelector('#attacks');
+      if (attacksInput) {
+        attacksInput.value = defaults.attacks || '';
+      }
+      const apInput = form.querySelector('#ap');
+      if (apInput) {
+        apInput.value = defaults.ap || '';
+      }
+      const notesInput = form.querySelector('#notes');
+      if (notesInput) {
+        notesInput.value = defaults.notes || '';
+      }
+      const abilityPickerRoot = form.querySelector('[data-ability-picker]');
+      if (abilityPickerRoot && abilityPickerRoot.abilityPicker && typeof abilityPickerRoot.abilityPicker.setItems === 'function') {
+        abilityPickerRoot.abilityPicker.setItems(defaults.abilities || []);
+      }
+    });
   });
 }
 
@@ -486,6 +794,8 @@ function initRosterUnitForms() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initAbilityPickers();
+  initRangePickers();
   initWeaponPickers();
   initRosterUnitForms();
+  initWeaponDefaults();
 });
