@@ -608,37 +608,78 @@ function initWeaponPicker(root) {
       listEl.appendChild(empty);
       return;
     }
-    const wrapper = document.createElement('div');
-    wrapper.className = 'd-flex flex-column gap-2';
+    const displayValue = (value) => {
+      if (value === undefined || value === null) {
+        return '-';
+      }
+      const text = String(value).trim();
+      return text === '' ? '-' : text;
+    };
+
+    const tableWrapper = document.createElement('div');
+    tableWrapper.className = 'table-responsive';
+    const table = document.createElement('table');
+    table.className = 'table table-sm table-striped align-middle mb-0';
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+      <tr>
+        <th>Broń</th>
+        <th>Zasięg</th>
+        <th>Ataki</th>
+        <th>AP</th>
+        <th>Cechy</th>
+        <th>Domyślna ilość</th>
+        <th class="text-end">Akcje</th>
+      </tr>
+    `;
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
     items.forEach((item, index) => {
-      const row = document.createElement('div');
-      row.className = 'border rounded p-2 d-flex flex-wrap align-items-center gap-2';
+      const weapon = weaponMap.get(String(item.weapon_id)) || {};
+      const row = document.createElement('tr');
 
-      const nameSpan = document.createElement('div');
-      nameSpan.className = 'flex-grow-1 fw-semibold';
-      nameSpan.textContent = item.name || weaponMap.get(String(item.weapon_id))?.name || `Broń #${item.weapon_id}`;
+      const nameCell = document.createElement('td');
+      const name = item.name || weapon.name || `Broń #${item.weapon_id}`;
+      nameCell.textContent = name;
+      if (weapon.notes) {
+        nameCell.title = weapon.notes;
+      }
+      row.appendChild(nameCell);
 
-      const defaultGroup = document.createElement('div');
-      defaultGroup.className = 'd-flex align-items-center gap-2';
-      const defaultLabel = document.createElement('label');
-      defaultLabel.className = 'form-label mb-0 small';
-      defaultLabel.textContent = 'Domyślna ilość';
-      defaultLabel.setAttribute('for', `weapon-default-count-${item.weapon_id}-${index}`);
+      const rangeCell = document.createElement('td');
+      rangeCell.textContent = displayValue(weapon.range);
+      row.appendChild(rangeCell);
+
+      const attacksCell = document.createElement('td');
+      attacksCell.textContent = displayValue(weapon.attacks);
+      row.appendChild(attacksCell);
+
+      const apCell = document.createElement('td');
+      apCell.textContent = displayValue(weapon.ap);
+      row.appendChild(apCell);
+
+      const traitsCell = document.createElement('td');
+      traitsCell.textContent = displayValue(weapon.traits);
+      row.appendChild(traitsCell);
+
+      const defaultCell = document.createElement('td');
       const defaultField = document.createElement('input');
       defaultField.className = 'form-control form-control-sm';
       defaultField.type = 'number';
       defaultField.min = '0';
       defaultField.value = Number.isFinite(item.default_count) ? item.default_count : 0;
-      defaultField.id = `weapon-default-count-${item.weapon_id}-${index}`;
+      defaultField.setAttribute('aria-label', 'Domyślna ilość');
       defaultField.addEventListener('change', () => {
         const parsed = Number.parseInt(defaultField.value, 10);
         const safeValue = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
         defaultField.value = safeValue;
         updateItem(index, { default_count: safeValue });
       });
-      defaultGroup.appendChild(defaultLabel);
-      defaultGroup.appendChild(defaultField);
+      defaultCell.appendChild(defaultField);
+      row.appendChild(defaultCell);
 
+      const actionsCell = document.createElement('td');
+      actionsCell.className = 'text-end';
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'btn btn-outline-danger btn-sm';
@@ -648,13 +689,14 @@ function initWeaponPicker(root) {
         updateHidden();
         renderList();
       });
+      actionsCell.appendChild(removeBtn);
+      row.appendChild(actionsCell);
 
-      row.appendChild(nameSpan);
-      row.appendChild(defaultGroup);
-      row.appendChild(removeBtn);
-      wrapper.appendChild(row);
+      tbody.appendChild(row);
     });
-    listEl.appendChild(wrapper);
+    table.appendChild(tbody);
+    tableWrapper.appendChild(table);
+    listEl.appendChild(tableWrapper);
   }
 
   function handleAdd() {
@@ -787,10 +829,24 @@ function initRosterUnitForms() {
   });
 }
 
+function initDeleteGuards() {
+  document.querySelectorAll('[data-delete-disabled-message]').forEach((element) => {
+    element.addEventListener('click', (event) => {
+      event.preventDefault();
+      const message = element.getAttribute('data-delete-disabled-message');
+      const text = message ? message.trim() : '';
+      if (text) {
+        window.alert(text);
+      }
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initAbilityPickers();
   initRangePickers();
   initWeaponPickers();
   initRosterUnitForms();
   initWeaponDefaults();
+  initDeleteGuards();
 });

@@ -47,11 +47,26 @@
           <button class="btn btn-primary" type="submit" {% if not can_edit %}disabled{% endif %}>Zapisz</button>
         </div>
       </form>
-      {% if can_delete %}
+      {% if can_delete or army_delete_disabled_reason %}
       <hr class="my-4" />
-      <form method="post" action="/armies/{{ army.id }}/delete" onsubmit="return confirm('Usunąć armię? Tej operacji nie można cofnąć.');">
+      {% if can_delete %}
+      <form
+        method="post"
+        action="/armies/{{ army.id }}/delete"
+        onsubmit="return confirm('Usunąć armię? Tej operacji nie można cofnąć.');"
+      >
         <button class="btn btn-outline-danger" type="submit">Usuń armię</button>
       </form>
+      {% else %}
+      <button
+        class="btn btn-outline-danger"
+        type="button"
+        data-delete-disabled-message="{{ army_delete_disabled_reason | e }}"
+        title="{{ army_delete_disabled_reason | e }}"
+      >
+        Usuń armię
+      </button>
+      {% endif %}
       {% endif %}
       {% if not can_edit %}
       <div class="alert alert-info mt-3">

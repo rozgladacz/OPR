@@ -207,6 +207,21 @@ def _armory_weapons(db: Session, armory: models.Armory) -> list[models.Weapon]:
     return weapons
 
 
+def _armory_delete_reason(armory: models.Armory, can_edit: bool) -> str | None:
+    if can_edit and not armory.variants and not armory.armies:
+        return None
+    if not can_edit:
+        return "Nie masz uprawnień do usunięcia tej zbrojowni."
+    reasons: list[str] = []
+    if armory.variants:
+        reasons.append("Ta zbrojownia ma powiązane warianty – usuń je najpierw.")
+    if armory.armies:
+        reasons.append("Ta zbrojownia jest używana przez istniejące armie.")
+    if not reasons:
+        return "Nie można usunąć tej zbrojowni."
+    return " ".join(reasons)
+
+
 def _update_weapon_cost(weapon: models.Weapon) -> bool:
     if weapon.parent and not weapon.has_overrides():
         if weapon.cached_cost is not None:
@@ -368,6 +383,7 @@ def view_armory(
     parent_chain = _parent_chain(armory)
     can_edit = current_user.is_admin or armory.owner_id == current_user.id
     can_delete = can_edit and not armory.variants and not armory.armies
+    delete_disabled_reason = _armory_delete_reason(armory, can_edit)
 
     weapon_rows = []
     for weapon in weapons:
@@ -392,6 +408,7 @@ def view_armory(
             "weapons": weapon_rows,
             "can_edit": can_edit,
             "can_delete": can_delete,
+            "armory_delete_disabled_reason": delete_disabled_reason,
             "parent_chain": list(reversed(parent_chain)),
             "form_values": _weapon_form_values(None),
             "error": None,
@@ -434,6 +451,9 @@ def rename_armory(
                 "weapons": weapon_rows,
                 "can_edit": True,
                 "can_delete": not armory.variants and not armory.armies,
+                "armory_delete_disabled_reason": _armory_delete_reason(
+                    armory, True
+                ),
                 "parent_chain": list(reversed(_parent_chain(armory))),
                 "form_values": _weapon_form_values(None),
                 "error": "Nazwa zbrojowni jest wymagana.",
