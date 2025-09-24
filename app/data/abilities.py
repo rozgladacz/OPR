@@ -424,6 +424,52 @@ def display_with_value(definition: AbilityDefinition, value: str | None) -> str:
     return f"{definition.name}({value_text})"
 
 
+def description_with_value(definition: AbilityDefinition, value: str | None) -> str:
+    if not definition or not definition.description:
+        return ""
+
+    description = definition.description
+    value_text = (value or "").strip()
+
+    if not value_text:
+        return description
+
+    if definition.slug == "rozkaz":
+        ability_slug = slug_for_name(value_text) or value_text
+        ability_def = find_definition(ability_slug) if ability_slug else None
+        ability_label = ability_def.name if ability_def else value_text
+        ability_description = ability_def.description if ability_def else ""
+        replaced = description.replace("X", ability_label)
+        parts = [replaced]
+        if ability_description:
+            parts.append(ability_description)
+        return " ".join(part.strip() for part in parts if part).strip()
+
+    if definition.slug == "aura":
+        ability_ref = ""
+        range_ref = ""
+        parts = value_text.split("|", 1)
+        if len(parts) == 2:
+            ability_ref, range_ref = parts[0].strip(), parts[1].strip()
+        else:
+            ability_ref = value_text
+        ability_slug = slug_for_name(ability_ref) or ability_ref
+        ability_def = find_definition(ability_slug) if ability_slug else None
+        ability_label = ability_def.name if ability_def else ability_ref
+        ability_description = ability_def.description if ability_def else ""
+        range_clean = range_ref.replace("\"", "").replace("”", "").strip()
+        summary: list[str] = [description]
+        if ability_label:
+            summary.append(f"Wybrana zdolność: {ability_label}.")
+        if ability_description:
+            summary.append(ability_description)
+        if range_clean:
+            summary.append(f"Zasięg: {range_clean}\".")
+        return " ".join(part.strip() for part in summary if part).strip()
+
+    return description.replace("X", value_text)
+
+
 def to_dict(definition: AbilityDefinition) -> dict:
     return {
         "slug": definition.slug,

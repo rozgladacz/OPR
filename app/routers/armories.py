@@ -137,12 +137,20 @@ def _weapon_tags_payload(tags_text: str | None) -> list[dict]:
             if definition
             else trait.strip()
         )
+        description = ""
+        if definition:
+            description = ability_catalog.description_with_value(
+                definition, value_text
+            )
+        if not description:
+            description = trait.strip()
         payload.append(
             {
                 "slug": definition.slug if definition else "__custom__",
                 "value": value_text,
                 "label": label,
                 "raw": trait.strip(),
+                "description": description,
             }
         )
     return payload
@@ -369,6 +377,7 @@ def view_armory(
                 "instance": weapon,
                 "overrides": overrides,
                 "cost": costs.weapon_cost(weapon),
+                "abilities": _weapon_tags_payload(weapon.effective_tags),
             }
         )
 
@@ -405,7 +414,15 @@ def rename_armory(
     if not cleaned_name:
         weapons = _armory_weapons(db, armory)
         weapon_rows = [
-            {"instance": weapon, "overrides": {field: getattr(weapon, field) is not None for field in OVERRIDABLE_FIELDS}, "cost": costs.weapon_cost(weapon)}
+            {
+                "instance": weapon,
+                "overrides": {
+                    field: getattr(weapon, field) is not None
+                    for field in OVERRIDABLE_FIELDS
+                },
+                "cost": costs.weapon_cost(weapon),
+                "abilities": _weapon_tags_payload(weapon.effective_tags),
+            }
             for weapon in weapons
         ]
         return templates.TemplateResponse(

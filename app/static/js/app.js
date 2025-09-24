@@ -525,8 +525,7 @@ function initWeaponPicker(root) {
   const targetId = root.dataset.targetInput;
   const hiddenInput = targetId ? document.getElementById(targetId) : root.querySelector('input[type="hidden"]');
   const selectEl = root.querySelector('.weapon-picker-select');
-  const defaultToggle = root.querySelector('.weapon-picker-default');
-  const countInput = root.querySelector('.weapon-picker-count');
+  const defaultCountInput = root.querySelector('.weapon-picker-default-count');
   const addButton = root.querySelector('.weapon-picker-add');
   const listEl = root.querySelector('.weapon-picker-list');
   let items = [];
@@ -540,13 +539,31 @@ function initWeaponPicker(root) {
       const parsed = JSON.parse(hiddenInput.value);
       if (Array.isArray(parsed)) {
         items = parsed
-          .map((entry) => ({
-            weapon_id: entry.weapon_id,
-            name: entry.name || (weaponMap.get(String(entry.weapon_id))?.name ?? ''),
-            is_default: Boolean(entry.is_default),
-            count: Number.parseInt(entry.count, 10) || 1,
-          }))
-          .filter((entry) => entry.weapon_id);
+          .map((entry) => {
+            const rawWeaponId = entry.weapon_id;
+            const weaponId = Number.parseInt(rawWeaponId, 10);
+            if (!Number.isFinite(weaponId)) {
+              return null;
+            }
+            const name = entry.name || weaponMap.get(String(weaponId))?.name || '';
+            const rawCount = entry.count ?? entry.default_count;
+            let defaultCount = Number.parseInt(rawCount, 10);
+            if (!Number.isFinite(defaultCount)) {
+              defaultCount = entry.is_default ? 1 : 0;
+            }
+            if (defaultCount < 0) {
+              defaultCount = 0;
+            }
+            if (!entry.is_default && entry.is_default !== undefined && defaultCount <= 0) {
+              defaultCount = 0;
+            }
+            return {
+              weapon_id: weaponId,
+              name: name || weaponMap.get(String(weaponId))?.name || `Broń #${weaponId}`,
+              default_count: defaultCount,
+            };
+          })
+          .filter((entry) => entry && entry.weapon_id);
       }
     } catch (err) {
       console.warn('Nie udało się odczytać listy broni', err);
@@ -556,7 +573,13 @@ function initWeaponPicker(root) {
 
   function updateHidden() {
     if (hiddenInput) {
-      hiddenInput.value = JSON.stringify(items);
+      const payload = items.map((entry) => ({
+        weapon_id: entry.weapon_id,
+        name: entry.name,
+        is_default: entry.default_count > 0,
+        count: entry.default_count,
+      }));
+      hiddenInput.value = JSON.stringify(payload);
     }
   }
 
@@ -595,50 +618,26 @@ function initWeaponPicker(root) {
       nameSpan.className = 'flex-grow-1 fw-semibold';
       nameSpan.textContent = item.name || weaponMap.get(String(item.weapon_id))?.name || `Broń #${item.weapon_id}`;
 
-      const defaultWrapper = document.createElement('div');
-      defaultWrapper.className = 'form-check mb-0';
-      const defaultInput = document.createElement('input');
-      defaultInput.className = 'form-check-input';
-      defaultInput.type = 'checkbox';
-      defaultInput.checked = Boolean(item.is_default);
-      defaultInput.id = `weapon-default-${item.weapon_id}-${index}`;
-      defaultInput.addEventListener('change', () => {
-        if (!defaultInput.checked) {
-          countField.value = '1';
-          updateItem(index, { is_default: false, count: 1 });
-        } else {
-          updateItem(index, { is_default: true });
-        }
-        countField.disabled = !defaultInput.checked;
-      });
+      const defaultGroup = document.createElement('div');
+      defaultGroup.className = 'd-flex align-items-center gap-2';
       const defaultLabel = document.createElement('label');
-      defaultLabel.className = 'form-check-label';
-      defaultLabel.setAttribute('for', defaultInput.id);
-      defaultLabel.textContent = 'Domyślna';
-      defaultWrapper.appendChild(defaultInput);
-      defaultWrapper.appendChild(defaultLabel);
-
-      const countGroup = document.createElement('div');
-      countGroup.className = 'd-flex align-items-center gap-2';
-      const countLabel = document.createElement('label');
-      countLabel.className = 'form-label mb-0 small';
-      countLabel.textContent = 'Ilość';
-      countLabel.setAttribute('for', `weapon-count-${item.weapon_id}-${index}`);
-      const countField = document.createElement('input');
-      countField.className = 'form-control form-control-sm';
-      countField.type = 'number';
-      countField.min = '1';
-      countField.value = Number.isFinite(item.count) ? item.count : 1;
-      countField.id = `weapon-count-${item.weapon_id}-${index}`;
-      countField.addEventListener('change', () => {
-        const parsed = Number.parseInt(countField.value, 10);
-        const safeValue = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
-        countField.value = safeValue;
-        updateItem(index, { count: safeValue });
+      defaultLabel.className = 'form-label mb-0 small';
+      defaultLabel.textContent = 'Domyślna ilość';
+      defaultLabel.setAttribute('for', `weapon-default-count-${item.weapon_id}-${index}`);
+      const defaultField = document.createElement('input');
+      defaultField.className = 'form-control form-control-sm';
+      defaultField.type = 'number';
+      defaultField.min = '0';
+      defaultField.value = Number.isFinite(item.default_count) ? item.default_count : 0;
+      defaultField.id = `weapon-default-count-${item.weapon_id}-${index}`;
+      defaultField.addEventListener('change', () => {
+        const parsed = Number.parseInt(defaultField.value, 10);
+        const safeValue = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+        defaultField.value = safeValue;
+        updateItem(index, { default_count: safeValue });
       });
-      countField.disabled = !item.is_default;
-      countGroup.appendChild(countLabel);
-      countGroup.appendChild(countField);
+      defaultGroup.appendChild(defaultLabel);
+      defaultGroup.appendChild(defaultField);
 
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
@@ -651,8 +650,7 @@ function initWeaponPicker(root) {
       });
 
       row.appendChild(nameSpan);
-      row.appendChild(defaultWrapper);
-      row.appendChild(countGroup);
+      row.appendChild(defaultGroup);
       row.appendChild(removeBtn);
       wrapper.appendChild(row);
     });
@@ -672,40 +670,23 @@ function initWeaponPicker(root) {
       return;
     }
     const weapon = weaponMap.get(String(weaponId));
-    const isDefault = defaultToggle ? defaultToggle.checked : true;
-    const countValue = countInput ? Number.parseInt(countInput.value, 10) : 1;
-    const safeCount = Number.isFinite(countValue) && countValue > 0 ? countValue : 1;
+    const rawCount = defaultCountInput ? Number.parseInt(defaultCountInput.value, 10) : 0;
+    const safeCount = Number.isFinite(rawCount) && rawCount >= 0 ? rawCount : 0;
     items.push({
       weapon_id: Number.parseInt(weaponId, 10),
       name: weapon?.name || selectEl.selectedOptions[0]?.textContent || `Broń #${weaponId}`,
-      is_default: isDefault,
-      count: safeCount,
+      default_count: safeCount,
     });
     updateHidden();
     renderList();
     selectEl.value = '';
-    if (defaultToggle) {
-      defaultToggle.checked = true;
-    }
-    if (countInput) {
-      countInput.value = '1';
-      countInput.disabled = false;
+    if (defaultCountInput) {
+      defaultCountInput.value = '0';
     }
   }
 
   if (addButton) {
     addButton.addEventListener('click', handleAdd);
-  }
-
-  if (defaultToggle && countInput) {
-    const syncAddControls = () => {
-      if (!defaultToggle.checked) {
-        countInput.value = '1';
-      }
-      countInput.disabled = !defaultToggle.checked;
-    };
-    defaultToggle.addEventListener('change', syncAddControls);
-    syncAddControls();
   }
 
   parseInitial();

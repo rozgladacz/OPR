@@ -148,14 +148,14 @@
                   </select>
                 </div>
                 <div class="col-md-3">
-                  <div class="form-check mb-2 mb-md-0">
-                    <input class="form-check-input weapon-picker-default" id="unit-weapon-default" type="checkbox" />
-                    <label class="form-check-label" for="unit-weapon-default">Domyślna</label>
-                  </div>
-                </div>
-                <div class="col-md-2">
-                  <label class="form-label" for="unit-weapon-count">Ilość</label>
-                  <input class="form-control weapon-picker-count" id="unit-weapon-count" type="number" min="1" value="1" />
+                  <label class="form-label" for="unit-weapon-default-count">Domyślna ilość</label>
+                  <input
+                    class="form-control weapon-picker-default-count"
+                    id="unit-weapon-default-count"
+                    type="number"
+                    min="0"
+                    value="0"
+                  />
                 </div>
                 <div class="col-md-auto">
                   <div class="d-grid">
@@ -166,7 +166,7 @@
               <div class="weapon-picker-list mt-3"></div>
             </div>
             <input type="hidden" id="unit-weapons" name="weapons" value='{{ weapon_payload | tojson }}' />
-            <div class="form-text">Wybierz listę dostępnych broni i określ, które są domyślne.</div>
+            <div class="form-text">Wybierz listę dostępnych broni i ustaw domyślną ilość (0 oznacza brak w wyposażeniu domyślnym).</div>
           </div>
           <button class="btn btn-primary" type="submit">Zapisz</button>
           <a class="btn btn-secondary" href="/armies/{{ army.id }}">Anuluj</a>
