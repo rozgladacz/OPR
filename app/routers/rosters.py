@@ -173,6 +173,7 @@ def edit_roster(
         )
     total_cost = costs.roster_total(roster)
     can_edit = current_user.is_admin or roster.owner_id == current_user.id
+    can_delete = can_edit
 
     return templates.TemplateResponse(
         "roster_edit.html",
@@ -185,6 +186,7 @@ def edit_roster(
             "total_cost": total_cost,
             "error": None,
             "can_edit": can_edit,
+            "can_delete": can_delete,
         },
     )
 
@@ -205,6 +207,22 @@ def update_roster(
     roster.points_limit = int(points_limit) if points_limit else None
     db.commit()
     return RedirectResponse(url=f"/rosters/{roster.id}", status_code=303)
+
+
+@router.post("/{roster_id}/delete")
+def delete_roster(
+    roster_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    roster = db.get(models.Roster, roster_id)
+    if not roster:
+        raise HTTPException(status_code=404)
+    _ensure_roster_edit_access(roster, current_user)
+
+    db.delete(roster)
+    db.commit()
+    return RedirectResponse(url="/rosters", status_code=303)
 
 
 @router.post("/{roster_id}/units/add")

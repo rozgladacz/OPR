@@ -321,6 +321,12 @@ def view_army(
     _ensure_army_view_access(army, current_user)
 
     can_edit = current_user.is_admin or army.owner_id == current_user.id
+    can_delete = False
+    if can_edit:
+        has_rosters = db.execute(
+            select(models.Roster.id).where(models.Roster.army_id == army.id)
+        ).first()
+        can_delete = not bool(has_rosters)
     weapons = _armory_weapons(db, army.armory)
 
     weapon_choices = [
@@ -369,6 +375,7 @@ def view_army(
             "selected_armory_id": army.armory_id,
             "error": None,
             "can_edit": can_edit,
+            "can_delete": can_delete,
             "passive_definitions": PASSIVE_DEFINITIONS,
             "active_definitions": active_definitions,
             "aura_definitions": aura_definitions,
@@ -390,6 +397,28 @@ def update_army(
     army.name = name
     db.commit()
     return RedirectResponse(url=f"/armies/{army.id}", status_code=303)
+
+
+@router.post("/{army_id}/delete")
+def delete_army(
+    army_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    _ensure_army_edit_access(army, current_user)
+
+    has_rosters = db.execute(
+        select(models.Roster.id).where(models.Roster.army_id == army.id)
+    ).first()
+    if has_rosters:
+        raise HTTPException(status_code=400, detail="Armia jest używana przez rozpiskę")
+
+    db.delete(army)
+    db.commit()
+    return RedirectResponse(url="/armies", status_code=303)
 
 
 @router.post("/{army_id}/units/new")

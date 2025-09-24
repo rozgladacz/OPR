@@ -27,10 +27,24 @@ function initAbilityPicker(root) {
       return displayValue;
     }
     if (definition.slug === 'aura') {
-      return displayValue ? `${definition.name}(${displayValue})` : definition.display_name;
+      if (choiceLabel) {
+        return choiceLabel;
+      }
+      if (value) {
+        const [abilityRef, rangeRefRaw] = String(value).split('|', 2);
+        const rangeRef = (rangeRefRaw || '').trim().replace(/["”]/g, '');
+        const isLongRange = rangeRef === '12';
+        const prefix = isLongRange ? `${definition.name}(12")` : definition.name;
+        const abilityLabel = (abilityRef || '').trim();
+        return abilityLabel ? `${prefix}: ${abilityLabel}` : prefix;
+      }
+      return definition.display_name || definition.name;
     }
     if (definition.slug === 'rozkaz') {
-      return displayValue ? `${definition.name}(${displayValue})` : definition.display_name;
+      const valueLabel = displayValue || value || '';
+      return valueLabel
+        ? `${definition.name}: ${valueLabel}`
+        : definition.display_name || definition.name;
     }
     if (definition.requires_value) {
       return displayValue ? `${definition.name}(${displayValue})` : definition.display_name;

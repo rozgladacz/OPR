@@ -255,14 +255,16 @@ def _parse_aura_value(name: str, value: str | None) -> tuple[str, float]:
     if not ability_ref:
         desc = normalize_name(name)
         if desc.startswith("aura("):
-            match = re.match(r"aura\(([^)]+)\)\s*(.*)", desc)
+            match = re.match(r"aura\(([^)]+)\)\s*[:\-–]?\s*(.*)", desc)
             if match:
                 aura_range = extract_number(match.group(1)) or 6.0
-                ability_ref = match.group(2).strip()
+                raw_ref = match.group(2)
+                ability_ref = raw_ref.lstrip(": -–").strip().rstrip(") ")
+                ability_ref = ability_ref.strip()
         elif desc.startswith("aura:" ):
             ability_ref = desc.split(":", 1)[1].strip()
         else:
-            ability_ref = desc[4:].strip()
+            ability_ref = desc[4:].lstrip(": -–").strip()
     slug = ability_catalog.slug_for_name(ability_ref) or ability_identifier(ability_ref)
     return slug, aura_range
 

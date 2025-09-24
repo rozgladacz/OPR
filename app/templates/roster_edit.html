@@ -30,6 +30,12 @@
         <button class="btn btn-primary" type="submit" {% if not can_edit %}disabled{% endif %}>Zapisz</button>
       </div>
     </form>
+    {% if can_delete %}
+    <hr class="my-4" />
+    <form method="post" action="/rosters/{{ roster.id }}/delete" onsubmit="return confirm('Usunąć rozpiskę? Tej operacji nie można cofnąć.');">
+      <button class="btn btn-outline-danger" type="submit">Usuń rozpiskę</button>
+    </form>
+    {% endif %}
     {% if not can_edit %}
     <div class="alert alert-info mt-3">
       Jest to rozpiska globalna. Modyfikacje są dostępne jedynie dla administratora.
