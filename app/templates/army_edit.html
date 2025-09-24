@@ -398,15 +398,15 @@
                   {% endfor %}
                 </select>
               </div>
-              <div class="col-sm-3 col-lg-2">
-                <div class="form-check mb-0">
-                  <input class="form-check-input weapon-picker-default" id="unit-weapon-default" type="checkbox" />
-                  <label class="form-check-label" for="unit-weapon-default">Domyślna</label>
-                </div>
-              </div>
-              <div class="col-sm-3 col-lg-3">
-                <label class="form-label" for="unit-weapon-count">Ilość</label>
-                <input class="form-control weapon-picker-count" id="unit-weapon-count" type="number" min="1" value="1" />
+              <div class="col-sm-4 col-lg-3">
+                <label class="form-label" for="unit-weapon-default-count">Domyślna ilość</label>
+                <input
+                  class="form-control weapon-picker-default-count"
+                  id="unit-weapon-default-count"
+                  type="number"
+                  min="0"
+                  value="0"
+                />
               </div>
               <div class="col-lg-auto">
                 <div class="d-grid">
@@ -417,7 +417,7 @@
             <div class="weapon-picker-list mt-3"></div>
           </div>
           <input type="hidden" id="unit-weapons" name="weapons" value="[]" />
-          <div class="form-text">Zaznacz, które bronie należą do domyślnego wyposażenia jednostki.</div>
+          <div class="form-text">Zaznacz dostępne bronie i określ domyślną ilość (0 oznacza brak w wyposażeniu domyślnym).</div>
         </div>
         <div class="col-12">
           <button class="btn btn-success" type="submit">Dodaj jednostkę</button>

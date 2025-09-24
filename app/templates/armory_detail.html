@@ -148,7 +148,20 @@
         {% endif %}
       </td>
       <td>
-        {{ item.instance.effective_tags or '-' }}
+        {% if item.abilities %}
+        <div class="d-flex flex-wrap gap-1">
+          {% for ability in item.abilities %}
+          <span
+            class="badge text-bg-secondary"
+            title="{{ ability.description or ability.raw }}"
+          >
+            {{ ability.label or ability.raw or ability.slug }}
+          </span>
+          {% endfor %}
+        </div>
+        {% else %}
+        <span class="text-muted">-</span>
+        {% endif %}
         {% if item.instance.parent %}
         <div class="text-muted small">{% if item.overrides.tags %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
         {% endif %}

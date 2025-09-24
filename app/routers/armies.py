@@ -118,12 +118,24 @@ def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
         if link.weapon_id is None:
             continue
         name = link.weapon.effective_name if link.weapon else ""
+        is_default_flag = bool(getattr(link, "is_default", False))
+        count_raw = getattr(link, "default_count", None)
+        try:
+            count_value = int(count_raw)
+        except (TypeError, ValueError):
+            count_value = 1 if is_default_flag else 0
+        if count_value < 0:
+            count_value = 0
+        if not is_default_flag and count_value > 0:
+            is_default_flag = True
+        if not is_default_flag:
+            count_value = 0
         payload.append(
             {
                 "weapon_id": link.weapon_id,
                 "name": name,
-                "is_default": bool(getattr(link, "is_default", True)),
-                "count": max(int(getattr(link, "default_count", 1) or 1), 1),
+                "is_default": is_default_flag,
+                "count": count_value,
             }
         )
         seen.add(link.weapon_id)
@@ -171,17 +183,25 @@ def _parse_weapon_payload(
         weapon = db.get(models.Weapon, weapon_id)
         if not weapon or weapon.armory_id != armory.id:
             continue
-        count = entry.get("count", 1)
+        count_raw = entry.get("count")
+        if count_raw is None:
+            count_raw = entry.get("default_count")
+        if count_raw is None:
+            count_raw = 1 if entry.get("is_default") else 0
         try:
-            count_value = int(count)
+            count_value = int(count_raw)
         except (TypeError, ValueError):
-            count_value = 1
-        if count_value < 1:
-            count_value = 1
+            count_value = 1 if entry.get("is_default") else 0
+        if count_value < 0:
+            count_value = 0
+        is_default_raw = entry.get("is_default")
+        is_default = bool(is_default_raw) if is_default_raw is not None else count_value > 0
+        if not is_default:
+            count_value = 0
         results.append(
             (
                 weapon,
-                bool(entry.get("is_default", False)),
+                is_default,
                 count_value,
             )
         )
@@ -459,6 +479,7 @@ def add_unit(
     )
     weapon_links: list[models.UnitWeapon] = []
     default_assigned = False
+    fallback_weapon = None
     for weapon, is_default, count in weapon_entries:
         link = models.UnitWeapon(
             weapon=weapon,
@@ -466,11 +487,13 @@ def add_unit(
             default_count=count,
         )
         weapon_links.append(link)
-        if is_default and not default_assigned:
+        if fallback_weapon is None and count > 0:
+            fallback_weapon = weapon
+        if is_default and count > 0 and not default_assigned:
             unit.default_weapon = weapon
             default_assigned = True
-    if not default_assigned and weapon_entries:
-        unit.default_weapon = weapon_entries[0][0]
+    if not default_assigned:
+        unit.default_weapon = fallback_weapon
     unit.weapon_links = weapon_links
     unit.abilities = active_links + aura_links
     db.add(unit)
@@ -554,6 +577,7 @@ def update_unit(
     weapon_entries = _parse_weapon_payload(db, army.armory, weapons)
     weapon_links: list[models.UnitWeapon] = []
     default_assigned = False
+    fallback_weapon = None
     for weapon, is_default, count in weapon_entries:
         link = models.UnitWeapon(
             weapon=weapon,
@@ -561,11 +585,13 @@ def update_unit(
             default_count=count,
         )
         weapon_links.append(link)
-        if is_default and not default_assigned:
+        if fallback_weapon is None and count > 0:
+            fallback_weapon = weapon
+        if is_default and count > 0 and not default_assigned:
             unit.default_weapon = weapon
             default_assigned = True
     if not default_assigned:
-        unit.default_weapon = weapon_entries[0][0] if weapon_entries else None
+        unit.default_weapon = fallback_weapon
     unit.weapon_links = weapon_links
     active_items = _parse_selection_payload(active_abilities)
     aura_items = _parse_selection_payload(aura_abilities)

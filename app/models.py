@@ -230,10 +230,22 @@ class Unit(TimestampMixin, Base):
         weapons: list[Weapon] = []
         added = False
         for link in getattr(self, "weapon_links", []):
-            if getattr(link, "is_default", True) and link.weapon is not None:
-                count = max(int(getattr(link, "default_count", 1) or 1), 1)
-                weapons.extend([link.weapon] * count)
-                added = True
+            if link.weapon is None:
+                continue
+            is_default = bool(getattr(link, "is_default", False))
+            count_raw = getattr(link, "default_count", None)
+            try:
+                count = int(count_raw)
+            except (TypeError, ValueError):
+                count = 1 if is_default else 0
+            if count < 0:
+                count = 0
+            if not is_default and count > 0:
+                is_default = True
+            if not is_default or count <= 0:
+                continue
+            weapons.extend([link.weapon] * count)
+            added = True
         if not added and self.default_weapon:
             weapons.append(self.default_weapon)
         return weapons
@@ -243,10 +255,21 @@ class Unit(TimestampMixin, Base):
         ids: list[int] = []
         seen: set[int] = set()
         for link in getattr(self, "weapon_links", []):
-            if getattr(link, "is_default", True) and link.weapon_id is not None:
-                if link.weapon_id not in seen:
-                    ids.append(link.weapon_id)
-                    seen.add(link.weapon_id)
+            is_default = bool(getattr(link, "is_default", False))
+            count_raw = getattr(link, "default_count", None)
+            try:
+                count = int(count_raw)
+            except (TypeError, ValueError):
+                count = 1 if is_default else 0
+            if count < 0:
+                count = 0
+            if not is_default and count > 0:
+                is_default = True
+            if not is_default or count <= 0 or link.weapon_id is None:
+                continue
+            if link.weapon_id not in seen:
+                ids.append(link.weapon_id)
+                seen.add(link.weapon_id)
         if self.default_weapon_id and self.default_weapon_id not in seen:
             ids.append(self.default_weapon_id)
         return ids
@@ -255,9 +278,21 @@ class Unit(TimestampMixin, Base):
     def default_weapon_loadout(self) -> List[tuple[Weapon, int]]:
         loadout: list[tuple[Weapon, int]] = []
         for link in getattr(self, "weapon_links", []):
-            if getattr(link, "is_default", True) and link.weapon is not None:
-                count = max(int(getattr(link, "default_count", 1) or 1), 1)
-                loadout.append((link.weapon, count))
+            if link.weapon is None:
+                continue
+            is_default = bool(getattr(link, "is_default", False))
+            count_raw = getattr(link, "default_count", None)
+            try:
+                count = int(count_raw)
+            except (TypeError, ValueError):
+                count = 1 if is_default else 0
+            if count < 0:
+                count = 0
+            if not is_default and count > 0:
+                is_default = True
+            if not is_default or count <= 0:
+                continue
+            loadout.append((link.weapon, count))
         if not loadout and self.default_weapon:
             loadout.append((self.default_weapon, 1))
         return loadout
