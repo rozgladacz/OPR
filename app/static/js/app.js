@@ -1347,9 +1347,9 @@ function initRosterEditor() {
   const countInput = root.querySelector('[data-roster-editor-count]');
   const customNameInput = root.querySelector('[data-roster-editor-custom-name]');
   const customLabel = root.querySelector('[data-roster-editor-custom-label]');
+  const roleEl = root.querySelector('[data-roster-editor-role]');
   const loadoutInput = root.querySelector('[data-roster-editor-loadout-input]');
   const costValueEl = root.querySelector('[data-roster-editor-cost]');
-  const costDisplayEl = root.querySelector('[data-roster-editor-cost-display]');
   const costBadgeEl = root.querySelector('[data-roster-editor-cost-badge]');
   const saveStateEl = root.querySelector('[data-roster-editor-save-state]');
   const totalContainer = root.querySelector('[data-roster-total-container]');
@@ -1375,6 +1375,9 @@ function initRosterEditor() {
   let currentPassives = [];
   let abilityCostMap = { active: new Map(), passive: new Map() };
   let baseCostPerModel = 0;
+  let currentClassification = null;
+  let currentCustomName = '';
+  let customEditInput = null;
   let autoSaveEnabled = false;
   let ignoreNextSave = false;
   let saveTimer = null;
@@ -1388,6 +1391,7 @@ function initRosterEditor() {
     error: 'Błąd zapisu',
   };
   let currentSaveStatus = 'idle';
+  const customPlaceholder = customLabel ? customLabel.dataset.placeholder || '' : '';
 
   function setSaveStatus(status) {
     currentSaveStatus = status;
@@ -1435,6 +1439,147 @@ function initRosterEditor() {
     } catch (err) {
       console.warn('Nie udało się odczytać konfiguracji oddziału', err);
       return {};
+    }
+  }
+
+  function parseJsonValue(value) {
+    if (!value) {
+      return null;
+    }
+    try {
+      return JSON.parse(value);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function updateCustomLabelDisplay(value) {
+    if (!customLabel) {
+      return;
+    }
+    const text = value ? String(value) : customPlaceholder;
+    customLabel.textContent = text;
+    if (customPlaceholder) {
+      const showPlaceholder = !value;
+      customLabel.classList.toggle('text-opacity-50', showPlaceholder);
+      customLabel.classList.toggle('fst-italic', showPlaceholder);
+    }
+  }
+
+  function updateListCustomName(item, value) {
+    if (!item) {
+      return;
+    }
+    const customEl = item.querySelector('[data-roster-unit-custom]');
+    if (!customEl) {
+      return;
+    }
+    if (value) {
+      customEl.textContent = value;
+      customEl.classList.remove('d-none');
+    } else {
+      customEl.textContent = '';
+      customEl.classList.add('d-none');
+    }
+  }
+
+  function setCustomName(rawValue, options = {}) {
+    const trimmed = (rawValue || '').trim();
+    const previous = currentCustomName;
+    currentCustomName = trimmed;
+    if (customNameInput) {
+      customNameInput.value = trimmed;
+    }
+    if (!customEditInput) {
+      updateCustomLabelDisplay(trimmed);
+    }
+    if (options.updateActiveItem !== false && activeItem) {
+      activeItem.setAttribute('data-unit-custom-name', trimmed);
+    }
+    if (options.updateList !== false && activeItem) {
+      updateListCustomName(activeItem, trimmed);
+    }
+    if (autoSaveEnabled && options.triggerSave !== false && trimmed !== previous) {
+      setSaveStatus('dirty');
+      scheduleSave();
+    }
+  }
+
+  function startCustomInlineEdit() {
+    if (!isEditable || !customLabel || customEditInput) {
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control form-control-sm';
+    input.maxLength = 120;
+    input.value = currentCustomName;
+    customEditInput = input;
+    customLabel.textContent = '';
+    customLabel.appendChild(input);
+    window.setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+    const finish = (commit) => {
+      if (!customEditInput) {
+        return;
+      }
+      const nextValue = commit ? customEditInput.value : currentCustomName;
+      customEditInput.remove();
+      customEditInput = null;
+      setCustomName(nextValue, {
+        triggerSave: commit,
+        updateActiveItem: true,
+        updateList: true,
+      });
+    };
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        finish(true);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        finish(false);
+      }
+    });
+  }
+
+  function renderClassificationDisplay(classification) {
+    if (!roleEl) {
+      return;
+    }
+    if (classification && classification.label) {
+      const suffix = classification.summary ? ` (${classification.summary})` : '';
+      roleEl.textContent = `Klasyfikacja: ${classification.label}${suffix}`;
+      roleEl.classList.remove('d-none');
+    } else {
+      roleEl.textContent = '';
+      roleEl.classList.add('d-none');
+    }
+  }
+
+  function updateItemClassification(item, classification) {
+    if (!item) {
+      return;
+    }
+    try {
+      item.setAttribute('data-unit-classification', JSON.stringify(classification ?? null));
+    } catch (err) {
+      item.setAttribute('data-unit-classification', 'null');
+    }
+    const roleNode = item.querySelector('[data-roster-unit-role]');
+    if (!roleNode) {
+      return;
+    }
+    if (classification && classification.label) {
+      const suffix = classification.summary ? ` (${classification.summary})` : '';
+      roleNode.textContent = `Klasyfikacja: ${classification.label}${suffix}`;
+      roleNode.classList.remove('d-none');
+    } else {
+      roleNode.textContent = '';
+      roleNode.classList.add('d-none');
     }
   }
 
@@ -1598,8 +1743,10 @@ function initRosterEditor() {
       ) {
         targetItem.setAttribute('data-base-cost-per-model', String(unitData.base_cost_per_model));
       }
-      if (typeof unitData.custom_name === 'string') {
-        targetItem.setAttribute('data-unit-custom-name', unitData.custom_name);
+      if (unitData.custom_name !== undefined) {
+        const serverName = typeof unitData.custom_name === 'string' ? unitData.custom_name : '';
+        targetItem.setAttribute('data-unit-custom-name', serverName);
+        updateListCustomName(targetItem, serverName.trim());
       }
       if (typeof unitData.loadout_json === 'string') {
         targetItem.setAttribute('data-loadout', unitData.loadout_json);
@@ -1611,16 +1758,6 @@ function initRosterEditor() {
           titleEl.textContent = `${unitData.count}x ${unitName}`;
         }
       }
-      const customEl = targetItem.querySelector('[data-roster-unit-custom]');
-      if (customEl) {
-        if (unitData.custom_name) {
-          customEl.textContent = unitData.custom_name;
-          customEl.classList.remove('d-none');
-        } else {
-          customEl.textContent = '';
-          customEl.classList.add('d-none');
-        }
-      }
       const costBadge = targetItem.querySelector('[data-roster-unit-cost]');
       if (costBadge && typeof unitData.cached_cost === 'number') {
         costBadge.textContent = `${formatPoints(unitData.cached_cost)} pkt`;
@@ -1630,6 +1767,9 @@ function initRosterEditor() {
         const defaultSummary = targetItem.getAttribute('data-default-summary') || '-';
         const summary = unitData.loadout_summary || defaultSummary;
         loadoutEl.textContent = `Uzbrojenie: ${summary || '-'}`;
+      }
+      if (Object.prototype.hasOwnProperty.call(unitData, 'classification')) {
+        updateItemClassification(targetItem, unitData.classification || null);
       }
       if (isActiveMatch) {
         ignoreNextSave = true;
@@ -1656,9 +1796,6 @@ function initRosterEditor() {
     const formatted = formatPoints(total);
     if (costValueEl) {
       costValueEl.textContent = formatted;
-    }
-    if (costDisplayEl) {
-      costDisplayEl.textContent = `${formatted} pkt`;
     }
     if (costBadgeEl) {
       costBadgeEl.classList.toggle('d-none', false);
@@ -1758,10 +1895,14 @@ function initRosterEditor() {
       if (customNameInput) {
         customNameInput.value = '';
       }
-      if (customLabel) {
-        customLabel.textContent = '';
-        customLabel.classList.add('d-none');
+      currentCustomName = '';
+      if (customEditInput) {
+        customEditInput.remove();
+        customEditInput = null;
       }
+      updateCustomLabelDisplay('');
+      currentClassification = null;
+      renderClassificationDisplay(null);
       autoSaveEnabled = false;
       setSaveStatus('idle');
       return;
@@ -1772,6 +1913,11 @@ function initRosterEditor() {
       setSaveStatus('idle');
     } else if (!isEditable) {
       autoSaveEnabled = false;
+    }
+
+    if (customEditInput) {
+      customEditInput.remove();
+      customEditInput = null;
     }
 
     currentPassives = parseList(item.getAttribute('data-passives'));
@@ -1788,6 +1934,9 @@ function initRosterEditor() {
     const rosterUnitId = item.getAttribute('data-roster-unit-id');
     const loadoutData = parseLoadout(item.getAttribute('data-loadout'));
     const customName = item.getAttribute('data-unit-custom-name') || '';
+    const classificationData = parseJsonValue(item.getAttribute('data-unit-classification'));
+    currentClassification =
+      classificationData && typeof classificationData === 'object' ? classificationData : null;
 
     if (nameEl) {
       nameEl.textContent = unitName;
@@ -1795,18 +1944,12 @@ function initRosterEditor() {
     if (statsEl) {
       statsEl.textContent = `Jakość ${quality} / Obrona ${defense} / Wytrzymałość ${toughness}`;
     }
-    if (customNameInput) {
-      customNameInput.value = customName;
-    }
-    if (customLabel) {
-      if (customName) {
-        customLabel.textContent = `Nazwa oddziału: ${customName}`;
-        customLabel.classList.remove('d-none');
-      } else {
-        customLabel.textContent = '';
-        customLabel.classList.add('d-none');
-      }
-    }
+    setCustomName(customName, {
+      triggerSave: false,
+      updateActiveItem: false,
+      updateList: false,
+    });
+    renderClassificationDisplay(currentClassification);
 
     currentCount = Number.isFinite(countValue) && countValue >= 1 ? countValue : 1;
     if (countInput) {
@@ -1878,25 +2021,25 @@ function initRosterEditor() {
     });
   }
 
-  if (customNameInput && customLabel) {
-    customNameInput.addEventListener('input', () => {
-      const rawValue = customNameInput.value || '';
-      const value = rawValue.trim();
-      if (value) {
-        customLabel.textContent = `Nazwa oddziału: ${value}`;
-        customLabel.classList.remove('d-none');
-      } else {
-        customLabel.textContent = '';
-        customLabel.classList.add('d-none');
-      }
-      if (activeItem) {
-        activeItem.setAttribute('data-unit-custom-name', rawValue);
-      }
-      if (autoSaveEnabled) {
-        setSaveStatus('dirty');
-        scheduleSave();
-      }
-    });
+  if (customLabel) {
+    if (isEditable) {
+      customLabel.classList.add('cursor-pointer');
+      customLabel.addEventListener('click', (event) => {
+        event.preventDefault();
+        startCustomInlineEdit();
+      });
+      customLabel.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          startCustomInlineEdit();
+        }
+      });
+    } else {
+      customLabel.classList.remove('cursor-pointer');
+      customLabel.setAttribute('tabindex', '-1');
+      customLabel.setAttribute('role', 'text');
+    }
+    updateCustomLabelDisplay('');
   }
 
   const selectedId = root.dataset.selectedId || '';

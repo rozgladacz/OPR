@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-import typing
+from types import SimpleNamespace
+from typing import Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -177,7 +178,8 @@ def edit_roster(
             active_items=active_items,
             aura_items=aura_items,
             passive_items=passive_items,
-    )
+        )
+        classification = _roster_unit_classification(roster_unit, loadout)
         roster_items.append(
             {
                 "instance": roster_unit,
@@ -189,6 +191,7 @@ def edit_roster(
                 "loadout": loadout,
                 "loadout_summary": _loadout_display_summary(roster_unit, loadout, weapon_options),
                 "base_cost_per_model": _base_cost_per_model(unit),
+                "classification": classification,
             }
         )
     total_cost = costs.roster_total(roster)
@@ -371,6 +374,7 @@ def update_roster_unit(
     accept_header = (request.headers.get("accept") or "").lower()
     if "application/json" in accept_header:
         total_cost = costs.roster_total(roster)
+        classification = _roster_unit_classification(roster_unit, loadout)
         warnings = collect_roster_warnings(roster)
         return JSONResponse(
             {
@@ -387,6 +391,7 @@ def update_roster_unit(
                     ),
                     "default_summary": _default_loadout_summary(roster_unit.unit),
                     "base_cost_per_model": _base_cost_per_model(roster_unit.unit),
+                    "classification": classification,
                 },
                 "roster": {"total_cost": total_cost},
                 "warnings": warnings,
@@ -696,10 +701,37 @@ def _parse_loadout_json(text: str | None) -> dict[str, dict[str, int]]:
             for entry in values:
                 if not isinstance(entry, dict):
                     continue
-                entry_id = entry.get("id") or entry.get("weapon_id") or entry.get("ability_id")
-                if entry_id is None:
-                    continue
-                iterable.append((entry_id, entry.get("per_model") or entry.get("count") or 0))
+                if section == "passive":
+                    entry_id = (
+                        entry.get("slug")
+                        or entry.get("id")
+                        or entry.get("ability_id")
+                        or entry.get("weapon_id")
+                    )
+                    if entry_id is None:
+                        continue
+                    raw_enabled = entry.get("enabled")
+                    if raw_enabled is None:
+                        raw_enabled = entry.get("count") or entry.get("per_model") or entry.get("value")
+
+                    def _to_flag(value: Any) -> int:
+                        if isinstance(value, bool):
+                            return 1 if value else 0
+                        if isinstance(value, (int, float)):
+                            return 1 if value > 0 else 0
+                        if value is None:
+                            return 0
+                        text = str(value).strip().lower()
+                        if text in {"", "0", "false", "no", "nie"}:
+                            return 0
+                        return 1
+
+                    iterable.append((entry_id, _to_flag(raw_enabled)))
+                else:
+                    entry_id = entry.get("id") or entry.get("weapon_id") or entry.get("ability_id")
+                    if entry_id is None:
+                        continue
+                    iterable.append((entry_id, entry.get("per_model") or entry.get("count") or 0))
         else:
             continue
         section_payload: dict[str, int] = {}
@@ -849,12 +881,68 @@ def _loadout_display_summary(
     return ", ".join(summary)
 
 
+def _loadout_weapon_mix(
+    roster_unit: models.RosterUnit,
+    loadout: dict[str, dict[str, int]] | None,
+) -> dict[str, float]:
+    serialized = "{}"
+    if isinstance(loadout, dict):
+        try:
+            serialized = json.dumps(loadout, ensure_ascii=False)
+        except (TypeError, ValueError):  # pragma: no cover - defensive fallback
+            serialized = "{}"
+    snapshot = SimpleNamespace(
+        unit=roster_unit.unit,
+        count=roster_unit.count,
+        selected_weapon=roster_unit.selected_weapon,
+        selected_weapon_id=roster_unit.selected_weapon_id,
+        extra_weapons_json=serialized,
+    )
+    return costs.roster_unit_weapon_mix(snapshot)
+
+
+def _classification_from_mix(mix: dict[str, float]) -> dict[str, Any] | None:
+    melee = float(mix.get("melee_cost", 0.0) or 0.0)
+    ranged = float(mix.get("ranged_cost", 0.0) or 0.0)
+    melee = max(melee, 0.0)
+    ranged = max(ranged, 0.0)
+    if melee <= 0 and ranged <= 0:
+        return None
+    if melee > 0 and ranged <= 0:
+        slug = "wojownik"
+    elif ranged > 0 and melee <= 0:
+        slug = "strzelec"
+    elif melee <= ranged:
+        slug = "wojownik"
+    else:
+        slug = "strzelec"
+    label = "Wojownik" if slug == "wojownik" else "Strzelec"
+    summary = (
+        f"Walka wręcz {int(round(melee))} pkt / Strzelcy {int(round(ranged))} pkt"
+    )
+    return {
+        "slug": slug,
+        "label": label,
+        "melee_cost": round(melee, 2),
+        "ranged_cost": round(ranged, 2),
+        "summary": summary,
+    }
+
+
+def _roster_unit_classification(
+    roster_unit: models.RosterUnit,
+    loadout: dict[str, dict[str, int]] | None,
+) -> dict[str, Any] | None:
+    mix = _loadout_weapon_mix(roster_unit, loadout)
+    return _classification_from_mix(mix)
+
+
 def _loadout_weapon_details(
     roster_unit: models.RosterUnit,
     loadout: dict[str, dict[str, int]],
     weapon_options: list[dict],
-) -> list[dict[str, typing.Any]]:
-    details: list[dict[str, typing.Any]] = []
+) -> list[dict[str, Any]]:
+    details: list[dict[str, Any]] = []
     mode = loadout.get("mode") if isinstance(loadout, dict) else None
     option_by_id = {
         str(option.get("id")): option
@@ -911,7 +999,7 @@ def _loadout_weapon_details(
 
 def _roster_unit_export_data(
     roster_unit: models.RosterUnit,
-) -> dict[str, typing.Any]:
+) -> dict[str, Any]:
     unit = roster_unit.unit
     if unit is None:  # pragma: no cover - defensive fallback
         total_value = float(roster_unit.cached_cost or 0.0)
@@ -944,6 +1032,7 @@ def _roster_unit_export_data(
         aura_items=aura_items,
         passive_items=passive_items,
     )
+    classification = _roster_unit_classification(roster_unit, loadout)
     weapon_details = _loadout_weapon_details(roster_unit, loadout, weapon_options)
     weapon_summary = _loadout_display_summary(roster_unit, loadout, weapon_options)
     if not weapon_summary:
@@ -981,6 +1070,7 @@ def _roster_unit_export_data(
         "weapon_summary": weapon_summary,
         "default_summary": _default_loadout_summary(unit),
         "total_cost": total_value,
+        "classification": classification,
     }
 
 

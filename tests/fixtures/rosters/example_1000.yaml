@@ -22,8 +22,6 @@ rosters:
           total: 450
   - name: 'Lista Mix'
     limit: 800
-    expected_warnings_contains:
-      - "[WEAPON MIX]"
     units:
       - template_unit: 'Taktyczni'
         models: 5
