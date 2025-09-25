@@ -123,17 +123,20 @@
                   <div class="text-muted small">
                     Jakość {{ unit.quality }} / Obrona {{ unit.defense }} / Wytrzymałość {{ unit.toughness }}
                   </div>
+                  {% set passive_defaults = entry.passive_items | selectattr('default_count') | list %}
+                  {% set active_defaults = entry.active_items | selectattr('default_count') | list %}
+                  {% set aura_defaults = entry.aura_items | selectattr('default_count') | list %}
                   <div class="d-flex flex-wrap gap-1 mt-2">
-                    {% for ability in entry.passive_items %}
+                    {% for ability in passive_defaults %}
                     <span class="badge text-bg-secondary" title="{{ ability.description }}">{{ ability.label }}</span>
                     {% endfor %}
-                    {% for ability in entry.active_items %}
+                    {% for ability in active_defaults %}
                     <span class="badge text-bg-info text-dark" title="{{ ability.description }}">{{ ability.label }}</span>
                     {% endfor %}
-                    {% for ability in entry.aura_items %}
+                    {% for ability in aura_defaults %}
                     <span class="badge text-bg-warning text-dark" title="{{ ability.description }}">{{ ability.label }}</span>
                     {% endfor %}
-                    {% if not entry.passive_items and not entry.active_items and not entry.aura_items %}
+                    {% if not passive_defaults and not active_defaults and not aura_defaults %}
                     <span class="text-muted small">Brak dodatkowych zdolności</span>
                     {% endif %}
                   </div>
@@ -190,26 +193,36 @@
             data-actives='{{ item.active_items | tojson | e }}'
             data-auras='{{ item.aura_items | tojson | e }}'
             data-loadout='{{ item.loadout | tojson | e }}'
+            data-unit-classification='{{ item.classification | tojson | e }}'
           >
             <span class="badge text-bg-primary roster-cost-badge" data-roster-unit-cost>{{ ru.cached_cost }} pkt</span>
             <div class="fw-semibold" data-roster-unit-title>{{ ru.count }}x {{ ru.unit.name }}</div>
-            {% if ru.custom_name %}
-            <div class="text-muted small" data-roster-unit-custom>{{ ru.custom_name }}</div>
-            {% endif %}
+            <div class="text-muted small {% if not ru.custom_name %}d-none{% endif %}" data-roster-unit-custom>
+              {{ ru.custom_name }}
+            </div>
             <div class="text-muted small">
               Jakość {{ ru.unit.quality }} / Obrona {{ ru.unit.defense }} / Wytrzymałość {{ ru.unit.toughness }}
             </div>
+            <div
+              class="text-muted small {% if not item.classification %}d-none{% endif %}"
+              data-roster-unit-role
+            >
+              {% if item.classification %}Klasyfikacja: {{ item.classification.label }} ({{ item.classification.summary }}){% endif %}
+            </div>
+            {% set passive_defaults = item.passive_items | selectattr('default_count') | list %}
+            {% set active_defaults = item.active_items | selectattr('default_count') | list %}
+            {% set aura_defaults = item.aura_items | selectattr('default_count') | list %}
             <div class="d-flex flex-wrap gap-1 mt-2" data-roster-unit-abilities>
-              {% for ability in item.passive_items %}
+              {% for ability in passive_defaults %}
               <span class="badge text-bg-secondary" title="{{ ability.description }}">{{ ability.label }}</span>
               {% endfor %}
-              {% for ability in item.active_items %}
+              {% for ability in active_defaults %}
               <span class="badge text-bg-info text-dark" title="{{ ability.description }}">{{ ability.label }}</span>
               {% endfor %}
-              {% for ability in item.aura_items %}
+              {% for ability in aura_defaults %}
               <span class="badge text-bg-warning text-dark" title="{{ ability.description }}">{{ ability.label }}</span>
               {% endfor %}
-              {% if not item.passive_items and not item.active_items and not item.aura_items %}
+              {% if not passive_defaults and not active_defaults and not aura_defaults %}
               <span class="text-muted small">Brak dodatkowych zdolności</span>
               {% endif %}
             </div>
@@ -240,10 +253,17 @@
         </div>
         <div class="d-none flex-grow-1 d-flex flex-column" data-roster-editor>
           <div class="mb-3 d-flex justify-content-between align-items-start gap-3 flex-wrap">
-            <div>
+            <div class="d-flex flex-column gap-1">
               <h6 class="mb-0" data-roster-editor-name></h6>
-              <div class="text-muted small d-none" data-roster-editor-custom-label></div>
+              <div
+                class="text-muted small"
+                data-roster-editor-custom-label
+                data-placeholder="Kliknij, aby nazwać oddział"
+                role="button"
+                tabindex="0"
+              ></div>
               <div class="text-muted small" data-roster-editor-stats></div>
+              <div class="text-muted small d-none" data-roster-editor-role></div>
             </div>
             <span class="badge text-bg-primary" data-roster-editor-cost-badge>
               <span data-roster-editor-cost></span> pkt
@@ -251,17 +271,7 @@
           </div>
           {% if can_edit %}
           <form method="post" class="d-flex flex-column flex-grow-1" data-roster-editor-form>
-            <div class="mb-3">
-              <label class="form-label" for="roster-editor-custom-name">Nazwa oddziału</label>
-              <input
-                class="form-control"
-                id="roster-editor-custom-name"
-                name="custom_name"
-                type="text"
-                maxlength="120"
-                data-roster-editor-custom-name
-              />
-            </div>
+            <input type="hidden" name="custom_name" data-roster-editor-custom-name />
             <div class="mb-3">
               <label class="form-label" for="roster-editor-count">Modele</label>
               <input
@@ -293,11 +303,7 @@
               </div>
             </div>
             <input type="hidden" name="loadout_json" data-roster-editor-loadout-input />
-            <div class="mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-              <div>
-                <div class="form-label mb-1">Koszt oddziału</div>
-                <div class="form-control-plaintext fw-semibold" data-roster-editor-cost-display></div>
-              </div>
+            <div class="mt-3 d-flex justify-content-end align-items-center flex-wrap gap-2">
               <div class="text-muted small" data-roster-editor-save-state></div>
             </div>
           </form>
