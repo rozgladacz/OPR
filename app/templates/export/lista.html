@@ -1,0 +1,49 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Lista armii – eksport (lista)</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; font-size: 12px; margin: 16px; }
+    h1 { font-size: 18px; margin: 0 0 8px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #999; padding: 4px 6px; vertical-align: top; }
+    th { background: #eee; }
+    .small { font-size: 11px; color: #333; }
+  </style>
+</head>
+<body>
+  <h1>{{ roster.name }} — {{ roster.total_points or roster.total_cost }} pkt</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Jednostka</th><th>#</th><th>Jakość</th><th>Obrona</th><th>Wytrz.</th><th>Zdolności</th><th>Uzbrojenie</th><th>Suma</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in roster.items %}
+        {% set u = item.unit or item.template_unit %}
+        <tr>
+          <td>{{ u.name }}</td>
+          <td>{{ item.models }}</td>
+          <td>{{ u.quality }}</td>
+          <td>{{ u.defense }}</td>
+          <td>{{ u.tough or u.toughness }}</td>
+          <td class="small">
+            {% for a in (u.abilities or []) %}
+              {{ a.name }}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </td>
+          <td class="small">
+            {% for w in (u.weapons or []) %}
+              {{ w.name }}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </td>
+          <td>{{ item.total_cost }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

@@ -1,0 +1,23 @@
+
+name: 'Przykład 1000 pkt – Marines'
+ruleset: default
+rosters:
+  - name: 'Lista 1000'
+    limit: 1000
+    expected_total: 998
+    expected_warnings_contains:
+      - "[LIMIT]"
+      - "[WEAPON MIX]"
+    units:
+      - template_unit: 'Taktyczni'
+        models: 10
+        overrides:
+          abilities: ['Nieustraszony']
+          weapons:
+            - name: 'Bolter'
+              range: 24
+              ap: 1
+              attacks: 1
+              traits: []
+        expected_cost:
+          total: 450
