@@ -92,6 +92,16 @@ def collect_roster_warnings(roster: models.Roster) -> List[str]:
     heroes_per_points = int(warnings_cfg.get("heroes_per_points", 500) or 500)
 
     total_cost = float(costs.roster_total(roster))
+    points_limit = 0.0
+    try:
+        raw_limit = getattr(roster, "points_limit", 0)
+        if raw_limit:
+            points_limit = float(raw_limit)
+    except (TypeError, ValueError):
+        points_limit = 0.0
+    effective_total = total_cost
+    if points_limit and points_limit > effective_total:
+        effective_total = points_limit
     summaries = list(_summaries(roster))
 
     warnings: List[str] = []
@@ -109,8 +119,8 @@ def collect_roster_warnings(roster: models.Roster) -> List[str]:
             warnings.append(
                 f"[SIZE] Jednostka '{summary.name}' ma {summary.models} modeli (> {max_models})."
             )
-        if total_cost > 0:
-            share = summary.total_cost / total_cost
+        if effective_total > 0:
+            share = summary.total_cost / effective_total
             if share > max_share:
                 warnings.append(
                     f"[LIMIT] '{summary.name}' kosztuje {summary.total_cost:.0f} pkt (> {int(max_share * 100)}% całości)."
