@@ -545,7 +545,8 @@ def _default_loadout_payload(
 
 
 def _parse_loadout_json(text: str | None) -> dict[str, dict[str, int]]:
-    base: dict[str, dict[str, int]] = {"weapons": {}, "active": {}, "aura": {}}
+    base: dict[str, dict[str, int] | str] = {"weapons": {}, "active": {}, "aura": {}}
+    mode: str | None = None
     if not text:
         return base
     try:
@@ -553,10 +554,15 @@ def _parse_loadout_json(text: str | None) -> dict[str, dict[str, int]]:
     except json.JSONDecodeError:
         return base
     if isinstance(data, dict):
+        mode_value = data.get("mode")
+        if isinstance(mode_value, str):
+            mode = mode_value
         items = data.items()
     else:
         return base
     for section, values in items:
+        if section == "mode":
+            continue
         if section not in base:
             continue
         if isinstance(values, dict):
@@ -586,6 +592,8 @@ def _parse_loadout_json(text: str | None) -> dict[str, dict[str, int]]:
                 count_value = 0
             section_payload[key] = count_value
         base[section] = section_payload
+    if mode:
+        base["mode"] = mode
     return base
 
 
@@ -604,6 +612,11 @@ def _sanitize_loadout(
         active_items=active_items,
         aura_items=aura_items,
     )
+    mode_value: str | None = None
+    if isinstance(payload, dict):
+        raw_mode = payload.get("mode")
+        if isinstance(raw_mode, str):
+            mode_value = raw_mode
     if not payload:
         return defaults
     safe_payload = {
@@ -636,6 +649,8 @@ def _sanitize_loadout(
     _merge("weapons")
     _merge("active")
     _merge("aura")
+    if mode_value:
+        defaults["mode"] = mode_value
     return defaults
 
 
@@ -673,12 +688,25 @@ def _loadout_display_summary(
     weapon_options: list[dict],
 ) -> str:
     summary: list[str] = []
+    mode = loadout.get("mode") if isinstance(loadout, dict) else None
     option_by_id = {str(option.get("id")): option for option in weapon_options if option.get("id") is not None}
-    for weapon_id, per_model_count in loadout.get("weapons", {}).items():
+    for weapon_id, stored_count in loadout.get("weapons", {}).items():
         option = option_by_id.get(weapon_id)
         if not option:
             continue
-        total_count = max(int(per_model_count), 0) * max(int(roster_unit.count), 0)
+        try:
+            parsed_count = int(stored_count)
+        except (TypeError, ValueError):
+            try:
+                parsed_count = int(float(stored_count))
+            except (TypeError, ValueError):
+                parsed_count = 0
+        if parsed_count < 0:
+            parsed_count = 0
+        if mode == "total":
+            total_count = parsed_count
+        else:
+            total_count = parsed_count * max(int(roster_unit.count), 0)
         if total_count <= 0:
             continue
         name = option.get("name") or "Broń"
