@@ -376,15 +376,13 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
         )
     return entries
 
-
 def _passive_labels(unit: models.Unit) -> list[str]:
     return [
         entry["label"]
         for entry in _passive_entries(unit)
         if entry.get("label")
     ]
-
-
+  
 def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
     entries: list[dict] = []
     payload = ability_registry.unit_ability_payload(unit, ability_type)
