@@ -37,19 +37,24 @@
     color: #666;
     margin-bottom: 0.25rem;
   }
-  .roster-print .weapon-item {
+  .roster-print .weapon-line {
     border: 1px solid #e0e0e0;
     border-radius: 6px;
     padding: 0.5rem 0.75rem;
     margin-bottom: 0.5rem;
     background: #fff;
+    font-size: 0.9rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: baseline;
   }
-  .roster-print .weapon-name {
+  .roster-print .weapon-label {
     font-weight: 600;
+    flex: 0 0 auto;
   }
-  .roster-print .weapon-meta,
-  .roster-print .weapon-traits {
-    font-size: 0.85rem;
+  .roster-print .weapon-details {
+    flex: 1 1 auto;
     color: #444;
   }
   .roster-print .ability-line {
@@ -106,19 +111,6 @@
             </div>
           </div>
 
-          <div class="mt-3">
-            <div class="section-title">Uzbrojenie</div>
-            <div class="weapon-list">
-              {% for weapon in item.weapon_details %}
-              <div class="weapon-item">
-                <div class="weapon-name">{{ weapon.name }} × {{ weapon.count }}</div>
-                <div class="weapon-meta">Zasięg: {{ weapon.range or '-' }} | Ataki: {{ weapon.attacks or '-' }} | AP: {{ weapon.ap if weapon.ap is not none else '-' }}</div>
-                <div class="weapon-traits">Cechy: {{ weapon.traits or '-' }}</div>
-              </div>
-              {% endfor %}
-            </div>
-          </div>
-
           {% if item.passive_labels or item.active_labels or item.aura_labels %}
           <div class="mt-3">
             <div class="section-title">Zdolności</div>
@@ -133,6 +125,21 @@
             {% endif %}
           </div>
           {% endif %}
+
+          <div class="mt-3">
+            <div class="section-title">Uzbrojenie</div>
+            <div class="weapon-list">
+              {% for weapon in item.weapon_details %}
+              <div class="weapon-line">
+                <span class="weapon-label">{{ weapon.name }}</span>
+                <span class="weapon-details">
+                  × {{ weapon.count }} | Ataki: {{ weapon.attacks or '-' }} | Zasięg: {{ weapon.range or '-' }} | AP:
+                  {{ weapon.ap if weapon.ap is not none else '-' }} | Cechy: {{ weapon.traits or '-' }}
+                </span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
         </div>
       </div>
     </div>

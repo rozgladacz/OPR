@@ -128,9 +128,21 @@ def collect_roster_warnings(roster: models.Roster) -> List[str]:
                 f"[HERO] Bohaterów {hero_models}, standard: ≤ {allowed} (1/{heroes_per_points} pkt)."
             )
 
-    warnings.append(
-        '[WEAPON MIX] Sprawdź klasyfikację "wojownik/strzelec" (tańsza kategoria ×0.5).'
-    )
+    melee_mix = 0.0
+    ranged_mix = 0.0
+    for roster_unit in getattr(roster, "roster_units", []):
+        mix = costs.roster_unit_weapon_mix(roster_unit)
+        melee_mix += float(mix.get("melee_cost", 0.0) or 0.0)
+        ranged_mix += float(mix.get("ranged_cost", 0.0) or 0.0)
+    if melee_mix > 0 and ranged_mix > 0:
+        cheaper = 'wojownik' if melee_mix <= ranged_mix else 'strzelec'
+        warnings.append(
+            (
+                "[WEAPON MIX] Klasyfikacja: wojownicy "
+                f"{int(round(melee_mix))} pkt / strzelcy {int(round(ranged_mix))} pkt "
+                f"(tańsza kategoria ×0.5: {cheaper})."
+            )
+        )
 
     return warnings
 

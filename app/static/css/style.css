@@ -78,6 +78,18 @@ body {
   max-height: 60vh;
 }
 
+[data-roster-add-trigger] {
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+[data-roster-add-trigger]:hover,
+[data-roster-add-trigger]:focus-visible {
+  background-color: rgba(13, 110, 253, 0.08);
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+  outline: none;
+}
+
 .print-header,
 .print-footer {
   text-align: center;

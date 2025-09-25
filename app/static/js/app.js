@@ -711,7 +711,7 @@ function formatPoints(value) {
   return number.toLocaleString('pl-PL', baseOptions);
 }
 
-function renderPassiveEditor(container, items, stateMap, editable, onChange) {
+function renderPassiveEditor(container, items, stateMap, modelCount, editable, onChange) {
   if (!container) {
     return false;
   }
@@ -720,6 +720,7 @@ function renderPassiveEditor(container, items, stateMap, editable, onChange) {
   if (!safeItems.length) {
     return false;
   }
+  const totalModels = Math.max(Number(modelCount) || 0, 0);
   const wrapper = document.createElement('div');
   wrapper.className = 'd-flex flex-column gap-2';
   safeItems.forEach((entry) => {
@@ -753,12 +754,22 @@ function renderPassiveEditor(container, items, stateMap, editable, onChange) {
     const cost = document.createElement('span');
     cost.className = 'roster-ability-cost';
     const costValue = Number(entry.cost);
-    if (Number.isFinite(costValue) && costValue !== 0) {
-      const prefix = costValue > 0 ? '+' : '';
-      cost.textContent = `${prefix}${formatPoints(costValue)} pkt/model`;
-    } else {
-      cost.textContent = 'wliczone';
-    }
+    const defaultFlag = Number(entry.default_count ?? (entry.is_default ? 1 : 0)) > 0 ? 1 : 0;
+    const computeDeltaText = (selectedFlag) => {
+      if (!Number.isFinite(costValue) || costValue === 0) {
+        return 'Δ 0 pkt';
+      }
+      const diff = selectedFlag - defaultFlag;
+      if (diff === 0) {
+        return 'Δ 0 pkt';
+      }
+      const multiplier = Math.max(totalModels, 1);
+      const delta = costValue * diff * multiplier;
+      const prefix = delta > 0 ? '+' : '';
+      return `Δ ${prefix}${formatPoints(delta)} pkt`;
+    };
+    let currentFlag = currentValue > 0 ? 1 : 0;
+    cost.textContent = computeDeltaText(currentFlag);
     info.appendChild(cost);
     row.appendChild(info);
 
@@ -772,7 +783,7 @@ function renderPassiveEditor(container, items, stateMap, editable, onChange) {
       input.type = 'checkbox';
       input.className = 'form-check-input';
       input.id = `passive-${slug}-${Math.random().toString(16).slice(2)}`;
-      input.checked = currentValue > 0;
+      input.checked = currentFlag > 0;
       const label = document.createElement('label');
       label.className = 'form-check-label small';
       label.setAttribute('for', input.id);
@@ -781,7 +792,10 @@ function renderPassiveEditor(container, items, stateMap, editable, onChange) {
         label.textContent = input.checked ? 'Aktywna' : 'Wyłączona';
       };
       input.addEventListener('change', () => {
-        stateMap.set(slug, input.checked ? 1 : 0);
+        const flag = input.checked ? 1 : 0;
+        stateMap.set(slug, flag);
+        currentFlag = flag;
+        cost.textContent = computeDeltaText(currentFlag);
         updateLabel();
         if (typeof onChange === 'function') {
           onChange();
@@ -793,7 +807,7 @@ function renderPassiveEditor(container, items, stateMap, editable, onChange) {
     } else {
       const status = document.createElement('div');
       status.className = 'text-muted small';
-      status.textContent = currentValue > 0 ? 'Aktywna' : 'Wyłączona';
+      status.textContent = currentFlag > 0 ? 'Aktywna' : 'Wyłączona';
       controls.appendChild(status);
     }
 
@@ -1016,13 +1030,6 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
 
     const controls = document.createElement('div');
     controls.className = 'roster-ability-controls text-end';
-
-    const totalLabel = document.createElement('div');
-    totalLabel.className = 'text-muted small';
-    const updateTotal = (value) => {
-      totalLabel.textContent = `${formatPoints(value)} szt.`;
-    };
-
     if (editable) {
       const input = document.createElement('input');
       input.type = 'number';
@@ -1042,17 +1049,16 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
         }
         input.value = String(nextValue);
         stateMap.set(abilityId, nextValue);
-        updateTotal(nextValue);
         if (typeof onChange === 'function') {
           onChange();
         }
       });
       controls.appendChild(input);
-      updateTotal(totalCount);
-      controls.appendChild(totalLabel);
     } else {
-      updateTotal(totalCount);
-      controls.appendChild(totalLabel);
+      const valueDisplay = document.createElement('div');
+      valueDisplay.className = 'text-muted small';
+      valueDisplay.textContent = `${formatPoints(totalCount)} szt.`;
+      controls.appendChild(valueDisplay);
     }
 
     row.appendChild(controls);
@@ -1134,12 +1140,6 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
 
     const controls = document.createElement('div');
     controls.className = 'roster-ability-controls text-end';
-    const totalLabel = document.createElement('div');
-    totalLabel.className = 'text-muted small';
-    const updateTotal = (value) => {
-      totalLabel.textContent = `${formatPoints(value)} szt.`;
-    };
-
     if (editable) {
       const input = document.createElement('input');
       input.type = 'number';
@@ -1153,17 +1153,16 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
         }
         input.value = String(nextValue);
         stateMap.set(weaponId, nextValue);
-        updateTotal(nextValue);
         if (typeof onChange === 'function') {
           onChange();
         }
       });
       controls.appendChild(input);
-      updateTotal(totalCount);
-      controls.appendChild(totalLabel);
     } else {
-      updateTotal(totalCount);
-      controls.appendChild(totalLabel);
+      const valueDisplay = document.createElement('div');
+      valueDisplay.className = 'text-muted small';
+      valueDisplay.textContent = `${formatPoints(totalCount)} szt.`;
+      controls.appendChild(valueDisplay);
     }
 
     row.appendChild(controls);
@@ -1267,11 +1266,71 @@ function computeTotalCost(basePerModel, modelCount, weaponOptions, state, costMa
   return total;
 }
 
+function initRosterAdders(root) {
+  if (!root) {
+    return;
+  }
+  root.querySelectorAll('[data-roster-add-trigger]').forEach((trigger) => {
+    const form = trigger.closest('form');
+    if (!form) {
+      return;
+    }
+    const submitForm = () => {
+      if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+      } else {
+        form.submit();
+      }
+    };
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      submitForm();
+    });
+    trigger.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        submitForm();
+      }
+    });
+  });
+}
+
+function renderWarningsList(container, warnings) {
+  if (!container) {
+    return;
+  }
+  container.innerHTML = '';
+  const list = Array.isArray(warnings) ? warnings : [];
+  container.dataset.warnings = JSON.stringify(list);
+  if (!list.length) {
+    const success = document.createElement('div');
+    success.className = 'alert alert-success mb-0';
+    success.textContent = 'Brak ostrzeżeń.';
+    container.appendChild(success);
+    return;
+  }
+  const alertBox = document.createElement('div');
+  alertBox.className = 'alert alert-warning mb-0';
+  const strong = document.createElement('strong');
+  strong.textContent = 'Ostrzeżenia:';
+  alertBox.appendChild(strong);
+  const listEl = document.createElement('ul');
+  listEl.className = 'mb-0';
+  list.forEach((warning) => {
+    const item = document.createElement('li');
+    item.textContent = String(warning || '');
+    listEl.appendChild(item);
+  });
+  alertBox.appendChild(listEl);
+  container.appendChild(alertBox);
+}
+
 function initRosterEditor() {
   const root = document.querySelector('[data-roster-root]');
   if (!root) {
     return;
   }
+  initRosterAdders(root);
   const rosterId = root.dataset.rosterId || '';
   const items = Array.from(root.querySelectorAll('[data-roster-item]'));
   const editor = root.querySelector('[data-roster-editor]');
@@ -1292,7 +1351,20 @@ function initRosterEditor() {
   const costValueEl = root.querySelector('[data-roster-editor-cost]');
   const costDisplayEl = root.querySelector('[data-roster-editor-cost-display]');
   const costBadgeEl = root.querySelector('[data-roster-editor-cost-badge]');
+  const saveStateEl = root.querySelector('[data-roster-editor-save-state]');
+  const totalContainer = root.querySelector('[data-roster-total-container]');
+  const totalValueEl = root.querySelector('[data-roster-total]');
+  const warningsContainer = root.querySelector('[data-roster-warnings]');
   const isEditable = Boolean(form && countInput && loadoutInput);
+
+  if (warningsContainer) {
+    try {
+      const initialWarnings = JSON.parse(warningsContainer.dataset.warnings || '[]');
+      renderWarningsList(warningsContainer, Array.isArray(initialWarnings) ? initialWarnings : []);
+    } catch (err) {
+      renderWarningsList(warningsContainer, []);
+    }
+  }
 
   let activeItem = null;
   let loadoutState = createLoadoutState({});
@@ -1303,6 +1375,42 @@ function initRosterEditor() {
   let currentPassives = [];
   let abilityCostMap = { active: new Map(), passive: new Map() };
   let baseCostPerModel = 0;
+  let autoSaveEnabled = false;
+  let ignoreNextSave = false;
+  let saveTimer = null;
+  let isSaving = false;
+  let pendingSave = false;
+  const SAVE_MESSAGES = {
+    idle: '',
+    dirty: 'Niezapisane zmiany',
+    saving: 'Zapisywanie...',
+    saved: 'Zapisano',
+    error: 'Błąd zapisu',
+  };
+  let currentSaveStatus = 'idle';
+
+  function setSaveStatus(status) {
+    currentSaveStatus = status;
+    if (!saveStateEl) {
+      return;
+    }
+    const message = SAVE_MESSAGES[status] ?? '';
+    saveStateEl.textContent = message;
+    saveStateEl.classList.remove('text-success', 'text-danger');
+    if (status === 'saved') {
+      saveStateEl.classList.add('text-success');
+    } else if (status === 'error') {
+      saveStateEl.classList.add('text-danger');
+    }
+  }
+
+  function cancelPendingSave() {
+    if (saveTimer) {
+      window.clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    pendingSave = false;
+  }
 
   function parseList(value) {
     if (!value) {
@@ -1397,6 +1505,145 @@ function initRosterEditor() {
     return { active: activeMap, passive: passiveMap };
   }
 
+  function updateTotalSummary(total) {
+    if (!totalValueEl) {
+      return;
+    }
+    totalValueEl.textContent = formatPoints(total);
+  }
+
+  function scheduleSave() {
+    if (!isEditable || !form || !autoSaveEnabled) {
+      return;
+    }
+    if (saveTimer) {
+      window.clearTimeout(saveTimer);
+    }
+    saveTimer = window.setTimeout(() => {
+      saveTimer = null;
+      if (isSaving) {
+        pendingSave = true;
+        return;
+      }
+      setSaveStatus('saving');
+      isSaving = true;
+      submitChanges()
+        .catch((error) => {
+          console.error('Nie udało się zapisać zmian oddziału', error);
+          setSaveStatus('error');
+        })
+        .finally(() => {
+          isSaving = false;
+          if (pendingSave) {
+            pendingSave = false;
+            scheduleSave();
+          }
+        });
+    }, 400);
+  }
+
+  async function submitChanges() {
+    if (!form || !activeItem) {
+      throw new Error('Brak aktywnego oddziału');
+    }
+    const action = form.getAttribute('action');
+    if (!action) {
+      throw new Error('Brak adresu zapisu');
+    }
+    const payload = new FormData(form);
+    payload.set('count', String(currentCount));
+    if (customNameInput) {
+      payload.set('custom_name', customNameInput.value.trim());
+    }
+    if (loadoutInput) {
+      payload.set('loadout_json', loadoutInput.value || '{}');
+    }
+    const response = await fetch(action, {
+      method: 'POST',
+      body: payload,
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    applyServerUpdate(data || {});
+    setSaveStatus('saved');
+  }
+
+  function applyServerUpdate(payload) {
+    if (!payload || typeof payload !== 'object') {
+      return;
+    }
+    const unitData = payload.unit || {};
+    const unitId = unitData && unitData.id !== undefined ? String(unitData.id) : '';
+    const isActiveMatch = Boolean(
+      activeItem && unitId && activeItem.getAttribute('data-roster-unit-id') === unitId,
+    );
+    const targetItem = isActiveMatch
+      ? activeItem
+      : unitId
+        ? root.querySelector(`[data-roster-item][data-roster-unit-id="${unitId}"]`)
+        : null;
+    if (unitData && targetItem) {
+      if (typeof unitData.count === 'number' && Number.isFinite(unitData.count)) {
+        targetItem.setAttribute('data-unit-count', String(unitData.count));
+      }
+      if (typeof unitData.cached_cost === 'number' && Number.isFinite(unitData.cached_cost)) {
+        targetItem.setAttribute('data-unit-cost', String(unitData.cached_cost));
+      }
+      if (
+        typeof unitData.base_cost_per_model === 'number'
+        && Number.isFinite(unitData.base_cost_per_model)
+      ) {
+        targetItem.setAttribute('data-base-cost-per-model', String(unitData.base_cost_per_model));
+      }
+      if (typeof unitData.custom_name === 'string') {
+        targetItem.setAttribute('data-unit-custom-name', unitData.custom_name);
+      }
+      if (typeof unitData.loadout_json === 'string') {
+        targetItem.setAttribute('data-loadout', unitData.loadout_json);
+      }
+      const unitName = targetItem.getAttribute('data-unit-name') || 'Jednostka';
+      if (typeof unitData.count === 'number' && Number.isFinite(unitData.count)) {
+        const titleEl = targetItem.querySelector('[data-roster-unit-title]');
+        if (titleEl) {
+          titleEl.textContent = `${unitData.count}x ${unitName}`;
+        }
+      }
+      const customEl = targetItem.querySelector('[data-roster-unit-custom]');
+      if (customEl) {
+        if (unitData.custom_name) {
+          customEl.textContent = unitData.custom_name;
+          customEl.classList.remove('d-none');
+        } else {
+          customEl.textContent = '';
+          customEl.classList.add('d-none');
+        }
+      }
+      const costBadge = targetItem.querySelector('[data-roster-unit-cost]');
+      if (costBadge && typeof unitData.cached_cost === 'number') {
+        costBadge.textContent = `${formatPoints(unitData.cached_cost)} pkt`;
+      }
+      const loadoutEl = targetItem.querySelector('[data-roster-unit-loadout]');
+      if (loadoutEl) {
+        const defaultSummary = targetItem.getAttribute('data-default-summary') || '-';
+        const summary = unitData.loadout_summary || defaultSummary;
+        loadoutEl.textContent = `Uzbrojenie: ${summary || '-'}`;
+      }
+      if (isActiveMatch) {
+        ignoreNextSave = true;
+        selectItem(targetItem, { preserveAutoSave: true });
+      }
+    }
+    if (payload.roster && typeof payload.roster.total_cost === 'number') {
+      updateTotalSummary(payload.roster.total_cost);
+    }
+    if (Array.isArray(payload.warnings)) {
+      renderWarningsList(warningsContainer, payload.warnings);
+    }
+  }
+
   function updateCostDisplays() {
     const total = computeTotalCost(
       baseCostPerModel,
@@ -1416,6 +1663,14 @@ function initRosterEditor() {
     if (costBadgeEl) {
       costBadgeEl.classList.toggle('d-none', false);
     }
+    if (activeItem) {
+      activeItem.setAttribute('data-unit-cost', String(total));
+      const listBadge = activeItem.querySelector('[data-roster-unit-cost]');
+      if (listBadge) {
+        listBadge.textContent = `${formatted} pkt`;
+      }
+    }
+    return total;
   }
 
   function handleStateChange() {
@@ -1426,6 +1681,20 @@ function initRosterEditor() {
       loadoutInput.value = serializeLoadoutState(loadoutState);
     }
     updateCostDisplays();
+    if (activeItem && loadoutInput) {
+      activeItem.setAttribute('data-loadout', loadoutInput.value || '{}');
+    }
+    if (activeItem) {
+      activeItem.setAttribute('data-unit-count', String(currentCount));
+    }
+    if (ignoreNextSave) {
+      ignoreNextSave = false;
+      return;
+    }
+    if (autoSaveEnabled) {
+      setSaveStatus('dirty');
+      scheduleSave();
+    }
   }
 
   function renderEditors() {
@@ -1433,6 +1702,7 @@ function initRosterEditor() {
       passiveContainer,
       currentPassives,
       loadoutState.passive,
+      currentCount,
       isEditable,
       handleStateChange,
     );
@@ -1466,10 +1736,12 @@ function initRosterEditor() {
     toggleSectionVisibility(loadoutContainer, hasWeapons);
   }
 
-  function selectItem(item) {
-    if (activeItem === item) {
+  function selectItem(item, options = {}) {
+    const { preserveAutoSave = false } = options;
+    if (!preserveAutoSave && activeItem === item) {
       return;
     }
+    cancelPendingSave();
     if (activeItem) {
       activeItem.classList.remove('active');
     }
@@ -1490,7 +1762,16 @@ function initRosterEditor() {
         customLabel.textContent = '';
         customLabel.classList.add('d-none');
       }
+      autoSaveEnabled = false;
+      setSaveStatus('idle');
       return;
+    }
+
+    if (!preserveAutoSave) {
+      autoSaveEnabled = false;
+      setSaveStatus('idle');
+    } else if (!isEditable) {
+      autoSaveEnabled = false;
     }
 
     currentPassives = parseList(item.getAttribute('data-passives'));
@@ -1560,6 +1841,7 @@ function initRosterEditor() {
     abilityCostMap = buildAbilityCostMap(currentActives, currentAuras, currentPassives);
     baseCostPerModel = Number.isFinite(baseCostValue) && baseCostValue >= 0 ? baseCostValue : 0;
 
+    ignoreNextSave = true;
     renderEditors();
     handleStateChange();
 
@@ -1574,6 +1856,8 @@ function initRosterEditor() {
     }
     editor.classList.remove('d-none');
     emptyState.classList.add('d-none');
+    autoSaveEnabled = isEditable;
+    setSaveStatus(currentSaveStatus);
   }
 
   items.forEach((item) => {
@@ -1596,13 +1880,21 @@ function initRosterEditor() {
 
   if (customNameInput && customLabel) {
     customNameInput.addEventListener('input', () => {
-      const value = customNameInput.value.trim();
+      const rawValue = customNameInput.value || '';
+      const value = rawValue.trim();
       if (value) {
         customLabel.textContent = `Nazwa oddziału: ${value}`;
         customLabel.classList.remove('d-none');
       } else {
         customLabel.textContent = '';
         customLabel.classList.add('d-none');
+      }
+      if (activeItem) {
+        activeItem.setAttribute('data-unit-custom-name', rawValue);
+      }
+      if (autoSaveEnabled) {
+        setSaveStatus('dirty');
+        scheduleSave();
       }
     });
   }
