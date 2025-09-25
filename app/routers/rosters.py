@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -145,6 +147,9 @@ def edit_roster(
             "unit": unit,
             "weapon_options": _unit_weapon_options(unit),
             "default_summary": _default_loadout_summary(unit),
+            "passive_items": _passive_entries(unit),
+            "active_items": _ability_entries(unit, "active"),
+            "aura_items": _ability_entries(unit, "aura"),
         }
         for unit in available_units
     ]
@@ -152,21 +157,15 @@ def edit_roster(
     roster_items = []
     for roster_unit in roster.roster_units:
         unit = roster_unit.unit
-        passive_labels = _passive_labels(unit)
-        active_labels = [
-            item.get("label") or item.get("raw") or ""
-            for item in ability_registry.unit_ability_payload(unit, "active")
-        ]
-        aura_labels = [
-            item.get("label") or item.get("raw") or ""
-            for item in ability_registry.unit_ability_payload(unit, "aura")
-        ]
+        passive_items = _passive_entries(unit)
+        active_items = _ability_entries(unit, "active")
+        aura_items = _ability_entries(unit, "aura")
         roster_items.append(
             {
                 "instance": roster_unit,
-                "passive_labels": passive_labels,
-                "active_labels": active_labels,
-                "aura_labels": aura_labels,
+                "passive_items": passive_items,
+                "active_items": active_items,
+                "aura_items": aura_items,
                 "default_summary": _default_loadout_summary(unit),
                 "weapon_options": _unit_weapon_options(unit),
             }
@@ -319,25 +318,37 @@ def _default_loadout_summary(unit: models.Unit) -> str:
 def _unit_weapon_options(unit: models.Unit) -> list[dict]:
     options: list[dict] = []
     seen: set[int] = set()
+    flags = utils.parse_flags(unit.flags)
     for link in getattr(unit, "weapon_links", []):
         if link.weapon_id is None or link.weapon is None:
             continue
         if link.weapon_id in seen:
             continue
+        cost_value = costs.weapon_cost(link.weapon, unit.quality, flags)
+        default_count = getattr(link, "default_count", None)
+        try:
+            default_count = int(default_count) if default_count is not None else None
+        except (TypeError, ValueError):
+            default_count = None
         options.append(
             {
                 "id": link.weapon_id,
                 "name": link.weapon.effective_name,
                 "is_default": bool(getattr(link, "is_default", False)),
+                "cost": cost_value,
+                "default_count": default_count,
             }
         )
         seen.add(link.weapon_id)
     if unit.default_weapon_id and unit.default_weapon_id not in seen and unit.default_weapon:
+        cost_value = costs.weapon_cost(unit.default_weapon, unit.quality, flags)
         options.append(
             {
                 "id": unit.default_weapon_id,
                 "name": unit.default_weapon.effective_name,
                 "is_default": True,
+                "cost": cost_value,
+                "default_count": 1,
             }
         )
     options.sort(key=lambda item: (not item["is_default"], item["name"].casefold()))
@@ -349,6 +360,66 @@ def _unit_allowed_weapon_ids(unit: models.Unit) -> set[int]:
     return {option["id"] for option in options}
 
 
-def _passive_labels(unit: models.Unit) -> list[str]:
+def _passive_entries(unit: models.Unit) -> list[dict]:
     payload = utils.passive_flags_to_payload(unit.flags)
-    return [item.get("label") or item.get("slug") or "" for item in payload if item]
+    entries: list[dict] = []
+    for item in payload:
+        if not item:
+            continue
+        entries.append(
+            {
+                "label": item.get("label") or item.get("slug") or "",
+                "description": item.get("description") or "",
+                "cost": None,
+                "is_default": bool(item.get("is_default", False)),
+            }
+        )
+    return entries
+
+
+def _passive_labels(unit: models.Unit) -> list[str]:
+    return [
+        entry["label"]
+        for entry in _passive_entries(unit)
+        if entry.get("label")
+    ]
+
+
+def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
+    entries: list[dict] = []
+    payload = ability_registry.unit_ability_payload(unit, ability_type)
+    payload_by_id = {
+        item.get("ability_id"): item for item in payload if item.get("ability_id")
+    }
+    flags = utils.parse_flags(unit.flags)
+    unit_traits = costs.flags_to_ability_list(flags)
+    for link in getattr(unit, "abilities", []):
+        ability = link.ability
+        if not ability or ability.type != ability_type:
+            continue
+        payload_entry = payload_by_id.get(ability.id) or {}
+        label = payload_entry.get("label") or ability.name or ""
+        description = payload_entry.get("description") or ability.description or ""
+        is_default = payload_entry.get("is_default")
+        if is_default is None:
+            is_default = False
+            if link.params_json:
+                try:
+                    params = json.loads(link.params_json)
+                except json.JSONDecodeError:
+                    params = {}
+                if "default" in params:
+                    is_default = bool(params.get("default"))
+                elif "is_default" in params:
+                    is_default = bool(params.get("is_default"))
+        cost_value = costs.ability_cost(link, unit_traits)
+        entries.append(
+            {
+                "label": label,
+                "description": description,
+                "cost": cost_value,
+                "is_default": bool(is_default),
+            }
+        )
+    entries.sort(key=lambda entry: (not entry.get("is_default", False), entry.get("label", "").casefold()))
+    return entries

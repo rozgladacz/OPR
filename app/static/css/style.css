@@ -12,6 +12,40 @@ body {
   box-shadow: inset 0 0 0 2px rgba(13, 110, 253, 0.2);
 }
 
+.roster-unit-list .roster-unit-item.active {
+  border-color: rgba(13, 110, 253, 0.5);
+  background-color: rgba(13, 110, 253, 0.08);
+}
+
+.roster-ability-list {
+  min-height: 2rem;
+}
+
+.roster-ability-item {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  background-color: var(--bs-body-bg);
+}
+
+.roster-ability-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.roster-ability-cost {
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+}
+
+.roster-army-unit-list {
+  max-height: 60vh;
+}
+
 .print-header,
 .print-footer {
   text-align: center;

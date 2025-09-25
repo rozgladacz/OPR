@@ -699,98 +699,240 @@ function initWeaponPickers() {
   });
 }
 
-function parseWeaponOptions(optionEl) {
-  if (!optionEl) {
-    return { weapons: [], summary: '-' };
+function formatPoints(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return value !== undefined && value !== null ? String(value) : '0';
   }
-  const rawWeapons = optionEl.getAttribute('data-weapons');
-  let weapons = [];
-  if (rawWeapons) {
-    try {
-      const parsed = JSON.parse(rawWeapons);
-      if (Array.isArray(parsed)) {
-        weapons = parsed.map((item) => ({ id: String(item.id ?? ''), name: item.name || '' }));
-      }
-    } catch (err) {
-      console.warn('Nie udało się odczytać listy broni dla jednostki', err);
-    }
+  const baseOptions = { minimumFractionDigits: 0, maximumFractionDigits: 2 };
+  if (!Number.isInteger(number)) {
+    baseOptions.minimumFractionDigits = 2;
   }
-  const summary = optionEl.getAttribute('data-default-summary') || '-';
-  return { weapons, summary };
+  return number.toLocaleString('pl-PL', baseOptions);
 }
 
-function initRosterUnitForm(form) {
-  const unitSelect = form.querySelector('[data-roster-unit-select]');
-  const weaponSelect = form.querySelector('[data-roster-weapon-select]');
-  const defaultSummaryEl = form.querySelector('[data-roster-default-summary]');
-  if (!weaponSelect) {
+function renderAbilityList(container, items, emptyText) {
+  if (!container) {
     return;
   }
-  const placeholder = weaponSelect.dataset.placeholder || 'Domyślne wyposażenie';
+  container.innerHTML = '';
+  const safeItems = Array.isArray(items) ? items : [];
+  if (!safeItems.length) {
+    const empty = document.createElement('span');
+    empty.className = 'text-muted small';
+    empty.textContent = emptyText;
+    container.appendChild(empty);
+    return;
+  }
+  const wrapper = document.createElement('div');
+  wrapper.className = 'd-flex flex-column gap-2';
+  safeItems.forEach((entry) => {
+    const row = document.createElement('div');
+    row.className = 'roster-ability-item';
+    const label = document.createElement('div');
+    label.className = 'roster-ability-label';
+    label.textContent = entry.label || entry.raw || '—';
+    if (entry.description) {
+      label.title = entry.description;
+    }
+    const cost = document.createElement('div');
+    cost.className = 'roster-ability-cost';
+    if (entry.cost !== undefined && entry.cost !== null) {
+      cost.textContent = `${formatPoints(entry.cost)} pkt`; 
+    } else {
+      cost.textContent = 'wliczone';
+    }
+    row.appendChild(label);
+    row.appendChild(cost);
+    wrapper.appendChild(row);
+  });
+  container.appendChild(wrapper);
+}
 
-  const updateSummary = (summary) => {
-    if (!defaultSummaryEl) {
+function updateLoadout(container, selectEl, defaultSummary) {
+  if (!container) {
+    return;
+  }
+  container.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'roster-ability-item';
+  const label = document.createElement('div');
+  label.className = 'roster-ability-label';
+  const cost = document.createElement('div');
+  cost.className = 'roster-ability-cost';
+  if (selectEl && selectEl.value) {
+    const option = selectEl.selectedOptions[0];
+    label.textContent = option ? option.textContent : 'Wybrana broń';
+    const rawCost = option ? option.getAttribute('data-cost') : null;
+    if (rawCost !== null && rawCost !== undefined && rawCost !== '') {
+      cost.textContent = `+${formatPoints(rawCost)} pkt / model`;
+    } else {
+      cost.textContent = 'wliczone';
+    }
+  } else {
+    const summary = defaultSummary && defaultSummary.trim() !== '' ? defaultSummary : 'Domyślne wyposażenie';
+    label.textContent = `Domyślne: ${summary}`;
+    cost.textContent = 'wliczone';
+  }
+  row.appendChild(label);
+  row.appendChild(cost);
+  container.appendChild(row);
+}
+
+function initRosterEditor() {
+  const root = document.querySelector('[data-roster-root]');
+  if (!root) {
+    return;
+  }
+  const rosterId = root.dataset.rosterId || '';
+  const items = Array.from(root.querySelectorAll('[data-roster-item]'));
+  const editor = root.querySelector('[data-roster-editor]');
+  const emptyState = root.querySelector('[data-roster-editor-empty]');
+  const nameEl = root.querySelector('[data-roster-editor-name]');
+  const statsEl = root.querySelector('[data-roster-editor-stats]');
+  const passiveContainer = root.querySelector('[data-roster-editor-passives]');
+  const activeContainer = root.querySelector('[data-roster-editor-actives]');
+  const auraContainer = root.querySelector('[data-roster-editor-auras]');
+  const loadoutContainer = root.querySelector('[data-roster-editor-loadout]');
+  const form = root.querySelector('[data-roster-editor-form]');
+  const deleteForm = root.querySelector('[data-roster-editor-delete]');
+  const countInput = root.querySelector('[data-roster-editor-count]');
+  const weaponSelect = root.querySelector('[data-roster-editor-weapon]');
+  const defaultHint = root.querySelector('[data-roster-editor-default]');
+  const costEl = root.querySelector('[data-roster-editor-cost]');
+  let activeItem = null;
+  let currentDefaultSummary = '';
+
+  function parseList(value) {
+    if (!value) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      console.warn('Nie udało się odczytać danych oddziału', err);
+      return [];
+    }
+  }
+
+  function populateWeapons(options, selectedId, defaultSummary) {
+    if (!weaponSelect) {
       return;
     }
-    if (summary && summary !== '-' && summary.trim() !== '') {
-      defaultSummaryEl.textContent = `Domyślne wyposażenie: ${summary}`;
-    } else {
-      defaultSummaryEl.textContent = 'Brak domyślnego uzbrojenia.';
-    }
-  };
-
-  const populateWeapons = (weapons, summary, selectedValue) => {
     weaponSelect.innerHTML = '';
-    const defaultOption = document.createElement('option');
-    defaultOption.value = '';
-    defaultOption.textContent = summary && summary !== '-' && summary.trim() !== '' ? `${placeholder} (${summary})` : placeholder;
-    weaponSelect.appendChild(defaultOption);
-    weapons.forEach((weapon) => {
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    const summaryText = defaultSummary && defaultSummary.trim() !== '' ? `${defaultSummary}` : 'Domyślne wyposażenie';
+    placeholder.textContent = `Domyślne (${summaryText})`;
+    weaponSelect.appendChild(placeholder);
+    const safeOptions = Array.isArray(options) ? options : [];
+    safeOptions.forEach((weapon) => {
       const option = document.createElement('option');
-      option.value = String(weapon.id || '');
-      option.textContent = weapon.name || `Broń #${weapon.id}`;
+      option.value = weapon.id !== undefined && weapon.id !== null ? String(weapon.id) : '';
+      const costLabel = weapon.cost !== undefined && weapon.cost !== null ? ` (+${formatPoints(weapon.cost)} pkt/model)` : '';
+      option.textContent = `${weapon.name || 'Broń'}${costLabel}`;
+      if (weapon.cost !== undefined && weapon.cost !== null) {
+        option.setAttribute('data-cost', weapon.cost);
+      }
       weaponSelect.appendChild(option);
     });
-    if (selectedValue && weapons.some((weapon) => String(weapon.id) === String(selectedValue))) {
-      weaponSelect.value = String(selectedValue);
+    const matched = safeOptions.some((weapon) => String(weapon.id) === String(selectedId));
+    if (selectedId && matched) {
+      weaponSelect.value = String(selectedId);
     } else {
       weaponSelect.value = '';
     }
-    weaponSelect.disabled = false;
-    updateSummary(summary);
-    weaponSelect.removeAttribute('data-selected');
-  };
-
-  if (unitSelect) {
-    const syncFromSelection = () => {
-      const option = unitSelect.selectedOptions[0];
-      const { weapons, summary } = parseWeaponOptions(option);
-      populateWeapons(weapons, summary, weaponSelect.dataset.selected || '');
-    };
-    unitSelect.addEventListener('change', () => {
-      weaponSelect.dataset.selected = '';
-      syncFromSelection();
-    });
-    syncFromSelection();
-  } else {
-    const selectedValue = weaponSelect.dataset.selected || '';
-    if (selectedValue) {
-      weaponSelect.value = selectedValue;
-      weaponSelect.removeAttribute('data-selected');
+    if (defaultHint) {
+      defaultHint.textContent = summaryText && summaryText !== '-' ? `Domyślne uzbrojenie: ${summaryText}` : 'Brak domyślnego uzbrojenia.';
     }
   }
-}
 
-function initRosterUnitForms() {
-  document.querySelectorAll('[data-roster-unit-form]').forEach((form) => {
-    initRosterUnitForm(form);
+  function selectItem(item) {
+    if (activeItem === item) {
+      return;
+    }
+    if (activeItem) {
+      activeItem.classList.remove('active');
+    }
+    activeItem = item;
+    if (activeItem) {
+      activeItem.classList.add('active');
+    }
+    if (!editor || !emptyState) {
+      return;
+    }
+    if (!item) {
+      editor.classList.add('d-none');
+      emptyState.classList.remove('d-none');
+      return;
+    }
+
+    const passives = parseList(item.getAttribute('data-passives'));
+    const actives = parseList(item.getAttribute('data-actives'));
+    const auras = parseList(item.getAttribute('data-auras'));
+    const weapons = parseList(item.getAttribute('data-weapon-options'));
+    const defaultSummary = item.getAttribute('data-default-summary') || '';
+    const selectedWeaponId = item.getAttribute('data-selected-weapon-id') || '';
+    const unitName = item.getAttribute('data-unit-name') || 'Jednostka';
+    const quality = item.getAttribute('data-unit-quality') || '-';
+    const defense = item.getAttribute('data-unit-defense') || '-';
+    const toughness = item.getAttribute('data-unit-toughness') || '-';
+    const count = item.getAttribute('data-unit-count') || '1';
+    const costValue = item.getAttribute('data-unit-cost') || '0';
+    const rosterUnitId = item.getAttribute('data-roster-unit-id');
+
+    if (nameEl) {
+      nameEl.textContent = unitName;
+    }
+    if (statsEl) {
+      statsEl.textContent = `Jakość ${quality} / Obrona ${defense} / Wytrzymałość ${toughness}`;
+    }
+    renderAbilityList(passiveContainer, passives, 'Brak zdolności.');
+    renderAbilityList(activeContainer, actives, 'Brak zdolności.');
+    renderAbilityList(auraContainer, auras, 'Brak aur.');
+    populateWeapons(weapons, selectedWeaponId, defaultSummary);
+    updateLoadout(loadoutContainer, weaponSelect, defaultSummary);
+    currentDefaultSummary = defaultSummary;
+
+    if (countInput) {
+      countInput.value = count;
+    }
+    if (costEl) {
+      costEl.textContent = formatPoints(costValue);
+    }
+    if (form && rosterUnitId) {
+      form.setAttribute('action', `/rosters/${rosterId}/units/${rosterUnitId}/update`);
+    }
+    if (deleteForm && rosterUnitId) {
+      deleteForm.setAttribute('action', `/rosters/${rosterId}/units/${rosterUnitId}/delete`);
+    }
+    editor.classList.remove('d-none');
+    emptyState.classList.add('d-none');
+  }
+
+  items.forEach((item) => {
+    item.addEventListener('click', () => selectItem(item));
   });
+
+  if (weaponSelect) {
+    weaponSelect.addEventListener('change', () => {
+      updateLoadout(loadoutContainer, weaponSelect, currentDefaultSummary);
+    });
+  }
+
+  if (items.length) {
+    selectItem(items[0]);
+  } else if (editor && emptyState) {
+    editor.classList.add('d-none');
+    emptyState.classList.remove('d-none');
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   initAbilityPickers();
   initRangePickers();
   initWeaponPickers();
-  initRosterUnitForms();
+  initRosterEditor();
   initWeaponDefaults();
 });
