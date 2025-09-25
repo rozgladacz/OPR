@@ -12,6 +12,7 @@ from .. import models
 from ..db import get_db
 from ..security import get_current_user
 from ..services import ability_registry, costs, utils
+from ..services.rules import collect_roster_warnings
 
 router = APIRouter(prefix="/rosters", tags=["rosters"])
 templates = Jinja2Templates(directory="app/templates")
@@ -187,6 +188,7 @@ def edit_roster(
             }
         )
     total_cost = costs.roster_total(roster)
+    warnings = collect_roster_warnings(roster)
     can_edit = current_user.is_admin or roster.owner_id == current_user.id
     can_delete = can_edit
 
@@ -202,6 +204,7 @@ def edit_roster(
             "error": None,
             "can_edit": can_edit,
             "can_delete": can_delete,
+            "warnings": warnings,
         },
     )
 

@@ -2,11 +2,12 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
   <title>Lista armii – eksport (lista)</title>
   <style>
     body { font-family: system-ui, Arial, sans-serif; font-size: 12px; margin: 16px; }
-    h1 { font-size: 18px; margin: 0 0 8px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    p.meta { margin: 0 0 12px; color: #555; }
     table { border-collapse: collapse; width: 100%; }
     th, td { border: 1px solid #999; padding: 4px 6px; vertical-align: top; }
     th { background: #eee; }
@@ -14,36 +15,62 @@
   </style>
 </head>
 <body>
-  <h1>{{ roster.name }} — {{ roster.total_points or roster.total_cost }} pkt</h1>
+  <h1>{{ roster.name }}</h1>
+  <p class="meta">
+    Armia: {{ roster.army.name if roster.army else '---' }} ·
+    Limit: {{ roster.points_limit or 'brak' }} ·
+    Suma: {{ '%.2f' | format(total_cost) }} pkt{% if generated_at %} ·
+    Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC{% endif %}
+  </p>
+
   <table>
     <thead>
       <tr>
-        <th>Jednostka</th><th>#</th><th>Jakość</th><th>Obrona</th><th>Wytrz.</th><th>Zdolności</th><th>Uzbrojenie</th><th>Suma</th>
+        <th>Jednostka</th>
+        <th>#</th>
+        <th>Jakość</th>
+        <th>Obrona</th>
+        <th>Wytrz.</th>
+        <th>Zdolności</th>
+        <th>Uzbrojenie</th>
+        <th>Suma</th>
       </tr>
     </thead>
     <tbody>
-      {% for item in roster.items %}
-        {% set u = item.unit or item.template_unit %}
-        <tr>
-          <td>{{ u.name }}</td>
-          <td>{{ item.models }}</td>
-          <td>{{ u.quality }}</td>
-          <td>{{ u.defense }}</td>
-          <td>{{ u.tough or u.toughness }}</td>
-          <td class="small">
-            {% for a in (u.abilities or []) %}
-              {{ a.name }}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          </td>
-          <td class="small">
-            {% for w in (u.weapons or []) %}
-              {{ w.name }}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          </td>
-          <td>{{ item.total_cost }}</td>
-        </tr>
+      {% for entry in entries %}
+      <tr>
+        <td>{{ entry.unit_name }}</td>
+        <td>{{ entry.count }}</td>
+        <td>{{ entry.quality }}</td>
+        <td>{{ entry.defense }}</td>
+        <td>{{ entry.toughness }}</td>
+        <td class="small">
+          {% set has_content = False %}
+          {% if entry.abilities %}
+            {% set has_content = True %}
+            <strong>Pasywne:</strong> {{ entry.abilities | join(', ') }}<br />
+          {% endif %}
+          {% if entry.active %}
+            {% set has_content = True %}
+            <strong>Aktywne:</strong> {{ entry.active | join(', ') }}<br />
+          {% endif %}
+          {% if entry.auras %}
+            {% set has_content = True %}
+            <strong>Aury:</strong> {{ entry.auras | join(', ') }}
+          {% endif %}
+          {% if not has_content %}-{% endif %}
+        </td>
+        <td class="small">{{ entry.weapon }}</td>
+        <td>{{ '%.2f' | format(entry.total_cost) }}</td>
+      </tr>
       {% endfor %}
     </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="7" style="text-align: right;">Razem</th>
+        <th>{{ '%.2f' | format(total_cost) }}</th>
+      </tr>
+    </tfoot>
   </table>
 </body>
 </html>

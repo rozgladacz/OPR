@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from .. import models
@@ -53,6 +55,48 @@ TRANSPORT_MULTIPLIERS = [
     ({"latajacy"}, 1.5),
     ({"szybki", "zwinny"}, 1.25),
 ]
+
+BASE_COST_FACTOR = 5.0
+
+_RULESET_FALLBACK_PATH = (
+    Path(__file__).resolve().parent.parent / "rulesets" / "default.json"
+)
+
+
+@lru_cache()
+def default_ruleset_config() -> dict[str, Any]:
+    try:
+        with _RULESET_FALLBACK_PATH.open("r", encoding="utf-8") as fp:
+            data = json.load(fp)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _apply_ruleset_overrides() -> None:
+    config = default_ruleset_config()
+    range_modifiers = config.get("range_modifiers")
+    if isinstance(range_modifiers, dict):
+        for key, value in range_modifiers.items():
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                continue
+            key_text = str(key).strip().casefold()
+            if key_text in {"melee", "m"}:
+                RANGE_TABLE[0] = numeric
+            else:
+                try:
+                    RANGE_TABLE[int(key)] = numeric
+                except (TypeError, ValueError):
+                    continue
+    base_factor = config.get("base_cost_factor")
+    if isinstance(base_factor, (int, float)) and base_factor > 0:
+        global BASE_COST_FACTOR
+        BASE_COST_FACTOR = float(base_factor)
+
+
+_apply_ruleset_overrides()
 
 
 def normalize_name(text: str | None) -> str:
@@ -351,7 +395,7 @@ def base_model_cost(
     defense_value = defense_modifier(int(defense), def_row)
     toughness_value = toughness_modifier(int(toughness))
 
-    cost = 5.0 * quality_value * defense_value * toughness_value
+    cost = BASE_COST_FACTOR * quality_value * defense_value * toughness_value
     cost += passive_total
     return cost
 
