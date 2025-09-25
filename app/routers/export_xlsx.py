@@ -1,82 +1,159 @@
+from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
 from io import BytesIO
-try:
-    from openpyxl import Workbook
-except Exception as e:
-    Workbook = None
 
-# Import your ORM session and models here as in other routers
-try:
-    from app.db import get_session  # adjust to your project
-except Exception:
-    get_session = None
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import RedirectResponse, StreamingResponse
+from openpyxl import Workbook
+from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/export", tags=["export"])  # register in app
+from .. import models
+from ..db import get_db
+from ..security import get_current_user
+from ..services import costs
+from .rosters import (
+    _ability_entries,
+    _default_loadout_summary,
+    _ensure_roster_view_access,
+    _loadout_display_summary,
+    _passive_labels,
+    _roster_unit_loadout,
+    _unit_weapon_options,
+)
 
-def _append_roster_sheets(wb, roster):
-    ws = wb.active
-    ws.title = "Lista"
-    ws.append(["Jednostka","#","Jakość","Obrona","Wytrzymałość","Zdolności","Broń","Koszt modeli","Koszt broni","Koszt zdolności","Suma"])
-    total_sum = 0
-    for item in getattr(roster, "items", []):
-        u = getattr(item, "unit", None) or getattr(item, "template_unit", None)
-        name = getattr(u, "name", "UNIT")
-        q = getattr(u, "quality", "-")
-        d = getattr(u, "defense", "-")
-        t = getattr(u, "tough", getattr(u, "toughness", "-"))
-        abil_list = getattr(u, "abilities", []) or []
-        abil_txt = ", ".join(getattr(a,"name", str(a)) for a in abil_list)
-        # weapons (best-effort)
-        wpn_list = getattr(u, "weapons", []) or []
-        wpn_txt = ", ".join(getattr(w,"name", str(w)) for w in wpn_list)
-        models = getattr(item, "models", 1)
-        km = int(getattr(item, "cost_models", 0))
-        kw = int(getattr(item, "cost_weapons", 0))
-        ka = int(getattr(item, "cost_abilities", 0))
-        total = int(getattr(item, "total_cost", km+kw+ka))
-        ws.append([name, models, q, d, t, abil_txt, wpn_txt, km, kw, ka, total])
-        total_sum += total
-    # Summary row
-    ws.append(["", "", "", "", "", "", "SUMA", "", "", "", total_sum])
-    # Used Armory sheet
-    ws2 = wb.create_sheet("Zbrojownia użyta")
-    ws2.append(["Nazwa","Zasięg","Ataki","AP","Cechy"])
-    used = {}
-    for item in getattr(roster, "items", []):
-        u = getattr(item, "unit", None) or getattr(item, "template_unit", None)
-        for w in getattr(u, "weapons", []) or []:
-            key = getattr(w, "name", str(w))
-            if key in used: 
+
+router = APIRouter(prefix="/export", tags=["export"])
+
+
+def _abilities_text(passives: list[str], actives: list[str], auras: list[str]) -> str:
+    parts: list[str] = []
+    if passives:
+        parts.append(f"Pasywne: {', '.join(passives)}")
+    if actives:
+        parts.append(f"Aktywne: {', '.join(actives)}")
+    if auras:
+        parts.append(f"Aury: {', '.join(auras)}")
+    return "\n".join(parts) if parts else "-"
+
+
+def _append_roster_sheet(workbook: Workbook, roster: models.Roster) -> float:
+    sheet = workbook.active
+    sheet.title = "Lista"
+    sheet.append(
+        [
+            "Jednostka",
+            "Ilość",
+            "Jakość",
+            "Obrona",
+            "Wytrzymałość",
+            "Zdolności",
+            "Uzbrojenie",
+            "Suma [pkt]",
+        ]
+    )
+
+    total_cost = 0.0
+    for roster_unit in roster.roster_units:
+        unit = roster_unit.unit
+        passive_labels = _passive_labels(unit)
+        active_items = _ability_entries(unit, "active")
+        aura_items = _ability_entries(unit, "aura")
+        active_labels = [item.get("label") for item in active_items if item.get("label")]
+        aura_labels = [item.get("label") for item in aura_items if item.get("label")]
+        weapon_options = _unit_weapon_options(unit)
+        loadout = _roster_unit_loadout(
+            roster_unit,
+            weapon_options=weapon_options,
+            active_items=active_items,
+            aura_items=aura_items,
+        )
+        weapon_summary = _loadout_display_summary(roster_unit, loadout, weapon_options)
+        if not weapon_summary:
+            weapon_summary = _default_loadout_summary(unit)
+        total_value = float(roster_unit.cached_cost or costs.roster_unit_cost(roster_unit))
+        total_cost += total_value
+        sheet.append(
+            [
+                unit.name,
+                roster_unit.count,
+                unit.quality,
+                unit.defense,
+                unit.toughness,
+                _abilities_text(passive_labels, active_labels, aura_labels),
+                weapon_summary,
+                round(total_value, 2),
+            ]
+        )
+
+    sheet.append(["", "", "", "", "", "Razem", "", round(total_cost, 2)])
+    for column_cells in sheet.columns:
+        max_length = max(len(str(cell.value or "")) for cell in column_cells)
+        adjusted = max_length + 2
+        column_letter = column_cells[0].column_letter
+        sheet.column_dimensions[column_letter].width = min(adjusted, 60)
+    return total_cost
+
+
+def _append_weapons_sheet(workbook: Workbook, roster: models.Roster) -> None:
+    sheet = workbook.create_sheet("Zbrojownia")
+    sheet.append(["Nazwa", "Zasięg", "Ataki", "AP", "Cechy"])
+    used: dict[str, tuple[str, str, str, str]] = {}
+    for roster_unit in roster.roster_units:
+        if roster_unit.selected_weapon:
+            weapons = [roster_unit.selected_weapon]
+        else:
+            weapons = costs.unit_default_weapons(roster_unit.unit)
+        for weapon in weapons:
+            if not weapon:
                 continue
-            rng = getattr(w, "range", getattr(w, "rng", "-"))
-            atk = getattr(w, "attacks", getattr(w, "atk", "-"))
-            ap  = getattr(w, "ap", "-")
-            traits = getattr(w, "traits", []) or []
-            traits_txt = ", ".join(getattr(t,"name", str(t)) for t in traits) if isinstance(traits, (list, tuple)) else str(traits)
-            used[key] = (rng, atk, ap, traits_txt)
-    for name, (rng, atk, ap, traits_txt) in used.items():
-        ws2.append([name, rng, atk, ap, traits_txt])
+            name = weapon.effective_name or weapon.name or "Broń"
+            if name in used:
+                continue
+            attacks = getattr(weapon, "display_attacks", None)
+            if attacks is None:
+                attacks = weapon.effective_attacks
+            traits = weapon.effective_tags or weapon.tags or ""
+            used[name] = (
+                weapon.effective_range or weapon.range or "-",
+                str(attacks),
+                str(weapon.effective_ap if hasattr(weapon, "effective_ap") else weapon.ap or 0),
+                traits,
+            )
+    for name in sorted(used):
+        sheet.append([name, *used[name]])
+    for column_cells in sheet.columns:
+        max_length = max(len(str(cell.value or "")) for cell in column_cells)
+        adjusted = max_length + 2
+        column_letter = column_cells[0].column_letter
+        sheet.column_dimensions[column_letter].width = min(adjusted, 50)
+
 
 @router.get("/xlsx/{roster_id}")
-def export_xlsx(roster_id: int):
-    if Workbook is None:
-        raise HTTPException(status_code=500, detail="Brak biblioteki openpyxl – dodaj do requirements.txt: openpyxl")
-    # Load roster by ID with eager relations; adapt to your project conventions.
-    roster = None
-    try:
-        # Pseudo-code: replace with actual session/ORM code as in your project
-        # with get_session() as s: roster = s.get(Roster, roster_id)
-        pass
-    except Exception:
-        roster = None
-    if roster is None:
-        raise HTTPException(status_code=404, detail="Nie znaleziono rozpiski")
-    wb = Workbook()
-    _append_roster_sheets(wb, roster)
-    bio = BytesIO()
-    wb.save(bio)
-    bio.seek(0)
-    return StreamingResponse(bio, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                             headers={"Content-Disposition": f"attachment; filename=roster_{roster_id}.xlsx"})
+def export_xlsx(
+    roster_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_current_user(optional=True)),
+):
+    if current_user is None:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    roster = db.get(models.Roster, roster_id)
+    if not roster:
+        raise HTTPException(status_code=404)
+    _ensure_roster_view_access(roster, current_user)
+
+    costs.update_cached_costs(roster.roster_units)
+    workbook = Workbook()
+    total_cost = _append_roster_sheet(workbook, roster)
+    _append_weapons_sheet(workbook, roster)
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    filename = f"roster_{roster_id}_{int(round(total_cost))}.xlsx"
+    headers = {"Content-Disposition": f"attachment; filename={filename}"}
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+

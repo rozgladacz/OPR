@@ -1,73 +1,136 @@
+from __future__ import annotations
 
-from typing import List
+import math
 from dataclasses import dataclass
+from typing import Iterable, List
 
-# NOTE: This module is intentionally standalone and side-effect free.
-# It exposes a single function: collect_roster_warnings(roster) -> List[str].
-# Import in routers/rosters.py and include its output in the Jinja context.
+from .. import models
+from ..data import abilities as ability_catalog
+from . import ability_registry, costs, utils
+
 
 @dataclass
 class UnitSummary:
+    """Light-weight snapshot of a roster entry used for soft validation."""
+
     name: str
     models: int
-    is_hero: bool = False
-    has_active: int = 0
-    has_aura: bool = False
-    total_cost: int = 0
+    total_cost: float
+    active_count: int
+    has_aura: bool
+    hero_models: int
 
-def _flatten_units(roster) -> list:
-    # minimal, duck-typed: works if roster has .items with .unit/.models/.total_cost and unit has .name, .abilities etc.
-    units = []
-    try:
-        for item in getattr(roster, "items", []):
-            u = getattr(item, "unit", None)
-            if u is None:
-                # some repos name relation differently
-                u = getattr(item, "template_unit", None)
-            name = getattr(u, "name", "UNIT")
-            models = getattr(item, "models", 1)
-            total_cost = int(getattr(item, "total_cost", 0))
-            # abilities can be list of strings or objects with .name and flags
-            abilities = getattr(u, "abilities", []) or []
-            # fallbacks for active/aura/hero flags
-            is_hero = any(getattr(a, "code", getattr(a, "name", "")).lower() in ("bohater","hero") for a in abilities)                           or getattr(u, "is_hero", False)
-            has_active_cnt = sum(1 for a in abilities if getattr(a, "kind", "").lower() == "active" or "mag(" in str(getattr(a,"name","")).lower())
-            has_aura = any(getattr(a, "kind", "").lower() == "aura" or "aura" in str(getattr(a,"name","")).lower() for a in abilities)
-            units.append(UnitSummary(name=name, models=models, is_hero=is_hero, has_active=has_active_cnt, has_aura=has_aura, total_cost=total_cost))
-    except Exception:
-        # best-effort: return empty -> no warnings
-        return []
-    return units
 
-def collect_roster_warnings(roster) -> List[str]:
+def _unit_is_hero(unit: models.Unit) -> bool:
+    for link in getattr(unit, "abilities", []):
+        ability = getattr(link, "ability", None)
+        if not ability:
+            continue
+        slug = ability_registry.ability_slug(ability)
+        if not slug and ability.name:
+            slug = ability_catalog.slug_for_name(ability.name)
+        if slug == "bohater":
+            return True
+    flags = utils.parse_flags(getattr(unit, "flags", None))
+    for key in flags:
+        slug = ability_catalog.slug_for_name(str(key)) or str(key).casefold()
+        if slug == "bohater":
+            return True
+    return False
+
+
+def _active_count(unit: models.Unit) -> int:
+    return sum(
+        1
+        for link in getattr(unit, "abilities", [])
+        if getattr(getattr(link, "ability", None), "type", "") == "active"
+    )
+
+
+def _has_aura(unit: models.Unit) -> bool:
+    return any(
+        getattr(getattr(link, "ability", None), "type", "").casefold() == "aura"
+        for link in getattr(unit, "abilities", [])
+    )
+
+
+def _summaries(roster: models.Roster) -> Iterable[UnitSummary]:
+    for roster_unit in getattr(roster, "roster_units", []):
+        unit = getattr(roster_unit, "unit", None)
+        if unit is None:
+            continue
+        models_count = getattr(roster_unit, "models", None)
+        if models_count is None:
+            try:
+                models_count = int(getattr(roster_unit, "count", 1))
+            except (TypeError, ValueError):
+                models_count = 1
+        models_count = max(models_count, 0)
+        cost_value = getattr(roster_unit, "cached_cost", None)
+        if cost_value is None:
+            cost_value = costs.roster_unit_cost(roster_unit)
+        total_cost = float(cost_value)
+        active_cnt = _active_count(unit)
+        summary = UnitSummary(
+            name=getattr(unit, "name", "Jednostka"),
+            models=models_count,
+            total_cost=total_cost,
+            active_count=active_cnt,
+            has_aura=_has_aura(unit),
+            hero_models=models_count if _unit_is_hero(unit) else 0,
+        )
+        yield summary
+
+
+def collect_roster_warnings(roster: models.Roster) -> List[str]:
+    config = costs.default_ruleset_config()
+    warnings_cfg = config.get("warnings", {}) if isinstance(config, dict) else {}
+
+    max_models = int(warnings_cfg.get("max_models", 21) or 21)
+    min_unit_cost = float(warnings_cfg.get("min_unit_cost", 50) or 50)
+    max_share = float(warnings_cfg.get("max_share", 0.35) or 0.35)
+    heroes_per_points = int(warnings_cfg.get("heroes_per_points", 500) or 500)
+
+    total_cost = float(costs.roster_total(roster))
+    summaries = list(_summaries(roster))
+
     warnings: List[str] = []
-    try:
-        total = int(getattr(roster, "total_points", 0) or getattr(roster, "total_cost", 0) or 0)
-    except Exception:
-        total = 0
-    units = _flatten_units(roster)
-    # [ACTIVE] more than 1 active per unit
-    for u in units:
-        if u.has_active > 1:
-            warnings.append(f"[ACTIVE] Jednostka '{u.name}' ma >1 zdolność aktywną.")
-        if u.has_active >= 1 and u.has_aura:
-            warnings.append(f"[AURA] Jednostka '{u.name}' ma jednocześnie aurę i zdolność aktywną.")
-        if u.models > 21:
-            warnings.append(f"[SIZE] Jednostka '{u.name}' ma {u.models} modeli (>21).")
-    # [HERO] max 1/500 pts (soft)
-    if total > 0:
-        heroes = sum(1 for u in units if u.is_hero)
-        allowed = max(1, total // 500)
-        if heroes > allowed:
-            warnings.append(f"[HERO] Bohaterów {heroes}, standard: ≤ {allowed} (1/500 pkt).")
-    # [LIMIT] oddział >35% lub <50 pkt (soft)
-    if total > 0:
-        for u in units:
-            share = (u.total_cost / total) if total else 0
-            if share > 0.35:
-                warnings.append(f"[LIMIT] '{u.name}' kosztuje {u.total_cost} pkt (>35% całości).")
-            if u.total_cost < 50:
-                warnings.append(f"[LIMIT] '{u.name}' kosztuje {u.total_cost} pkt (<50 pkt).")
-    # Potential future: verify "warrior/shooter" classification cost halving — leave as informational
-    warnings.append("[WEAPON MIX] Sprawdź klasyfikację "wojownik/strzelec" (tańsza kategoria ×0.5).")
+
+    for summary in summaries:
+        if summary.active_count > 1:
+            warnings.append(
+                f"[ACTIVE] Jednostka '{summary.name}' ma więcej niż jedną zdolność aktywną."
+            )
+        if summary.active_count >= 1 and summary.has_aura:
+            warnings.append(
+                f"[AURA] Jednostka '{summary.name}' ma jednocześnie aurę i zdolność aktywną."
+            )
+        if summary.models > max_models:
+            warnings.append(
+                f"[SIZE] Jednostka '{summary.name}' ma {summary.models} modeli (> {max_models})."
+            )
+        if total_cost > 0:
+            share = summary.total_cost / total_cost
+            if share > max_share:
+                warnings.append(
+                    f"[LIMIT] '{summary.name}' kosztuje {summary.total_cost:.0f} pkt (> {int(max_share * 100)}% całości)."
+                )
+            if summary.total_cost < min_unit_cost:
+                warnings.append(
+                    f"[LIMIT] '{summary.name}' kosztuje {summary.total_cost:.0f} pkt (< {int(min_unit_cost)} pkt)."
+                )
+
+    if heroes_per_points > 0 and total_cost > 0:
+        hero_models = sum(item.hero_models for item in summaries)
+        allowed = max(1, math.floor(total_cost / heroes_per_points))
+        if hero_models > allowed:
+            warnings.append(
+                f"[HERO] Bohaterów {hero_models}, standard: ≤ {allowed} (1/{heroes_per_points} pkt)."
+            )
+
+    warnings.append(
+        '[WEAPON MIX] Sprawdź klasyfikację "wojownik/strzelec" (tańsza kategoria ×0.5).'
+    )
+
     return warnings
+

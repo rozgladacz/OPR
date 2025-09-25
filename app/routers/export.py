@@ -15,9 +15,13 @@ from ..db import get_db
 from ..security import get_current_user
 from ..services import ability_registry, costs
 from .rosters import (
+    _ability_entries,
     _default_loadout_summary,
     _ensure_roster_view_access,
+    _loadout_display_summary,
     _passive_labels,
+    _roster_unit_loadout,
+    _unit_weapon_options,
 )
 
 router = APIRouter(prefix="/rosters", tags=["export"])
@@ -68,6 +72,71 @@ def roster_print(
             "user": current_user,
             "roster": roster,
             "roster_items": roster_items,
+            "total_cost": total_cost,
+            "generated_at": datetime.utcnow(),
+        },
+    )
+
+
+@router.get("/{roster_id}/export/lista", response_class=HTMLResponse)
+def roster_export_list(
+    roster_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_current_user(optional=True)),
+):
+    if not current_user:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    roster = db.get(models.Roster, roster_id)
+    if not roster:
+        raise HTTPException(status_code=404)
+    _ensure_roster_view_access(roster, current_user)
+
+    costs.update_cached_costs(roster.roster_units)
+    total_cost = costs.roster_total(roster)
+
+    entries: list[dict] = []
+    for roster_unit in roster.roster_units:
+        unit = roster_unit.unit
+        passive_labels = _passive_labels(unit)
+        active_items = _ability_entries(unit, "active")
+        aura_items = _ability_entries(unit, "aura")
+        active_labels = [item.get("label") for item in active_items if item.get("label")]
+        aura_labels = [item.get("label") for item in aura_items if item.get("label")]
+        weapon_options = _unit_weapon_options(unit)
+        loadout = _roster_unit_loadout(
+            roster_unit,
+            weapon_options=weapon_options,
+            active_items=active_items,
+            aura_items=aura_items,
+        )
+        weapon_summary = _loadout_display_summary(roster_unit, loadout, weapon_options)
+        if not weapon_summary:
+            weapon_summary = _default_loadout_summary(unit)
+        total_value = roster_unit.cached_cost or costs.roster_unit_cost(roster_unit)
+        entries.append(
+            {
+                "instance": roster_unit,
+                "unit_name": unit.name,
+                "count": roster_unit.count,
+                "quality": unit.quality,
+                "defense": unit.defense,
+                "toughness": unit.toughness,
+                "abilities": passive_labels,
+                "active": active_labels,
+                "auras": aura_labels,
+                "weapon": weapon_summary,
+                "total_cost": total_value,
+            }
+        )
+
+    return templates.TemplateResponse(
+        "export/lista.html",
+        {
+            "request": request,
+            "user": current_user,
+            "roster": roster,
+            "entries": entries,
             "total_cost": total_cost,
             "generated_at": datetime.utcnow(),
         },

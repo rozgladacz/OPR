@@ -14,7 +14,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import models
 from .config import DEBUG, SECRET_KEY
 from .db import get_db, init_db
-from .routers import armories, armies, auth, export, rosters, users
+from .routers import armories, armies, auth, export, export_xlsx, rosters, users
 from .security import get_current_user
 from .services import costs
 
@@ -79,4 +79,5 @@ app.include_router(armories.router)
 app.include_router(armies.router)
 app.include_router(rosters.router)
 app.include_router(export.router)
+app.include_router(export_xlsx.router)
 app.include_router(users.router)

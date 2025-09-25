@@ -19,8 +19,19 @@
     <a class="btn btn-outline-secondary" href="/rosters">Wróć</a>
     <a class="btn btn-success" href="/rosters/{{ roster.id }}/print" target="_blank">Widok do druku</a>
     <a class="btn btn-outline-success" href="/rosters/{{ roster.id }}/pdf">Pobierz PDF</a>
+    <a class="btn btn-outline-secondary" href="/rosters/{{ roster.id }}/export/lista" target="_blank">Styl: lista</a>
+    <a class="btn btn-outline-primary" href="/export/xlsx/{{ roster.id }}">Eksport XLSX</a>
   </div>
 </div>
+
+{% if warnings %}
+<div class="alert alert-warning">
+  <strong>Ostrzeżenia:</strong>
+  <ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+</div>
+{% else %}
+<div class="alert alert-success">Brak ostrzeżeń.</div>
+{% endif %}
 
 <div class="collapse mb-4" id="roster-settings">
   <div class="card">
