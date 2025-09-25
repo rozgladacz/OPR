@@ -551,25 +551,138 @@ def unit_total_cost(unit: models.Unit) -> float:
 def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
     flags = parse_flags(roster_unit.unit.flags)
     unit_traits = flags_to_ability_list(flags)
-    unit_cost = base_model_cost(
+    base_value = base_model_cost(
         roster_unit.unit.quality,
         roster_unit.unit.defense,
         roster_unit.unit.toughness,
         unit_traits,
     )
 
+    passive_cost = 0.0
+    ability_costs: dict[int, float] = {}
+    active_total = 0.0
+    for link in getattr(roster_unit.unit, "abilities", []):
+        ability = link.ability
+        if not ability:
+            continue
+        cost_value = ability_cost(link, unit_traits)
+        if ability.type == "passive":
+            passive_cost += cost_value
+        else:
+            ability_costs[ability.id] = cost_value
+            active_total += cost_value
+
+    base_per_model = base_value + passive_cost
+
+    def _weapon_cost_map() -> dict[int, float]:
+        results: dict[int, float] = {}
+        links = getattr(roster_unit.unit, "weapon_links", None) or []
+        for link in links:
+            weapon = link.weapon
+            if not weapon or link.weapon_id is None:
+                continue
+            if link.weapon_id in results:
+                continue
+            results[link.weapon_id] = weapon_cost(
+                weapon,
+                roster_unit.unit.quality,
+                flags,
+            )
+        if roster_unit.unit.default_weapon and roster_unit.unit.default_weapon_id:
+            weapon_id = roster_unit.unit.default_weapon_id
+            if weapon_id not in results:
+                results[weapon_id] = weapon_cost(
+                    roster_unit.unit.default_weapon,
+                    roster_unit.unit.quality,
+                    flags,
+                )
+        if roster_unit.selected_weapon and roster_unit.selected_weapon.id not in results:
+            results[roster_unit.selected_weapon.id] = weapon_cost(
+                roster_unit.selected_weapon,
+                roster_unit.unit.quality,
+                flags,
+            )
+        return results
+
+    weapon_costs = _weapon_cost_map()
+
+    def _parse_counts(section: str) -> dict[int, int]:
+        raw = {}
+        if roster_unit.extra_weapons_json:
+            try:
+                data = json.loads(roster_unit.extra_weapons_json)
+            except json.JSONDecodeError:
+                data = None
+            if isinstance(data, dict):
+                raw_section = data.get(section) or {}
+                if isinstance(raw_section, dict):
+                    raw = raw_section
+                elif isinstance(raw_section, list):
+                    temp: dict[str, int] = {}
+                    for entry in raw_section:
+                        if not isinstance(entry, dict):
+                            continue
+                        entry_id = entry.get("id") or entry.get("weapon_id") or entry.get("ability_id")
+                        if entry_id is None:
+                            continue
+                        temp[str(entry_id)] = entry.get("per_model") or entry.get("count") or 0
+                    raw = temp
+        counts: dict[int, int] = {}
+        for raw_id, raw_value in raw.items():
+            try:
+                parsed_id = int(raw_id)
+            except (TypeError, ValueError):
+                try:
+                    parsed_id = int(float(raw_id))
+                except (TypeError, ValueError):
+                    continue
+            try:
+                parsed_value = int(raw_value)
+            except (TypeError, ValueError):
+                try:
+                    parsed_value = int(float(raw_value))
+                except (TypeError, ValueError):
+                    parsed_value = 0
+            if parsed_value < 0:
+                parsed_value = 0
+            counts[parsed_id] = parsed_value
+        return counts
+
+    weapons_counts = _parse_counts("weapons") if roster_unit.extra_weapons_json else {}
+    active_counts = _parse_counts("active") if roster_unit.extra_weapons_json else {}
+    aura_counts = _parse_counts("aura") if roster_unit.extra_weapons_json else {}
+
+    if roster_unit.extra_weapons_json:
+        total = base_per_model * max(roster_unit.count, 1)
+        for weapon_id, per_model_count in weapons_counts.items():
+            cost_value = weapon_costs.get(weapon_id)
+            if cost_value is None:
+                continue
+            total += cost_value * per_model_count * max(roster_unit.count, 1)
+        for ability_id, per_model_count in {**active_counts, **aura_counts}.items():
+            cost_value = ability_costs.get(ability_id)
+            if cost_value is None:
+                continue
+            total += cost_value * per_model_count * max(roster_unit.count, 1)
+        return round(total, 2)
+
+    legacy_unit_cost = base_per_model + active_total
     default_weapons = unit_default_weapons(roster_unit.unit)
     if roster_unit.selected_weapon:
-        unit_cost += weapon_cost(roster_unit.selected_weapon, roster_unit.unit.quality, flags)
+        legacy_unit_cost += weapon_cost(
+            roster_unit.selected_weapon,
+            roster_unit.unit.quality,
+            flags,
+        )
     else:
         for weapon in default_weapons:
-            unit_cost += weapon_cost(weapon, roster_unit.unit.quality, flags)
+            legacy_unit_cost += weapon_cost(
+                weapon,
+                roster_unit.unit.quality,
+                flags,
+            )
 
-    unit_cost += sum(ability_cost(link, unit_traits) for link in roster_unit.unit.abilities)
-
-    total = unit_cost * max(roster_unit.count, 1)
-    if roster_unit.extra_weapons_json:
-        total += 5
+    total = legacy_unit_cost * max(roster_unit.count, 1)
     return round(total, 2)
 
 

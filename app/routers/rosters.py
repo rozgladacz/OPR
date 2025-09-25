@@ -142,24 +142,37 @@ def edit_roster(
         .scalars()
         .all()
     )
-    available_unit_options = [
-        {
-            "unit": unit,
-            "weapon_options": _unit_weapon_options(unit),
-            "default_summary": _default_loadout_summary(unit),
-            "passive_items": _passive_entries(unit),
-            "active_items": _ability_entries(unit, "active"),
-            "aura_items": _ability_entries(unit, "aura"),
-        }
-        for unit in available_units
-    ]
+    available_unit_options = []
+    for unit in available_units:
+        weapon_options = _unit_weapon_options(unit)
+        passive_items = _passive_entries(unit)
+        active_items = _ability_entries(unit, "active")
+        aura_items = _ability_entries(unit, "aura")
+        available_unit_options.append(
+            {
+                "unit": unit,
+                "weapon_options": weapon_options,
+                "default_summary": _default_loadout_summary(unit),
+                "passive_items": passive_items,
+                "active_items": active_items,
+                "aura_items": aura_items,
+                "unit_cost": costs.unit_total_cost(unit),
+            }
+        )
 
     roster_items = []
     for roster_unit in roster.roster_units:
         unit = roster_unit.unit
+        weapon_options = _unit_weapon_options(unit)
         passive_items = _passive_entries(unit)
         active_items = _ability_entries(unit, "active")
         aura_items = _ability_entries(unit, "aura")
+        loadout = _roster_unit_loadout(
+            roster_unit,
+            weapon_options=weapon_options,
+            active_items=active_items,
+            aura_items=aura_items,
+        )
         roster_items.append(
             {
                 "instance": roster_unit,
@@ -167,7 +180,10 @@ def edit_roster(
                 "active_items": active_items,
                 "aura_items": aura_items,
                 "default_summary": _default_loadout_summary(unit),
-                "weapon_options": _unit_weapon_options(unit),
+                "weapon_options": weapon_options,
+                "loadout": loadout,
+                "loadout_summary": _loadout_display_summary(roster_unit, loadout, weapon_options),
+                "base_cost_per_model": _base_cost_per_model(unit),
             }
         )
     total_cost = costs.roster_total(roster)
@@ -249,11 +265,28 @@ def add_roster_unit(
     if weapon and not current_user.is_admin and weapon.owner_id not in (None, current_user.id):
         raise HTTPException(status_code=403, detail="Brak dostępu do broni")
     count = max(int(count), 1)
+    weapon_options = _unit_weapon_options(unit)
+    active_items = _ability_entries(unit, "active")
+    aura_items = _ability_entries(unit, "aura")
+    loadout = _default_loadout_payload(
+        unit,
+        weapon_options=weapon_options,
+        active_items=active_items,
+        aura_items=aura_items,
+    )
+    if weapon:
+        selected_key = str(weapon.id)
+        for key in list(loadout["weapons"].keys()):
+            loadout["weapons"][key] = 1 if key == selected_key else 0
+        if selected_key not in loadout["weapons"]:
+            loadout["weapons"][selected_key] = 1
+
     roster_unit = models.RosterUnit(
         roster=roster,
         unit=unit,
         count=count,
         selected_weapon=weapon,
+        extra_weapons_json=json.dumps(loadout, ensure_ascii=False),
     )
     roster_unit.cached_cost = costs.roster_unit_cost(roster_unit)
     db.add(roster_unit)
@@ -267,6 +300,7 @@ def update_roster_unit(
     roster_unit_id: int,
     count: int = Form(...),
     selected_weapon_id: str | None = Form(None),
+    loadout_json: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -277,15 +311,42 @@ def update_roster_unit(
     _ensure_roster_edit_access(roster, current_user)
 
     roster_unit.count = max(int(count), 1)
-    allowed_weapon_ids = _unit_allowed_weapon_ids(roster_unit.unit)
-    weapon_id = int(selected_weapon_id) if selected_weapon_id else None
-    if weapon_id:
-        weapon = db.get(models.Weapon, weapon_id)
-        if not weapon or weapon.id not in allowed_weapon_ids or weapon.armory_id != roster.army.armory_id:
-            weapon_id = None
-        elif not current_user.is_admin and weapon.owner_id not in (None, current_user.id):
-            raise HTTPException(status_code=403, detail="Brak dostępu do broni")
+    weapon_options = _unit_weapon_options(roster_unit.unit)
+    active_items = _ability_entries(roster_unit.unit, "active")
+    aura_items = _ability_entries(roster_unit.unit, "aura")
+
+    parsed_loadout = _parse_loadout_json(loadout_json) if loadout_json is not None else None
+    loadout = _sanitize_loadout(
+        roster_unit.unit,
+        roster_unit.count,
+        parsed_loadout,
+        weapon_options=weapon_options,
+        active_items=active_items,
+        aura_items=aura_items,
+    )
+
+    weapon_id: int | None = None
+    if loadout_json is None:
+        allowed_weapon_ids = _unit_allowed_weapon_ids(roster_unit.unit)
+        weapon_id = int(selected_weapon_id) if selected_weapon_id else None
+        if weapon_id:
+            weapon = db.get(models.Weapon, weapon_id)
+            if (
+                not weapon
+                or weapon.id not in allowed_weapon_ids
+                or weapon.armory_id != roster.army.armory_id
+            ):
+                weapon_id = None
+            elif not current_user.is_admin and weapon.owner_id not in (None, current_user.id):
+                raise HTTPException(status_code=403, detail="Brak dostępu do broni")
+        if weapon_id:
+            selected_key = str(weapon_id)
+            for key in list(loadout["weapons"].keys()):
+                loadout["weapons"][key] = 1 if key == selected_key else 0
+            if selected_key not in loadout["weapons"]:
+                loadout["weapons"][selected_key] = 1
     roster_unit.selected_weapon_id = weapon_id
+    roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
     roster_unit.cached_cost = costs.roster_unit_cost(roster_unit)
     db.commit()
     return RedirectResponse(url=f"/rosters/{roster.id}", status_code=303)
@@ -376,13 +437,15 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
         )
     return entries
 
+
 def _passive_labels(unit: models.Unit) -> list[str]:
     return [
         entry["label"]
         for entry in _passive_entries(unit)
         if entry.get("label")
     ]
-  
+
+
 def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
     entries: list[dict] = []
     payload = ability_registry.unit_ability_payload(unit, ability_type)
@@ -413,11 +476,211 @@ def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
         cost_value = costs.ability_cost(link, unit_traits)
         entries.append(
             {
+                "ability_id": ability.id,
                 "label": label,
                 "description": description,
                 "cost": cost_value,
                 "is_default": bool(is_default),
+                "default_count": 1 if bool(is_default) else 0,
             }
         )
     entries.sort(key=lambda entry: (not entry.get("is_default", False), entry.get("label", "").casefold()))
     return entries
+
+
+def _base_cost_per_model(unit: models.Unit) -> float:
+    flags = utils.parse_flags(unit.flags)
+    unit_traits = costs.flags_to_ability_list(flags)
+    base_value = costs.base_model_cost(
+        unit.quality,
+        unit.defense,
+        unit.toughness,
+        unit_traits,
+    )
+    passive_cost = 0.0
+    for link in getattr(unit, "abilities", []):
+        ability = link.ability
+        if ability and ability.type == "passive":
+            passive_cost += costs.ability_cost(link, unit_traits)
+    return round(base_value + passive_cost, 2)
+
+
+def _default_loadout_payload(
+    unit: models.Unit,
+    weapon_options: list[dict] | None = None,
+    active_items: list[dict] | None = None,
+    aura_items: list[dict] | None = None,
+) -> dict[str, dict[str, int]]:
+    payload: dict[str, dict[str, int]] = {
+        "weapons": {},
+        "active": {},
+        "aura": {},
+    }
+    options = weapon_options if weapon_options is not None else _unit_weapon_options(unit)
+    for option in options:
+        weapon_id = option.get("id")
+        if weapon_id is None:
+            continue
+        try:
+            default_count = int(option.get("default_count") or 0)
+        except (TypeError, ValueError):
+            default_count = 0
+        payload["weapons"][str(weapon_id)] = max(default_count, 0)
+
+    for ability_entry, key in (
+        (active_items if active_items is not None else _ability_entries(unit, "active"), "active"),
+        (aura_items if aura_items is not None else _ability_entries(unit, "aura"), "aura"),
+    ):
+        for item in ability_entry:
+            ability_id = item.get("ability_id")
+            if ability_id is None:
+                continue
+            try:
+                default_count = int(item.get("default_count") or 0)
+            except (TypeError, ValueError):
+                default_count = 0
+            payload[key][str(ability_id)] = max(default_count, 0)
+
+    return payload
+
+
+def _parse_loadout_json(text: str | None) -> dict[str, dict[str, int]]:
+    base: dict[str, dict[str, int]] = {"weapons": {}, "active": {}, "aura": {}}
+    if not text:
+        return base
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return base
+    if isinstance(data, dict):
+        items = data.items()
+    else:
+        return base
+    for section, values in items:
+        if section not in base:
+            continue
+        if isinstance(values, dict):
+            iterable = values.items()
+        elif isinstance(values, list):
+            iterable = []
+            for entry in values:
+                if not isinstance(entry, dict):
+                    continue
+                entry_id = entry.get("id") or entry.get("weapon_id") or entry.get("ability_id")
+                if entry_id is None:
+                    continue
+                iterable.append((entry_id, entry.get("per_model") or entry.get("count") or 0))
+        else:
+            continue
+        section_payload: dict[str, int] = {}
+        for raw_id, raw_count in iterable:
+            key = str(raw_id)
+            try:
+                count_value = int(raw_count)
+            except (TypeError, ValueError):
+                try:
+                    count_value = int(float(raw_count))
+                except (TypeError, ValueError):
+                    count_value = 0
+            if count_value < 0:
+                count_value = 0
+            section_payload[key] = count_value
+        base[section] = section_payload
+    return base
+
+
+def _sanitize_loadout(
+    unit: models.Unit,
+    model_count: int,
+    payload: dict[str, dict[str, int]] | None,
+    *,
+    weapon_options: list[dict] | None = None,
+    active_items: list[dict] | None = None,
+    aura_items: list[dict] | None = None,
+) -> dict[str, dict[str, int]]:
+    defaults = _default_loadout_payload(
+        unit,
+        weapon_options=weapon_options,
+        active_items=active_items,
+        aura_items=aura_items,
+    )
+    if not payload:
+        return defaults
+    safe_payload = {
+        "weapons": payload.get("weapons") or {},
+        "active": payload.get("active") or {},
+        "aura": payload.get("aura") or {},
+    }
+
+    max_count = max(int(model_count), 0)
+
+    def _merge(section: str) -> None:
+        defaults_section = defaults.get(section, {})
+        incoming = safe_payload.get(section, {})
+        for key in defaults_section.keys():
+            raw_value = incoming.get(key, defaults_section[key])
+            try:
+                value = int(raw_value)
+            except (TypeError, ValueError):
+                try:
+                    value = int(float(raw_value))
+                except (TypeError, ValueError):
+                    value = defaults_section[key]
+            if value < 0:
+                value = 0
+            if section == "weapons":
+                defaults_section[key] = value
+            else:
+                defaults_section[key] = min(value, max_count)
+
+    _merge("weapons")
+    _merge("active")
+    _merge("aura")
+    return defaults
+
+
+def _roster_unit_loadout(
+    roster_unit: models.RosterUnit,
+    *,
+    weapon_options: list[dict] | None = None,
+    active_items: list[dict] | None = None,
+    aura_items: list[dict] | None = None,
+) -> dict[str, dict[str, int]]:
+    raw_payload = _parse_loadout_json(roster_unit.extra_weapons_json)
+    loadout = _sanitize_loadout(
+        roster_unit.unit,
+        roster_unit.count,
+        raw_payload,
+        weapon_options=weapon_options,
+        active_items=active_items,
+        aura_items=aura_items,
+    )
+
+    # Backwards compatibility for legacy rosters using selected_weapon_id.
+    if (
+        not roster_unit.extra_weapons_json
+        and roster_unit.selected_weapon_id
+        and str(roster_unit.selected_weapon_id) not in loadout["weapons"]
+    ):
+        loadout["weapons"][str(roster_unit.selected_weapon_id)] = 1
+
+    return loadout
+
+
+def _loadout_display_summary(
+    roster_unit: models.RosterUnit,
+    loadout: dict[str, dict[str, int]],
+    weapon_options: list[dict],
+) -> str:
+    summary: list[str] = []
+    option_by_id = {str(option.get("id")): option for option in weapon_options if option.get("id") is not None}
+    for weapon_id, per_model_count in loadout.get("weapons", {}).items():
+        option = option_by_id.get(weapon_id)
+        if not option:
+            continue
+        total_count = max(int(per_model_count), 0) * max(int(roster_unit.count), 0)
+        if total_count <= 0:
+            continue
+        name = option.get("name") or "Broń"
+        summary.append(f"{name} x{total_count}")
+    return ", ".join(summary)

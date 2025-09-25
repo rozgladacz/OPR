@@ -88,7 +88,8 @@
             <div class="list-group">
               {% for entry in available_units %}
               {% set unit = entry.unit %}
-              <div class="list-group-item">
+              <div class="list-group-item position-relative roster-card">
+                <span class="badge text-bg-light text-dark roster-cost-badge">{{ entry.unit_cost }} pkt/model</span>
                 <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
                   <div class="flex-grow-1">
                     <div class="fw-semibold">{{ unit.name }}</div>
@@ -149,12 +150,13 @@
           {% set ru = item.instance %}
           <button
             type="button"
-            class="list-group-item list-group-item-action roster-unit-item text-start"
+            class="list-group-item list-group-item-action roster-unit-item text-start position-relative roster-card"
             data-roster-item
             data-roster-unit-id="{{ ru.id }}"
             data-unit-name="{{ ru.unit.name }}"
             data-unit-count="{{ ru.count }}"
             data-unit-cost="{{ ru.cached_cost }}"
+            data-base-cost-per-model="{{ item.base_cost_per_model }}"
             data-unit-quality="{{ ru.unit.quality }}"
             data-unit-defense="{{ ru.unit.defense }}"
             data-unit-toughness="{{ ru.unit.toughness }}"
@@ -164,33 +166,34 @@
             data-passives='{{ item.passive_items | tojson | e }}'
             data-actives='{{ item.active_items | tojson | e }}'
             data-auras='{{ item.aura_items | tojson | e }}'
+            data-loadout='{{ item.loadout | tojson | e }}'
           >
-            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-              <div class="flex-grow-1">
-                <div class="fw-semibold">{{ ru.unit.name }}</div>
-                <div class="text-muted small">
-                  Jakość {{ ru.unit.quality }} / Obrona {{ ru.unit.defense }} / Wytrzymałość {{ ru.unit.toughness }}
-                </div>
-                <div class="d-flex flex-wrap gap-1 mt-2">
-                  {% for ability in item.passive_items %}
-                  <span class="badge text-bg-secondary" title="{{ ability.description }}">{{ ability.label }}</span>
-                  {% endfor %}
-                  {% for ability in item.active_items %}
-                  <span class="badge text-bg-info text-dark" title="{{ ability.description }}">{{ ability.label }}</span>
-                  {% endfor %}
-                  {% for ability in item.aura_items %}
-                  <span class="badge text-bg-warning text-dark" title="{{ ability.description }}">{{ ability.label }}</span>
-                  {% endfor %}
-                  {% if not item.passive_items and not item.active_items and not item.aura_items %}
-                  <span class="text-muted small">Brak dodatkowych zdolności</span>
-                  {% endif %}
-                </div>
-              </div>
-              <div class="text-end small">
-                <div class="fw-semibold">{{ ru.count }} modele</div>
-                <div>{% if ru.selected_weapon %}{{ ru.selected_weapon.effective_name }}{% else %}{{ item.default_summary }}{% endif %}</div>
-                <div class="text-muted">{{ ru.cached_cost }} pkt</div>
-              </div>
+            <span class="badge text-bg-primary roster-cost-badge">{{ ru.cached_cost }} pkt</span>
+            <div class="fw-semibold">{{ ru.count }}x {{ ru.unit.name }}</div>
+            <div class="text-muted small">
+              Jakość {{ ru.unit.quality }} / Obrona {{ ru.unit.defense }} / Wytrzymałość {{ ru.unit.toughness }}
+            </div>
+            <div class="d-flex flex-wrap gap-1 mt-2">
+              {% for ability in item.passive_items %}
+              <span class="badge text-bg-secondary" title="{{ ability.description }}">{{ ability.label }}</span>
+              {% endfor %}
+              {% for ability in item.active_items %}
+              <span class="badge text-bg-info text-dark" title="{{ ability.description }}">{{ ability.label }}</span>
+              {% endfor %}
+              {% for ability in item.aura_items %}
+              <span class="badge text-bg-warning text-dark" title="{{ ability.description }}">{{ ability.label }}</span>
+              {% endfor %}
+              {% if not item.passive_items and not item.active_items and not item.aura_items %}
+              <span class="text-muted small">Brak dodatkowych zdolności</span>
+              {% endif %}
+            </div>
+            <div class="text-muted small mt-2">
+              Uzbrojenie:
+              {% if item.loadout_summary %}
+              {{ item.loadout_summary }}
+              {% else %}
+              {{ item.default_summary }}
+              {% endif %}
             </div>
           </button>
           {% endfor %}
@@ -210,9 +213,14 @@
           Wybierz oddział z listy, aby zobaczyć szczegóły i opcje dostosowania.
         </div>
         <div class="d-none flex-grow-1 d-flex flex-column" data-roster-editor>
-          <div class="mb-3">
-            <h6 class="mb-0" data-roster-editor-name></h6>
-            <div class="text-muted small" data-roster-editor-stats></div>
+          <div class="mb-3 d-flex justify-content-between align-items-start gap-3 flex-wrap">
+            <div>
+              <h6 class="mb-0" data-roster-editor-name></h6>
+              <div class="text-muted small" data-roster-editor-stats></div>
+            </div>
+            <span class="badge text-bg-primary" data-roster-editor-cost-badge>
+              <span data-roster-editor-cost></span> pkt
+            </span>
           </div>
           <div class="mb-3">
             <div class="fw-semibold small text-uppercase text-muted">Zdolności pasywne</div>
@@ -246,20 +254,12 @@
                 />
               </div>
               <div class="col-sm-8">
-                <label class="form-label" for="roster-editor-weapon">Broń</label>
-                <select
-                  class="form-select"
-                  id="roster-editor-weapon"
-                  name="selected_weapon_id"
-                  data-roster-editor-weapon
-                ></select>
-                <div class="form-text" data-roster-editor-default></div>
+                <div class="form-label">Koszt oddziału</div>
+                <div class="form-control-plaintext fw-semibold" data-roster-editor-cost-display></div>
               </div>
             </div>
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
-              <div class="small text-muted">
-                Koszt oddziału: <span class="fw-semibold" data-roster-editor-cost></span> pkt
-              </div>
+            <input type="hidden" name="loadout_json" data-roster-editor-loadout-input />
+            <div class="d-flex justify-content-end align-items-center flex-wrap gap-2 mt-3">
               <button class="btn btn-primary" type="submit">Zapisz zmiany</button>
             </div>
           </form>
