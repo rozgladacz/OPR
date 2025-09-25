@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -11,15 +12,7 @@ from .. import models
 from ..db import get_db
 from ..security import get_current_user
 from ..services import costs
-from .rosters import (
-    _ability_entries,
-    _default_loadout_summary,
-    _ensure_roster_view_access,
-    _loadout_display_summary,
-    _passive_labels,
-    _roster_unit_loadout,
-    _unit_weapon_options,
-)
+from .rosters import _ensure_roster_view_access, _roster_unit_export_data
 
 
 router = APIRouter(prefix="/export", tags=["export"])
@@ -36,12 +29,33 @@ def _abilities_text(passives: list[str], actives: list[str], auras: list[str]) -
     return "\n".join(parts) if parts else "-"
 
 
-def _append_roster_sheet(workbook: Workbook, roster: models.Roster) -> float:
+def _weapon_details_text(details: list[dict[str, Any]]) -> str:
+    if not details:
+        return "-"
+    lines: list[str] = []
+    for weapon in details:
+        name = weapon.get("name") or "Broń"
+        count = weapon.get("count") or 0
+        range_value = weapon.get("range") or "-"
+        attacks = weapon.get("attacks") or "-"
+        ap_value = weapon.get("ap") if weapon.get("ap") is not None else "-"
+        traits = weapon.get("traits") or "-"
+        lines.append(
+            f"{name} × {count} | Z: {range_value} | Ataki: {attacks} | AP: {ap_value} | Cechy: {traits}"
+        )
+    return "\n".join(lines)
+
+
+def _append_roster_sheet(
+    workbook: Workbook,
+    entries: list[dict[str, Any]],
+) -> float:
     sheet = workbook.active
     sheet.title = "Lista"
     sheet.append(
         [
             "Jednostka",
+            "Oddział",
             "Ilość",
             "Jakość",
             "Obrona",
@@ -53,39 +67,28 @@ def _append_roster_sheet(workbook: Workbook, roster: models.Roster) -> float:
     )
 
     total_cost = 0.0
-    for roster_unit in roster.roster_units:
-        unit = roster_unit.unit
-        passive_labels = _passive_labels(unit)
-        active_items = _ability_entries(unit, "active")
-        aura_items = _ability_entries(unit, "aura")
-        active_labels = [item.get("label") for item in active_items if item.get("label")]
-        aura_labels = [item.get("label") for item in aura_items if item.get("label")]
-        weapon_options = _unit_weapon_options(unit)
-        loadout = _roster_unit_loadout(
-            roster_unit,
-            weapon_options=weapon_options,
-            active_items=active_items,
-            aura_items=aura_items,
-        )
-        weapon_summary = _loadout_display_summary(roster_unit, loadout, weapon_options)
-        if not weapon_summary:
-            weapon_summary = _default_loadout_summary(unit)
-        total_value = float(roster_unit.cached_cost or costs.roster_unit_cost(roster_unit))
+    for entry in entries:
+        total_value = float(entry.get("total_cost", 0.0))
         total_cost += total_value
         sheet.append(
             [
-                unit.name,
-                roster_unit.count,
-                unit.quality,
-                unit.defense,
-                unit.toughness,
-                _abilities_text(passive_labels, active_labels, aura_labels),
-                weapon_summary,
+                entry.get("unit_name"),
+                entry.get("custom_name") or "",
+                entry.get("count"),
+                entry.get("quality"),
+                entry.get("defense"),
+                entry.get("toughness"),
+                _abilities_text(
+                    entry.get("passive_labels", []),
+                    entry.get("active_labels", []),
+                    entry.get("aura_labels", []),
+                ),
+                _weapon_details_text(entry.get("weapon_details", [])),
                 round(total_value, 2),
             ]
         )
 
-    sheet.append(["", "", "", "", "", "Razem", "", round(total_cost, 2)])
+    sheet.append(["", "", "", "", "", "", "Razem", "", round(total_cost, 2)])
     for column_cells in sheet.columns:
         max_length = max(len(str(cell.value or "")) for cell in column_cells)
         adjusted = max_length + 2
@@ -94,33 +97,23 @@ def _append_roster_sheet(workbook: Workbook, roster: models.Roster) -> float:
     return total_cost
 
 
-def _append_weapons_sheet(workbook: Workbook, roster: models.Roster) -> None:
+def _append_weapons_sheet(workbook: Workbook, entries: list[dict[str, Any]]) -> None:
     sheet = workbook.create_sheet("Zbrojownia")
-    sheet.append(["Nazwa", "Zasięg", "Ataki", "AP", "Cechy"])
-    used: dict[str, tuple[str, str, str, str]] = {}
-    for roster_unit in roster.roster_units:
-        if roster_unit.selected_weapon:
-            weapons = [roster_unit.selected_weapon]
-        else:
-            weapons = costs.unit_default_weapons(roster_unit.unit)
-        for weapon in weapons:
-            if not weapon:
-                continue
-            name = weapon.effective_name or weapon.name or "Broń"
-            if name in used:
-                continue
-            attacks = getattr(weapon, "display_attacks", None)
-            if attacks is None:
-                attacks = weapon.effective_attacks
-            traits = weapon.effective_tags or weapon.tags or ""
-            used[name] = (
-                weapon.effective_range or weapon.range or "-",
-                str(attacks),
-                str(weapon.effective_ap if hasattr(weapon, "effective_ap") else weapon.ap or 0),
-                traits,
+    sheet.append(["Nazwa", "Ilość", "Zasięg", "Ataki", "AP", "Cechy"])
+    aggregated: dict[tuple[str, str, str, str, str], int] = {}
+    for entry in entries:
+        for weapon in entry.get("weapon_details", []):
+            name = weapon.get("name") or "Broń"
+            range_value = weapon.get("range") or "-"
+            attacks = str(weapon.get("attacks") or "-")
+            ap_value = (
+                str(weapon.get("ap")) if weapon.get("ap") is not None else "-"
             )
-    for name in sorted(used):
-        sheet.append([name, *used[name]])
+            traits = weapon.get("traits") or "-"
+            key = (name, str(range_value), attacks, ap_value, traits)
+            aggregated[key] = aggregated.get(key, 0) + int(weapon.get("count") or 0)
+    for (name, range_value, attacks, ap_value, traits), count in sorted(aggregated.items()):
+        sheet.append([name, count, range_value, attacks, ap_value, traits])
     for column_cells in sheet.columns:
         max_length = max(len(str(cell.value or "")) for cell in column_cells)
         adjusted = max_length + 2
@@ -143,8 +136,9 @@ def export_xlsx(
 
     costs.update_cached_costs(roster.roster_units)
     workbook = Workbook()
-    total_cost = _append_roster_sheet(workbook, roster)
-    _append_weapons_sheet(workbook, roster)
+    entries = [_roster_unit_export_data(ru) for ru in roster.roster_units]
+    total_cost = _append_roster_sheet(workbook, entries)
+    _append_weapons_sheet(workbook, entries)
 
     buffer = BytesIO()
     workbook.save(buffer)

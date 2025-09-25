@@ -173,6 +173,14 @@ def _migrate_schema() -> None:
             if "default_count" not in {column["name"] for column in columns}:
                 _rebuild_unit_weapons_table(connection)
 
+        if "roster_units" in table_names:
+            columns = inspector.get_columns("roster_units")
+            if "custom_name" not in {column["name"] for column in columns}:
+                logger.info("Adding custom_name column to roster_units table")
+                connection.execute(
+                    text("ALTER TABLE roster_units ADD COLUMN custom_name VARCHAR(120)")
+                )
+
 
 
 def init_db() -> None:
