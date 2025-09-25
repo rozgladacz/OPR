@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 from .. import models
 from ..data import abilities as ability_catalog
@@ -606,27 +606,35 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
 
     weapon_costs = _weapon_cost_map()
 
+    raw_data: dict[str, Any] | None = None
+    loadout_mode: str | None = None
+    if roster_unit.extra_weapons_json:
+        try:
+            parsed = json.loads(roster_unit.extra_weapons_json)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            raw_data = parsed
+            mode_value = parsed.get("mode")
+            if isinstance(mode_value, str):
+                loadout_mode = mode_value
+
     def _parse_counts(section: str) -> dict[int, int]:
-        raw = {}
-        if roster_unit.extra_weapons_json:
-            try:
-                data = json.loads(roster_unit.extra_weapons_json)
-            except json.JSONDecodeError:
-                data = None
-            if isinstance(data, dict):
-                raw_section = data.get(section) or {}
-                if isinstance(raw_section, dict):
-                    raw = raw_section
-                elif isinstance(raw_section, list):
-                    temp: dict[str, int] = {}
-                    for entry in raw_section:
-                        if not isinstance(entry, dict):
-                            continue
-                        entry_id = entry.get("id") or entry.get("weapon_id") or entry.get("ability_id")
-                        if entry_id is None:
-                            continue
-                        temp[str(entry_id)] = entry.get("per_model") or entry.get("count") or 0
-                    raw = temp
+        raw: dict[str, Any] = {}
+        data = raw_data if isinstance(raw_data, dict) else {}
+        raw_section = data.get(section) if isinstance(data, dict) else None
+        if isinstance(raw_section, dict):
+            raw = raw_section
+        elif isinstance(raw_section, list):
+            temp: dict[str, int] = {}
+            for entry in raw_section:
+                if not isinstance(entry, dict):
+                    continue
+                entry_id = entry.get("id") or entry.get("weapon_id") or entry.get("ability_id")
+                if entry_id is None:
+                    continue
+                temp[str(entry_id)] = entry.get("per_model") or entry.get("count") or 0
+            raw = temp
         counts: dict[int, int] = {}
         for raw_id, raw_value in raw.items():
             try:
@@ -654,16 +662,23 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
 
     if roster_unit.extra_weapons_json:
         total = base_per_model * max(roster_unit.count, 1)
-        for weapon_id, per_model_count in weapons_counts.items():
+        total_mode = loadout_mode == "total"
+        model_multiplier = max(roster_unit.count, 1)
+
+        def _to_total(value: int) -> int:
+            safe_value = max(int(value), 0)
+            return safe_value if total_mode else safe_value * model_multiplier
+
+        for weapon_id, stored_count in weapons_counts.items():
             cost_value = weapon_costs.get(weapon_id)
             if cost_value is None:
                 continue
-            total += cost_value * per_model_count * max(roster_unit.count, 1)
-        for ability_id, per_model_count in {**active_counts, **aura_counts}.items():
+            total += cost_value * _to_total(stored_count)
+        for ability_id, stored_count in {**active_counts, **aura_counts}.items():
             cost_value = ability_costs.get(ability_id)
             if cost_value is None:
                 continue
-            total += cost_value * per_model_count * max(roster_unit.count, 1)
+            total += cost_value * _to_total(stored_count)
         return round(total, 2)
 
     legacy_unit_cost = base_per_model + active_total

@@ -711,22 +711,21 @@ function formatPoints(value) {
   return number.toLocaleString('pl-PL', baseOptions);
 }
 
-function renderPassiveList(container, items, emptyText) {
+function renderPassiveList(container, items) {
   if (!container) {
-    return;
+    return false;
   }
   container.innerHTML = '';
   const safeItems = Array.isArray(items) ? items : [];
   if (!safeItems.length) {
-    const empty = document.createElement('span');
-    empty.className = 'text-muted small';
-    empty.textContent = emptyText;
-    container.appendChild(empty);
-    return;
+    return false;
   }
   const wrapper = document.createElement('div');
   wrapper.className = 'd-flex flex-column gap-2';
   safeItems.forEach((entry) => {
+    if (!entry) {
+      return;
+    }
     const row = document.createElement('div');
     row.className = 'roster-ability-item';
     const label = document.createElement('div');
@@ -746,7 +745,11 @@ function renderPassiveList(container, items, emptyText) {
     row.appendChild(cost);
     wrapper.appendChild(row);
   });
+  if (!wrapper.childElementCount) {
+    return false;
+  }
   container.appendChild(wrapper);
+  return true;
 }
 
 function createLoadoutState(rawLoadout) {
@@ -754,9 +757,13 @@ function createLoadoutState(rawLoadout) {
     weapons: new Map(),
     active: new Map(),
     aura: new Map(),
+    mode: 'per_model',
   };
   if (!rawLoadout || typeof rawLoadout !== 'object') {
     return state;
+  }
+  if (typeof rawLoadout.mode === 'string') {
+    state.mode = rawLoadout.mode;
   }
   const sections = [
     ['weapons', 'weapon_id'],
@@ -800,18 +807,19 @@ function createLoadoutState(rawLoadout) {
 }
 
 function serializeLoadoutState(state) {
-  const result = { weapons: [], active: [], aura: [] };
+  const result = { weapons: [], active: [], aura: [], mode: 'total' };
   if (!state) {
     return JSON.stringify(result);
   }
+  result.mode = state.mode === 'total' ? 'total' : 'per_model';
   state.weapons.forEach((value, id) => {
-    result.weapons.push({ id, per_model: value });
+    result.weapons.push({ id, count: value });
   });
   state.active.forEach((value, id) => {
-    result.active.push({ id, per_model: value });
+    result.active.push({ id, count: value });
   });
   state.aura.forEach((value, id) => {
-    result.aura.push({ id, per_model: value });
+    result.aura.push({ id, count: value });
   });
   return JSON.stringify(result);
 }
@@ -842,16 +850,12 @@ function ensureStateEntries(map, entries, idKey, defaultKey) {
 
 function renderAbilityEditor(container, items, stateMap, modelCount, editable, onChange) {
   if (!container) {
-    return;
+    return false;
   }
   container.innerHTML = '';
   const safeItems = Array.isArray(items) ? items : [];
   if (!safeItems.length) {
-    const empty = document.createElement('span');
-    empty.className = 'text-muted small';
-    empty.textContent = 'Brak opcji.';
-    container.appendChild(empty);
-    return;
+    return false;
   }
   const wrapper = document.createElement('div');
   wrapper.className = 'd-flex flex-column gap-2';
@@ -864,28 +868,31 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
     if (!Number.isFinite(abilityId)) {
       return;
     }
-    let perModelCount = Number(stateMap.get(abilityId));
-    if (!Number.isFinite(perModelCount) || perModelCount < 0) {
-      perModelCount = Number(item.default_count ?? 0);
-      if (!Number.isFinite(perModelCount) || perModelCount < 0) {
-        perModelCount = 0;
+    let totalCount = Number(stateMap.get(abilityId));
+    if (!Number.isFinite(totalCount) || totalCount < 0) {
+      totalCount = Number(item.default_count ?? 0);
+      if (!Number.isFinite(totalCount) || totalCount < 0) {
+        totalCount = 0;
       }
     }
-    stateMap.set(abilityId, perModelCount);
+    if (maxCount > 0 && totalCount > maxCount) {
+      totalCount = maxCount;
+    }
+    stateMap.set(abilityId, totalCount);
 
     const row = document.createElement('div');
-    row.className = 'roster-ability-item flex-wrap gap-3';
+    row.className = 'roster-ability-item';
 
     const info = document.createElement('div');
-    info.className = 'flex-grow-1';
-    const name = document.createElement('div');
+    info.className = 'roster-ability-details flex-grow-1';
+    const name = document.createElement('span');
     name.className = 'roster-ability-label';
     name.textContent = item.label || 'Zdolność';
     if (item.description) {
       name.title = item.description;
     }
     info.appendChild(name);
-    const cost = document.createElement('div');
+    const cost = document.createElement('span');
     cost.className = 'roster-ability-cost';
     if (item.cost !== undefined && item.cost !== null) {
       cost.textContent = `+${formatPoints(item.cost)} pkt/model`;
@@ -896,21 +903,20 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
     row.appendChild(info);
 
     const controls = document.createElement('div');
-    controls.className = 'd-flex flex-column align-items-end gap-1';
+    controls.className = 'roster-ability-controls text-end';
 
     const totalLabel = document.createElement('div');
     totalLabel.className = 'text-muted small';
     const updateTotal = (value) => {
-      const total = Math.max(Number(modelCount) || 0, 0) * value;
-      totalLabel.textContent = `Łącznie: ${formatPoints(total)} szt.`;
+      totalLabel.textContent = `Łącznie: ${formatPoints(value)} szt.`;
     };
 
     if (editable) {
       const input = document.createElement('input');
       input.type = 'number';
-      input.className = 'form-control form-control-sm';
+      input.className = 'form-control form-control-sm roster-count-input';
       input.min = '0';
-      input.value = String(perModelCount);
+      input.value = String(totalCount);
       if (maxCount > 0) {
         input.max = String(maxCount);
       }
@@ -930,35 +936,41 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
         }
       });
       controls.appendChild(input);
-      updateTotal(perModelCount);
+      updateTotal(totalCount);
       controls.appendChild(totalLabel);
     } else {
-      const perModelInfo = document.createElement('div');
-      perModelInfo.className = 'text-muted small';
-      perModelInfo.textContent = `Na model: ${formatPoints(perModelCount)}`;
-      controls.appendChild(perModelInfo);
-      updateTotal(perModelCount);
+      updateTotal(totalCount);
       controls.appendChild(totalLabel);
     }
 
     row.appendChild(controls);
     wrapper.appendChild(row);
   });
+  if (!wrapper.childElementCount) {
+    return false;
+  }
   container.appendChild(wrapper);
+  return true;
+}
+
+function toggleSectionVisibility(container, isVisible) {
+  if (!container) {
+    return;
+  }
+  const wrapper = container.closest('[data-roster-section]');
+  if (wrapper) {
+    wrapper.classList.toggle('d-none', !isVisible);
+  }
 }
 
 function renderWeaponEditor(container, options, stateMap, modelCount, editable, onChange) {
   if (!container) {
-    return;
+    return false;
   }
   container.innerHTML = '';
   const safeOptions = Array.isArray(options) ? options : [];
   if (!safeOptions.length) {
-    const empty = document.createElement('span');
-    empty.className = 'text-muted small';
-    empty.textContent = 'Brak dostępnego uzbrojenia.';
-    container.appendChild(empty);
-    return;
+    return false;
   }
   const wrapper = document.createElement('div');
   wrapper.className = 'd-flex flex-column gap-2';
@@ -970,25 +982,25 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
     if (!Number.isFinite(weaponId)) {
       return;
     }
-    let perModelCount = Number(stateMap.get(weaponId));
-    if (!Number.isFinite(perModelCount) || perModelCount < 0) {
-      perModelCount = Number(option.default_count ?? 0);
-      if (!Number.isFinite(perModelCount) || perModelCount < 0) {
-        perModelCount = 0;
+    let totalCount = Number(stateMap.get(weaponId));
+    if (!Number.isFinite(totalCount) || totalCount < 0) {
+      totalCount = Number(option.default_count ?? 0);
+      if (!Number.isFinite(totalCount) || totalCount < 0) {
+        totalCount = 0;
       }
     }
-    stateMap.set(weaponId, perModelCount);
+    stateMap.set(weaponId, totalCount);
 
     const row = document.createElement('div');
-    row.className = 'roster-ability-item flex-wrap gap-3';
+    row.className = 'roster-ability-item';
 
     const info = document.createElement('div');
-    info.className = 'flex-grow-1';
-    const name = document.createElement('div');
+    info.className = 'roster-ability-details flex-grow-1';
+    const name = document.createElement('span');
     name.className = 'roster-ability-label';
     name.textContent = option.name || 'Broń';
     info.appendChild(name);
-    const cost = document.createElement('div');
+    const cost = document.createElement('span');
     cost.className = 'roster-ability-cost';
     if (option.cost !== undefined && option.cost !== null) {
       cost.textContent = `+${formatPoints(option.cost)} pkt/model`;
@@ -999,20 +1011,19 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
     row.appendChild(info);
 
     const controls = document.createElement('div');
-    controls.className = 'd-flex flex-column align-items-end gap-1';
+    controls.className = 'roster-ability-controls text-end';
     const totalLabel = document.createElement('div');
     totalLabel.className = 'text-muted small';
     const updateTotal = (value) => {
-      const total = Math.max(Number(modelCount) || 0, 0) * value;
-      totalLabel.textContent = `Łącznie: ${formatPoints(total)} szt.`;
+      totalLabel.textContent = `Łącznie: ${formatPoints(value)} szt.`;
     };
 
     if (editable) {
       const input = document.createElement('input');
       input.type = 'number';
-      input.className = 'form-control form-control-sm';
+      input.className = 'form-control form-control-sm roster-count-input';
       input.min = '0';
-      input.value = String(perModelCount);
+      input.value = String(totalCount);
       input.addEventListener('change', () => {
         let nextValue = Number(input.value);
         if (!Number.isFinite(nextValue) || nextValue < 0) {
@@ -1026,21 +1037,21 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
         }
       });
       controls.appendChild(input);
-      updateTotal(perModelCount);
+      updateTotal(totalCount);
       controls.appendChild(totalLabel);
     } else {
-      const perModelInfo = document.createElement('div');
-      perModelInfo.className = 'text-muted small';
-      perModelInfo.textContent = `Na model: ${formatPoints(perModelCount)}`;
-      controls.appendChild(perModelInfo);
-      updateTotal(perModelCount);
+      updateTotal(totalCount);
       controls.appendChild(totalLabel);
     }
 
     row.appendChild(controls);
     wrapper.appendChild(row);
   });
+  if (!wrapper.childElementCount) {
+    return false;
+  }
   container.appendChild(wrapper);
+  return true;
 }
 
 function computeTotalCost(basePerModel, modelCount, weaponOptions, state, abilityCostMap) {
@@ -1052,6 +1063,14 @@ function computeTotalCost(basePerModel, modelCount, weaponOptions, state, abilit
   if (!Number.isFinite(total)) {
     total = 0;
   }
+  const stateMode = state && state.mode === 'total' ? 'total' : 'per_model';
+  const toTotal = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return 0;
+    }
+    return stateMode === 'total' ? numeric : numeric * count;
+  };
   const weaponCostMap = new Map();
   const safeOptions = Array.isArray(weaponOptions) ? weaponOptions : [];
   safeOptions.forEach((option) => {
@@ -1067,13 +1086,13 @@ function computeTotalCost(basePerModel, modelCount, weaponOptions, state, abilit
 
   if (state && state.weapons instanceof Map) {
     state.weapons.forEach((value, weaponId) => {
-      const perModel = Number(value);
-      if (!Number.isFinite(perModel) || perModel <= 0) {
+      const totalCount = toTotal(value);
+      if (totalCount <= 0) {
         return;
       }
       const costValue = weaponCostMap.get(weaponId);
       if (costValue !== undefined) {
-        total += costValue * perModel * count;
+        total += costValue * totalCount;
       }
     });
   }
@@ -1084,13 +1103,13 @@ function computeTotalCost(basePerModel, modelCount, weaponOptions, state, abilit
         return;
       }
       section.forEach((value, abilityId) => {
-        const perModel = Number(value);
-        if (!Number.isFinite(perModel) || perModel <= 0) {
+        const totalCount = toTotal(value);
+        if (totalCount <= 0) {
           return;
         }
         const costValue = abilityCostMap.get(abilityId);
         if (costValue !== undefined) {
-          total += costValue * perModel * count;
+          total += costValue * totalCount;
         }
       });
     });
@@ -1189,6 +1208,9 @@ function initRosterEditor() {
   }
 
   function handleStateChange() {
+    if (loadoutState) {
+      loadoutState.mode = 'total';
+    }
     if (loadoutInput && loadoutState) {
       loadoutInput.value = serializeLoadoutState(loadoutState);
     }
@@ -1196,10 +1218,35 @@ function initRosterEditor() {
   }
 
   function renderEditors() {
-    renderPassiveList(passiveContainer, currentPassives, 'Brak zdolności.');
-    renderAbilityEditor(activeContainer, currentActives, loadoutState.active, currentCount, isEditable, handleStateChange);
-    renderAbilityEditor(auraContainer, currentAuras, loadoutState.aura, currentCount, isEditable, handleStateChange);
-    renderWeaponEditor(loadoutContainer, currentWeapons, loadoutState.weapons, currentCount, isEditable, handleStateChange);
+    const hasPassives = renderPassiveList(passiveContainer, currentPassives);
+    toggleSectionVisibility(passiveContainer, hasPassives);
+    const hasActives = renderAbilityEditor(
+      activeContainer,
+      currentActives,
+      loadoutState.active,
+      currentCount,
+      isEditable,
+      handleStateChange,
+    );
+    toggleSectionVisibility(activeContainer, hasActives);
+    const hasAuras = renderAbilityEditor(
+      auraContainer,
+      currentAuras,
+      loadoutState.aura,
+      currentCount,
+      isEditable,
+      handleStateChange,
+    );
+    toggleSectionVisibility(auraContainer, hasAuras);
+    const hasWeapons = renderWeaponEditor(
+      loadoutContainer,
+      currentWeapons,
+      loadoutState.weapons,
+      currentCount,
+      isEditable,
+      handleStateChange,
+    );
+    toggleSectionVisibility(loadoutContainer, hasWeapons);
   }
 
   function selectItem(item) {
@@ -1243,17 +1290,37 @@ function initRosterEditor() {
       statsEl.textContent = `Jakość ${quality} / Obrona ${defense} / Wytrzymałość ${toughness}`;
     }
 
-    loadoutState = createLoadoutState(loadoutData);
-    ensureStateEntries(loadoutState.weapons, currentWeapons, 'id', 'default_count');
-    ensureStateEntries(loadoutState.active, currentActives, 'ability_id', 'default_count');
-    ensureStateEntries(loadoutState.aura, currentAuras, 'ability_id', 'default_count');
-    abilityCostMap = buildAbilityCostMap(currentActives, currentAuras);
-    baseCostPerModel = Number.isFinite(baseCostValue) && baseCostValue >= 0 ? baseCostValue : 0;
-
     currentCount = Number.isFinite(countValue) && countValue >= 1 ? countValue : 1;
     if (countInput) {
       countInput.value = String(currentCount);
     }
+
+    loadoutState = createLoadoutState(loadoutData);
+    ensureStateEntries(loadoutState.weapons, currentWeapons, 'id', 'default_count');
+    ensureStateEntries(loadoutState.active, currentActives, 'ability_id', 'default_count');
+    ensureStateEntries(loadoutState.aura, currentAuras, 'ability_id', 'default_count');
+    if (loadoutState.mode !== 'total') {
+      const convertToTotal = (map) => {
+        if (!(map instanceof Map)) {
+          return;
+        }
+        map.forEach((value, key) => {
+          const numeric = Number(value);
+          if (!Number.isFinite(numeric) || numeric <= 0) {
+            map.set(key, 0);
+            return;
+          }
+          map.set(key, numeric * currentCount);
+        });
+      };
+      convertToTotal(loadoutState.weapons);
+      convertToTotal(loadoutState.active);
+      convertToTotal(loadoutState.aura);
+      loadoutState.mode = 'total';
+    }
+
+    abilityCostMap = buildAbilityCostMap(currentActives, currentAuras);
+    baseCostPerModel = Number.isFinite(baseCostValue) && baseCostValue >= 0 ? baseCostValue : 0;
 
     renderEditors();
     handleStateChange();
