@@ -1716,6 +1716,68 @@ function initRosterEditor() {
     setSaveStatus('saved');
   }
 
+  function setItemListAttribute(element, attribute, list) {
+    if (!element) {
+      return;
+    }
+    const safeList = Array.isArray(list) ? list : [];
+    try {
+      element.setAttribute(attribute, JSON.stringify(safeList));
+    } catch (error) {
+      element.setAttribute(attribute, '[]');
+    }
+  }
+
+  function updateItemAbilityBadges(item, selections) {
+    if (!item) {
+      return;
+    }
+    const container = item.querySelector('[data-roster-unit-abilities]');
+    if (!container) {
+      return;
+    }
+    container.innerHTML = '';
+    const config = [
+      { key: 'passives', className: 'badge text-bg-secondary', showCount: false },
+      { key: 'actives', className: 'badge text-bg-info text-dark', showCount: true },
+      { key: 'auras', className: 'badge text-bg-warning text-dark', showCount: true },
+    ];
+    let hasContent = false;
+    config.forEach(({ key, className, showCount }) => {
+      const list = selections && Array.isArray(selections[key]) ? selections[key] : [];
+      list.forEach((entry) => {
+        if (!entry) {
+          return;
+        }
+        const label = entry.label ?? entry.raw ?? entry.slug;
+        if (!label) {
+          return;
+        }
+        const badge = document.createElement('span');
+        badge.className = className;
+        if (entry.description) {
+          badge.title = entry.description;
+        }
+        let text = String(label);
+        if (showCount) {
+          const numeric = Number(entry.count);
+          if (Number.isFinite(numeric) && numeric > 1) {
+            text += ` ×${numeric}`;
+          }
+        }
+        badge.textContent = text;
+        container.appendChild(badge);
+        hasContent = true;
+      });
+    });
+    if (!hasContent) {
+      const empty = document.createElement('span');
+      empty.className = 'text-muted small';
+      empty.textContent = 'Brak dodatkowych zdolności';
+      container.appendChild(empty);
+    }
+  }
+
   function applyServerUpdate(payload) {
     if (!payload || typeof payload !== 'object') {
       return;
@@ -1751,6 +1813,23 @@ function initRosterEditor() {
       if (typeof unitData.loadout_json === 'string') {
         targetItem.setAttribute('data-loadout', unitData.loadout_json);
       }
+      if (Object.prototype.hasOwnProperty.call(unitData, 'selected_passive_items')) {
+        setItemListAttribute(
+          targetItem,
+          'data-selected-passives',
+          unitData.selected_passive_items,
+        );
+      }
+      if (Object.prototype.hasOwnProperty.call(unitData, 'selected_active_items')) {
+        setItemListAttribute(
+          targetItem,
+          'data-selected-actives',
+          unitData.selected_active_items,
+        );
+      }
+      if (Object.prototype.hasOwnProperty.call(unitData, 'selected_aura_items')) {
+        setItemListAttribute(targetItem, 'data-selected-auras', unitData.selected_aura_items);
+      }
       const unitName = targetItem.getAttribute('data-unit-name') || 'Jednostka';
       if (typeof unitData.count === 'number' && Number.isFinite(unitData.count)) {
         const titleEl = targetItem.querySelector('[data-roster-unit-title]');
@@ -1771,6 +1850,11 @@ function initRosterEditor() {
       if (Object.prototype.hasOwnProperty.call(unitData, 'classification')) {
         updateItemClassification(targetItem, unitData.classification || null);
       }
+      updateItemAbilityBadges(targetItem, {
+        passives: unitData.selected_passive_items || [],
+        actives: unitData.selected_active_items || [],
+        auras: unitData.selected_aura_items || [],
+      });
       if (isActiveMatch) {
         ignoreNextSave = true;
         selectItem(targetItem, { preserveAutoSave: true });

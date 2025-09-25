@@ -180,12 +180,18 @@ def edit_roster(
             passive_items=passive_items,
         )
         classification = _roster_unit_classification(roster_unit, loadout)
+        selected_passives = _selected_passive_entries(roster_unit, loadout, passive_items)
+        selected_actives = _selected_ability_entries(loadout, active_items, "active")
+        selected_auras = _selected_ability_entries(loadout, aura_items, "aura")
         roster_items.append(
             {
                 "instance": roster_unit,
                 "passive_items": passive_items,
                 "active_items": active_items,
                 "aura_items": aura_items,
+                "selected_passive_items": selected_passives,
+                "selected_active_items": selected_actives,
+                "selected_aura_items": selected_auras,
                 "default_summary": _default_loadout_summary(unit),
                 "weapon_options": weapon_options,
                 "loadout": loadout,
@@ -375,6 +381,9 @@ def update_roster_unit(
     if "application/json" in accept_header:
         total_cost = costs.roster_total(roster)
         classification = _roster_unit_classification(roster_unit, loadout)
+        selected_passives = _selected_passive_entries(roster_unit, loadout, passive_items)
+        selected_actives = _selected_ability_entries(loadout, active_items, "active")
+        selected_auras = _selected_ability_entries(loadout, aura_items, "aura")
         warnings = collect_roster_warnings(roster)
         return JSONResponse(
             {
@@ -392,6 +401,9 @@ def update_roster_unit(
                     "default_summary": _default_loadout_summary(roster_unit.unit),
                     "base_cost_per_model": _base_cost_per_model(roster_unit.unit),
                     "classification": classification,
+                    "selected_passive_items": selected_passives,
+                    "selected_active_items": selected_actives,
+                    "selected_aura_items": selected_auras,
                 },
                 "roster": {"total_cost": total_cost},
                 "warnings": warnings,
@@ -559,6 +571,130 @@ def _passive_labels(unit: models.Unit) -> list[str]:
         for entry in _passive_entries(unit)
         if entry.get("label")
     ]
+
+
+def _coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        try:
+            number = int(float(value))
+        except (TypeError, ValueError):
+            return default
+    return number
+
+
+def _loadout_counts(
+    loadout: dict[str, Any] | None, section: str
+) -> dict[str, int]:
+    result: dict[str, int] = {}
+    if not isinstance(loadout, dict):
+        return result
+    raw_section = loadout.get(section)
+    if isinstance(raw_section, dict):
+        items = raw_section.items()
+    elif isinstance(raw_section, list):
+        items = []
+        for entry in raw_section:
+            if not isinstance(entry, dict):
+                continue
+            if section == "passive":
+                key = entry.get("slug") or entry.get("id")
+            else:
+                key = entry.get("id") or entry.get("ability_id")
+            if key is None:
+                continue
+            items.append((key, entry.get("count")))
+    else:
+        return result
+    for key, raw_value in items:
+        if key is None:
+            continue
+        count = _coerce_int(raw_value, 0)
+        if count < 0:
+            count = 0
+        result[str(key)] = count
+    return result
+
+
+def _loadout_passive_flags(loadout: dict[str, Any] | None) -> dict[str, int]:
+    counts = _loadout_counts(loadout, "passive")
+    return {key: 1 if value > 0 else 0 for key, value in counts.items()}
+
+
+def _selected_passive_entries(
+    roster_unit: models.RosterUnit,
+    loadout: dict[str, Any] | None,
+    passive_items: list[dict] | None,
+) -> list[dict]:
+    entries = passive_items if passive_items is not None else _passive_entries(roster_unit.unit)
+    flags = _loadout_passive_flags(loadout)
+    selected: list[dict] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if not entry:
+            continue
+        slug = str(entry.get("slug") or "").strip()
+        if not slug:
+            continue
+        default_flag = 1 if entry.get("is_default") or entry.get("default_count") else 0
+        selected_flag = flags.get(slug, default_flag)
+        if selected_flag <= 0:
+            seen.add(slug)
+            continue
+        item = dict(entry)
+        item["selected"] = True
+        item["count"] = 1
+        selected.append(item)
+        seen.add(slug)
+    for slug, flag in flags.items():
+        if slug in seen or flag <= 0:
+            continue
+        selected.append({"slug": slug, "label": slug, "description": "", "selected": True, "count": 1})
+    return selected
+
+
+def _selected_ability_entries(
+    loadout: dict[str, Any] | None,
+    ability_items: list[dict] | None,
+    section: str,
+) -> list[dict]:
+    entries = ability_items if ability_items is not None else []
+    counts = _loadout_counts(loadout, section)
+    selected: list[dict] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if not entry or entry.get("ability_id") is None:
+            continue
+        ability_id = entry.get("ability_id")
+        key = str(ability_id)
+        default_count = _coerce_int(entry.get("default_count") or 0, 0)
+        stored = counts.get(key, default_count)
+        if stored <= 0:
+            seen.add(key)
+            continue
+        item = dict(entry)
+        item["count"] = stored
+        selected.append(item)
+        seen.add(key)
+    for key, value in counts.items():
+        if key in seen or value <= 0:
+            continue
+        selected.append({
+            "ability_id": key,
+            "label": str(key),
+            "description": "",
+            "count": value,
+        })
+    return selected
+
+
+def _ability_label_with_count(entry: dict) -> str:
+    label = entry.get("label") or entry.get("raw") or entry.get("slug") or ""
+    count = _coerce_int(entry.get("count"), 0)
+    if count > 1:
+        return f"{label} ×{count}"
+    return label
 
 
 def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
@@ -1037,20 +1173,23 @@ def _roster_unit_export_data(
     weapon_summary = _loadout_display_summary(roster_unit, loadout, weapon_options)
     if not weapon_summary:
         weapon_summary = _default_loadout_summary(unit)
+    selected_passives = _selected_passive_entries(roster_unit, loadout, passive_items)
+    selected_actives = _selected_ability_entries(loadout, active_items, "active")
+    selected_auras = _selected_ability_entries(loadout, aura_items, "aura")
     passive_labels = [
-        label
-        for label in _selected_passive_labels(roster_unit, loadout, passive_items)
-        if label
+        entry.get("label") or entry.get("raw") or entry.get("slug") or ""
+        for entry in selected_passives
+        if entry
     ]
     active_labels = [
-        (item.get("label") or item.get("raw") or "")
-        for item in active_items
-        if item
+        _ability_label_with_count(entry)
+        for entry in selected_actives
+        if entry
     ]
     aura_labels = [
-        (item.get("label") or item.get("raw") or "")
-        for item in aura_items
-        if item
+        _ability_label_with_count(entry)
+        for entry in selected_auras
+        if entry
     ]
     total_value = float(roster_unit.cached_cost or costs.roster_unit_cost(roster_unit))
 
@@ -1079,44 +1218,9 @@ def _selected_passive_labels(
     loadout: dict[str, dict[str, int]],
     passive_items: list[dict],
 ) -> list[str]:
-    entries = passive_items if passive_items is not None else _passive_entries(roster_unit.unit)
-    passive_section: dict[str, int] = {}
-    if isinstance(loadout, dict):
-        raw_passive = loadout.get("passive")
-        if isinstance(raw_passive, dict):
-            passive_section = {
-                str(key): int(value) if str(value).strip() else 0
-                for key, value in raw_passive.items()
-            }
-        elif isinstance(raw_passive, list):
-            for entry in raw_passive:
-                if not isinstance(entry, dict):
-                    continue
-                slug = entry.get("slug") or entry.get("id")
-                if not slug:
-                    continue
-                value = entry.get("enabled") or entry.get("count") or entry.get("per_model")
-                try:
-                    passive_section[str(slug)] = int(value) if str(value).strip() else 0
-                except (TypeError, ValueError):
-                    passive_section[str(slug)] = 1 if value else 0
-    labels: list[str] = []
-    for entry in entries:
-        if not entry:
-            continue
-        slug = str(entry.get("slug") or "").strip()
-        if not slug:
-            continue
-        default_value = 1 if entry.get("default_count") else 0
-        stored_value = passive_section.get(slug, default_value)
-        try:
-            numeric = int(stored_value)
-        except (TypeError, ValueError):
-            try:
-                numeric = int(float(stored_value))
-            except (TypeError, ValueError):
-                numeric = 1 if stored_value else 0
-        if numeric <= 0:
-            continue
-        labels.append(entry.get("label") or entry.get("raw") or slug)
-    return labels
+    selected_entries = _selected_passive_entries(roster_unit, loadout, passive_items)
+    return [
+        entry.get("label") or entry.get("raw") or entry.get("slug") or ""
+        for entry in selected_entries
+        if entry
+    ]
