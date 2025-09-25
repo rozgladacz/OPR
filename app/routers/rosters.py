@@ -4,7 +4,7 @@ import json
 import typing
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -312,6 +312,7 @@ def add_roster_unit(
 def update_roster_unit(
     roster_id: int,
     roster_unit_id: int,
+    request: Request,
     count: int = Form(...),
     selected_weapon_id: str | None = Form(None),
     loadout_json: str | None = Form(None),
@@ -367,6 +368,30 @@ def update_roster_unit(
     roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
     roster_unit.cached_cost = costs.roster_unit_cost(roster_unit)
     db.commit()
+    accept_header = (request.headers.get("accept") or "").lower()
+    if "application/json" in accept_header:
+        total_cost = costs.roster_total(roster)
+        warnings = collect_roster_warnings(roster)
+        return JSONResponse(
+            {
+                "unit": {
+                    "id": roster_unit.id,
+                    "count": roster_unit.count,
+                    "custom_name": roster_unit.custom_name or "",
+                    "cached_cost": roster_unit.cached_cost,
+                    "loadout_json": json.dumps(loadout, ensure_ascii=False),
+                    "loadout_summary": _loadout_display_summary(
+                        roster_unit,
+                        loadout,
+                        weapon_options,
+                    ),
+                    "default_summary": _default_loadout_summary(roster_unit.unit),
+                    "base_cost_per_model": _base_cost_per_model(roster_unit.unit),
+                },
+                "roster": {"total_cost": total_cost},
+                "warnings": warnings,
+            }
+        )
     return RedirectResponse(
         url=f"/rosters/{roster.id}?selected={roster_unit.id}",
         status_code=303,

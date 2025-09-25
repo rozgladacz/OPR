@@ -843,6 +843,139 @@ def roster_total(roster: models.Roster) -> float:
     return round(sum(roster_unit_cost(ru) for ru in roster.roster_units), 2)
 
 
+def roster_unit_weapon_mix(roster_unit: models.RosterUnit) -> dict[str, float]:
+    unit = getattr(roster_unit, "unit", None)
+    if unit is None:
+        return {"melee_cost": 0.0, "ranged_cost": 0.0}
+    flags = parse_flags(unit.flags)
+    model_multiplier = max(int(getattr(roster_unit, "count", 0)), 0)
+    weapon_profiles: dict[int, models.Weapon] = {}
+    for link in getattr(unit, "weapon_links", []) or []:
+        if not link.weapon or link.weapon_id is None:
+            continue
+        if link.weapon_id in weapon_profiles:
+            continue
+        weapon_profiles[link.weapon_id] = link.weapon
+    if unit.default_weapon and unit.default_weapon_id is not None:
+        weapon_profiles.setdefault(unit.default_weapon_id, unit.default_weapon)
+    if roster_unit.selected_weapon and roster_unit.selected_weapon.id is not None:
+        weapon_profiles.setdefault(roster_unit.selected_weapon.id, roster_unit.selected_weapon)
+
+    raw_data: dict[str, Any] | None = None
+    loadout_mode: str | None = None
+    if roster_unit.extra_weapons_json:
+        try:
+            parsed = json.loads(roster_unit.extra_weapons_json)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            raw_data = parsed
+            mode_value = parsed.get("mode")
+            if isinstance(mode_value, str):
+                loadout_mode = mode_value
+
+    def _parse_weapon_counts() -> dict[int, int]:
+        result: dict[int, int] = {}
+        if not isinstance(raw_data, dict):
+            return result
+        raw_section = raw_data.get("weapons")
+        if isinstance(raw_section, dict):
+            iterable = raw_section.items()
+        elif isinstance(raw_section, list):
+            iterable = []
+            for entry in raw_section:
+                if not isinstance(entry, dict):
+                    continue
+                entry_id = entry.get("id") or entry.get("weapon_id")
+                if entry_id is None:
+                    continue
+                iterable.append((entry_id, entry.get("count") or entry.get("per_model")))
+        else:
+            return result
+        for raw_id, raw_value in iterable:
+            try:
+                weapon_id = int(raw_id)
+            except (TypeError, ValueError):
+                try:
+                    weapon_id = int(float(raw_id))
+                except (TypeError, ValueError):
+                    continue
+            try:
+                count_value = int(raw_value)
+            except (TypeError, ValueError):
+                try:
+                    count_value = int(float(raw_value))
+                except (TypeError, ValueError):
+                    count_value = 0
+            if count_value < 0:
+                count_value = 0
+            result[weapon_id] = count_value
+        return result
+
+    weapons_counts = _parse_weapon_counts()
+    total_mode = loadout_mode == "total"
+    model_count = max(model_multiplier, 1)
+
+    def _to_total(value: int) -> int:
+        safe_value = max(int(value), 0)
+        return safe_value if total_mode else safe_value * model_count
+
+    melee_cost = 0.0
+    ranged_cost = 0.0
+
+    def _add_weapon_cost(weapon: models.Weapon | None, total_count: int) -> None:
+        nonlocal melee_cost, ranged_cost
+        if not weapon or total_count <= 0:
+            return
+        cost_value = weapon_cost(weapon, unit.quality, flags)
+        if cost_value <= 0:
+            return
+        range_value = normalize_range_value(weapon.effective_range)
+        contribution = cost_value * total_count
+        if range_value == 0:
+            melee_cost += contribution
+        else:
+            ranged_cost += contribution
+
+    processed_ids: set[int] = set()
+    for weapon_id, stored_count in weapons_counts.items():
+        try:
+            numeric_id = int(weapon_id)
+        except (TypeError, ValueError):
+            continue
+        total_count = _to_total(stored_count)
+        if total_count <= 0:
+            processed_ids.add(numeric_id)
+            continue
+        weapon = weapon_profiles.get(numeric_id)
+        _add_weapon_cost(weapon, total_count)
+        processed_ids.add(numeric_id)
+
+    default_entries = getattr(unit, "default_weapon_loadout", []) or []
+    for weapon_obj, per_model_count in default_entries:
+        if not weapon_obj:
+            continue
+        weapon_id = getattr(weapon_obj, "id", None)
+        if weapon_id is not None and int(weapon_id) in processed_ids:
+            continue
+        total_count = max(int(per_model_count) if per_model_count is not None else 0, 0)
+        total_count *= model_count
+        _add_weapon_cost(weapon_obj, total_count)
+        if weapon_id is not None:
+            processed_ids.add(int(weapon_id))
+
+    if roster_unit.selected_weapon:
+        weapon = roster_unit.selected_weapon
+        weapon_id = getattr(weapon, "id", None)
+        if weapon_id is None or int(weapon_id) not in processed_ids:
+            _add_weapon_cost(weapon, model_count)
+
+    return {
+        "melee_cost": round(melee_cost, 2),
+        "ranged_cost": round(ranged_cost, 2),
+    }
+
+
 def update_cached_costs(roster_units: Iterable[models.RosterUnit]) -> None:
     for ru in roster_units:
         ru.cached_cost = roster_unit_cost(ru)

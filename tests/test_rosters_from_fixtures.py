@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import glob
+import itertools
 import json
 import os
 import sys
@@ -21,6 +22,7 @@ from app.services.rules import collect_roster_warnings
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "rosters"
+_WEAPON_ID_SEQ = itertools.count(1)
 
 
 TEMPLATE_LIBRARY: dict[str, dict[str, Any]] = {
@@ -64,10 +66,13 @@ def _ability_type(name: str) -> str:
     return definition.type if definition else "passive"
 
 
-def _build_unit(template_name: str, overrides: dict[str, Any] | None) -> tuple[models.Unit, int]:
+def _build_unit(
+    template_name: str, overrides: dict[str, Any] | None
+) -> tuple[models.Unit, int, dict[str, Any]]:
     if template_name not in TEMPLATE_LIBRARY:
         raise KeyError(f"Brak definicji szablonu jednostki: {template_name}")
     template = TEMPLATE_LIBRARY[template_name]
+    overrides = overrides or {}
     unit = models.Unit(
         name=template_name,
         quality=template["quality"],
@@ -79,7 +84,7 @@ def _build_unit(template_name: str, overrides: dict[str, Any] | None) -> tuple[m
 
     ability_names: list[str] = []
     ability_names.extend(template.get("abilities", []))
-    for name in (overrides or {}).get("abilities", []) or []:
+    for name in overrides.get("abilities", []) or []:
         if name not in ability_names:
             ability_names.append(name)
     unit.abilities = []
@@ -89,6 +94,25 @@ def _build_unit(template_name: str, overrides: dict[str, Any] | None) -> tuple[m
         link.ability = ability
         unit.abilities.append(link)
 
+    def _make_weapon(payload: dict[str, Any]) -> models.Weapon:
+        data = dict(payload or {})
+        range_value = data.get("range")
+        if isinstance(range_value, (int, float)):
+            range_text = f"{int(range_value)}\""
+        else:
+            range_text = range_value or None
+        traits = data.get("traits", []) or []
+        weapon = models.Weapon(
+            name=data.get("name"),
+            range=range_text,
+            attacks=data.get("attacks"),
+            ap=data.get("ap"),
+            tags=",".join(traits) if traits else None,
+            armory_id=1,
+        )
+        weapon.id = int(data.get("id") or next(_WEAPON_ID_SEQ))
+        return weapon
+
     weapon_payload = dict(template.get("weapon", {}))
     range_value = weapon_payload.get("range")
     if isinstance(range_value, (int, float)):
@@ -96,18 +120,41 @@ def _build_unit(template_name: str, overrides: dict[str, Any] | None) -> tuple[m
     else:
         range_text = range_value or None
     traits = weapon_payload.get("traits", []) or []
-    weapon = models.Weapon(
-        name=weapon_payload.get("name"),
-        range=range_text,
-        attacks=weapon_payload.get("attacks"),
-        ap=weapon_payload.get("ap"),
-        tags=",".join(traits) if traits else None,
-        armory_id=1,
-    )
+    weapon = _make_weapon(weapon_payload)
     unit.default_weapon = weapon
-    unit.default_weapon_id = 1
+    unit.default_weapon_id = weapon.id
     unit.weapon_links = []
-    return unit, int(template.get("base_models", 1))
+
+    override_entries: list[dict[str, Any]] = []
+    raw_override_weapons = overrides.get("weapons")
+    if isinstance(raw_override_weapons, dict):
+        override_iterable = [raw_override_weapons]
+    elif isinstance(raw_override_weapons, list):
+        override_iterable = [entry for entry in raw_override_weapons if isinstance(entry, dict)]
+    else:
+        override_iterable = []
+    for payload in override_iterable:
+        custom_weapon = _make_weapon(payload)
+        link = models.UnitWeapon()
+        link.weapon = custom_weapon
+        link.weapon_id = custom_weapon.id
+        link.is_default = False
+        link.default_count = 0
+        unit.weapon_links.append(link)
+        range_value = payload.get("range")
+        try:
+            numeric_range = int(float(range_value))
+        except (TypeError, ValueError):
+            numeric_range = None
+        override_entries.append(
+            {
+                "id": custom_weapon.id,
+                "is_melee": numeric_range == 0,
+            }
+        )
+
+    context = {"override_weapons": override_entries}
+    return unit, int(template.get("base_models", 1)), context
 
 
 def _build_roster(roster_payload: dict[str, Any]) -> models.Roster:
@@ -119,13 +166,27 @@ def _build_roster(roster_payload: dict[str, Any]) -> models.Roster:
     )
     roster.roster_units = []
     for unit_payload in roster_payload.get("units", []):
-        unit, base_models = _build_unit(unit_payload["template_unit"], unit_payload.get("overrides"))
+        unit, base_models, context = _build_unit(
+            unit_payload["template_unit"], unit_payload.get("overrides")
+        )
         roster_unit = models.RosterUnit(
             unit=unit,
             count=int(unit_payload.get("models", 1)),
         )
         total_models = max(base_models * roster_unit.count, 0)
         setattr(roster_unit, "models", total_models)
+        override_payload = context.get("override_weapons") if context else None
+        if override_payload:
+            melee_weapons = [entry["id"] for entry in override_payload if entry.get("is_melee")]
+        else:
+            melee_weapons = []
+        if melee_weapons:
+            loadout = {"mode": "per_model", "weapons": {}}
+            if unit.default_weapon_id is not None:
+                loadout["weapons"][str(unit.default_weapon_id)] = 0
+            for weapon_id in melee_weapons:
+                loadout["weapons"][str(weapon_id)] = 1
+            roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
         roster.roster_units.append(roster_unit)
     costs.update_cached_costs(roster.roster_units)
     for roster_unit in roster.roster_units:

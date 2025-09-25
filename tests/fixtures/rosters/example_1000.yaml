@@ -7,7 +7,6 @@ rosters:
     expected_total: 998
     expected_warnings_contains:
       - "[LIMIT]"
-      - "[WEAPON MIX]"
     units:
       - template_unit: 'Taktyczni'
         models: 10
@@ -21,3 +20,26 @@ rosters:
               traits: []
         expected_cost:
           total: 450
+  - name: 'Lista Mix'
+    limit: 800
+    expected_warnings_contains:
+      - "[WEAPON MIX]"
+    units:
+      - template_unit: 'Taktyczni'
+        models: 5
+        overrides:
+          weapons:
+            - name: 'Miecz Bojowy'
+              range: 0
+              ap: 1
+              attacks: 2
+              traits: []
+      - template_unit: 'Taktyczni'
+        models: 5
+        overrides:
+          weapons:
+            - name: 'Karabin Dystansowy'
+              range: 24
+              ap: 1
+              attacks: 2
+              traits: []
