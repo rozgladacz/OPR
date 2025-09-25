@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 from datetime import datetime
+import textwrap
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -13,16 +14,8 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..db import get_db
 from ..security import get_current_user
-from ..services import ability_registry, costs
-from .rosters import (
-    _ability_entries,
-    _default_loadout_summary,
-    _ensure_roster_view_access,
-    _loadout_display_summary,
-    _passive_labels,
-    _roster_unit_loadout,
-    _unit_weapon_options,
-)
+from ..services import costs
+from .rosters import _ensure_roster_view_access, _roster_unit_export_data
 
 router = APIRouter(prefix="/rosters", tags=["export"])
 templates = Jinja2Templates(directory="app/templates")
@@ -44,27 +37,7 @@ def roster_print(
 
     costs.update_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
-    roster_items = []
-    for roster_unit in roster.roster_units:
-        unit = roster_unit.unit
-        passive_labels = _passive_labels(unit)
-        active_labels = [
-            item.get("label") or item.get("raw") or ""
-            for item in ability_registry.unit_ability_payload(unit, "active")
-        ]
-        aura_labels = [
-            item.get("label") or item.get("raw") or ""
-            for item in ability_registry.unit_ability_payload(unit, "aura")
-        ]
-        roster_items.append(
-            {
-                "instance": roster_unit,
-                "passive_labels": passive_labels,
-                "active_labels": active_labels,
-                "aura_labels": aura_labels,
-                "default_summary": _default_loadout_summary(unit),
-            }
-        )
+    roster_items = [_roster_unit_export_data(ru) for ru in roster.roster_units]
     return templates.TemplateResponse(
         "roster_print.html",
         {
@@ -95,40 +68,7 @@ def roster_export_list(
     costs.update_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
 
-    entries: list[dict] = []
-    for roster_unit in roster.roster_units:
-        unit = roster_unit.unit
-        passive_labels = _passive_labels(unit)
-        active_items = _ability_entries(unit, "active")
-        aura_items = _ability_entries(unit, "aura")
-        active_labels = [item.get("label") for item in active_items if item.get("label")]
-        aura_labels = [item.get("label") for item in aura_items if item.get("label")]
-        weapon_options = _unit_weapon_options(unit)
-        loadout = _roster_unit_loadout(
-            roster_unit,
-            weapon_options=weapon_options,
-            active_items=active_items,
-            aura_items=aura_items,
-        )
-        weapon_summary = _loadout_display_summary(roster_unit, loadout, weapon_options)
-        if not weapon_summary:
-            weapon_summary = _default_loadout_summary(unit)
-        total_value = roster_unit.cached_cost or costs.roster_unit_cost(roster_unit)
-        entries.append(
-            {
-                "instance": roster_unit,
-                "unit_name": unit.name,
-                "count": roster_unit.count,
-                "quality": unit.quality,
-                "defense": unit.defense,
-                "toughness": unit.toughness,
-                "abilities": passive_labels,
-                "active": active_labels,
-                "auras": aura_labels,
-                "weapon": weapon_summary,
-                "total_cost": total_value,
-            }
-        )
+    entries = [_roster_unit_export_data(ru) for ru in roster.roster_units]
 
     return templates.TemplateResponse(
         "export/lista.html",
@@ -156,90 +96,108 @@ def roster_pdf(
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
 
+    generated_at = datetime.utcnow()
     costs.update_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
-    roster_items = []
-    for roster_unit in roster.roster_units:
-        unit = roster_unit.unit
-        passive_labels = _passive_labels(unit)
-        active_labels = [
-            item.get("label") or item.get("raw") or ""
-            for item in ability_registry.unit_ability_payload(unit, "active")
-        ]
-        aura_labels = [
-            item.get("label") or item.get("raw") or ""
-            for item in ability_registry.unit_ability_payload(unit, "aura")
-        ]
-        roster_items.append(
-            {
-                "instance": roster_unit,
-                "passive_labels": passive_labels,
-                "active_labels": active_labels,
-                "aura_labels": aura_labels,
-                "default_summary": _default_loadout_summary(unit),
-            }
-        )
+    roster_items = [_roster_unit_export_data(ru) for ru in roster.roster_units]
 
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
 
     y = height - 50
-    pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(40, y, f"Rozpiska: {roster.name}")
-    y -= 20
-    pdf.setFont("Helvetica", 12)
-    pdf.drawString(40, y, f"Armia: {roster.army.name}")
-    y -= 20
-    pdf.drawString(40, y, f"Limit punktów: {roster.points_limit or 'brak'}")
-    y -= 30
+    line_height = 14
+    margin = 60
 
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(40, y, "Jednostka")
-    pdf.drawString(280, y, "Ilość")
-    pdf.drawString(340, y, "Koszt")
-    y -= 20
+    def wrap_line(text: str, width_limit: int = 95) -> list[str]:
+        if not text:
+            return [""]
+        wrapped = textwrap.wrap(text, width=width_limit)
+        return wrapped or [text]
 
-    pdf.setFont("Helvetica", 11)
-    line_height = 16
+    def draw_page_header() -> None:
+        nonlocal y
+        pdf.setFont("Helvetica-Bold", 16)
+        pdf.drawString(40, y, f"Rozpiska: {roster.name}")
+        y -= 18
+        pdf.setFont("Helvetica", 12)
+        army_name = roster.army.name if roster.army else "---"
+        pdf.drawString(40, y, f"Armia: {army_name}")
+        y -= 16
+        pdf.drawString(40, y, f"Limit punktów: {roster.points_limit or 'brak'}")
+        y -= 16
+        pdf.drawString(40, y, f"Suma punktów: {total_cost:.1f} pkt")
+        y -= 16
+        pdf.drawString(40, y, f"Wygenerowano: {generated_at.strftime('%Y-%m-%d %H:%M')} UTC")
+        y -= 20
+        pdf.setFont("Helvetica", 11)
+
+    draw_page_header()
+
     for item in roster_items:
-        ru = item["instance"]
-        abilities_text = []
-        if item["passive_labels"]:
-            abilities_text.append(f"Pasywne: {', '.join(item['passive_labels'])}")
-        if item["active_labels"]:
-            abilities_text.append(f"Aktywne: {', '.join(item['active_labels'])}")
-        if item["aura_labels"]:
-            abilities_text.append(f"Aury: {', '.join(item['aura_labels'])}")
-        required_space = 80 + line_height * (len(abilities_text) + 2)
-        if y < required_space:
+        name = item.get("custom_name") or item.get("unit_name") or "Jednostka"
+        header_line = f"{name} × {item.get('count', 0)} (Koszt: {item.get('total_cost', 0.0):.1f} pkt)"
+        line_specs: list[tuple[str, float, int, str]] = [
+            ("Helvetica-Bold", 12, 40, header_line)
+        ]
+        if item.get("custom_name"):
+            base_line = f"Jednostka bazowa: {item.get('unit_name') or '-'}"
+            line_specs.append(("Helvetica-Oblique", 11, 40, base_line))
+        stats_line = (
+            f"Jakość: {item.get('quality', '-')} | "
+            f"Obrona: {item.get('defense', '-')} | "
+            f"Wytrzymałość: {item.get('toughness', '-')}"
+        )
+        line_specs.append(("Helvetica", 11, 40, stats_line))
+        line_specs.append(("Helvetica", 11, 40, "Uzbrojenie:"))
+
+        for weapon in item.get("weapon_details", []):
+            weapon_name = weapon.get("name") or "Broń"
+            count = weapon.get("count") or 0
+            range_value = weapon.get("range") or "-"
+            attacks = weapon.get("attacks") or "-"
+            ap_value = weapon.get("ap") if weapon.get("ap") is not None else "-"
+            traits = weapon.get("traits") or "-"
+            weapon_line = (
+                f"- {weapon_name} × {count} | Z: {range_value} | "
+                f"Ataki: {attacks} | AP: {ap_value} | Cechy: {traits}"
+            )
+            for segment in wrap_line(weapon_line):
+                line_specs.append(("Helvetica", 11, 50, segment))
+
+        ability_sections: list[tuple[str, list[str]]] = []
+        if item.get("passive_labels"):
+            ability_sections.append(("Pasywne", item["passive_labels"]))
+        if item.get("active_labels"):
+            ability_sections.append(("Aktywne", item["active_labels"]))
+        if item.get("aura_labels"):
+            ability_sections.append(("Aury", item["aura_labels"]))
+
+        if ability_sections:
+            line_specs.append(("Helvetica", 11, 40, "Zdolności:"))
+            for label, values in ability_sections:
+                base = f"{label}: {', '.join(values)}"
+                for segment in wrap_line(base):
+                    line_specs.append(("Helvetica", 11, 50, segment))
+
+        required_space = line_height * (len(line_specs) + 1)
+        if y - required_space < margin:
             pdf.showPage()
             y = height - 50
-            pdf.setFont("Helvetica-Bold", 12)
-            pdf.drawString(40, y, "Jednostka")
-            pdf.drawString(280, y, "Ilość")
-            pdf.drawString(340, y, "Koszt")
-            y -= 20
-            pdf.setFont("Helvetica", 11)
-        weapon_label = (
-            ru.selected_weapon.effective_name
-            if ru.selected_weapon
-            else item["default_summary"]
-        )
-        pdf.drawString(40, y, f"{ru.unit.name} ({ru.count}x)")
-        pdf.drawString(280, y, str(ru.count))
-        pdf.drawString(340, y, f"{ru.cached_cost or costs.roster_unit_cost(ru):.1f}")
-        y -= line_height
-        pdf.drawString(40, y, f"Uzbrojenie: {weapon_label}")
-        y -= line_height
-        for ability_line in abilities_text:
-            pdf.drawString(40, y, ability_line)
-            y -= line_height
-        y -= 4
+            draw_page_header()
 
-    y -= 20
+        for font_name, font_size, x_offset, text in line_specs:
+            pdf.setFont(font_name, font_size)
+            pdf.drawString(x_offset, y, text)
+            y -= line_height
+        y -= 6
+
+    if y - line_height < margin:
+        pdf.showPage()
+        y = height - 50
+        draw_page_header()
     pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(40, y, f"Suma: {total_cost:.1f} pkt")
+    pdf.drawString(40, y, f"Suma punktów: {total_cost:.1f} pkt")
 
     pdf.showPage()
     pdf.save()

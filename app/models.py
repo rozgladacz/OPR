@@ -347,6 +347,7 @@ class RosterUnit(TimestampMixin, Base):
     selected_weapon_id: Mapped[Optional[int]] = mapped_column(ForeignKey("weapons.id"), nullable=True)
     extra_weapons_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cached_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    custom_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
 
     roster: Mapped[Roster] = relationship(back_populates="roster_units")
     unit: Mapped[Unit] = relationship(back_populates="roster_units")

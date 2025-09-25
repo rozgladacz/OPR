@@ -1,48 +1,146 @@
 {% extends "base.html" %}
 {% block title %}Do druku - {{ roster.name }}{% endblock %}
 {% block content %}
-<div class="print-header mb-4">
-  <h1>{{ roster.name }}</h1>
-  <p>Armia: {{ roster.army.name }} | Limit: {{ roster.points_limit or 'brak' }} | Suma: {{ total_cost }}</p>
-  <p>Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC</p>
-</div>
+<style>
+  .roster-print .print-header {
+    border-bottom: 2px solid #ccc;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+  }
+  .roster-print .stat-grid {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .roster-print .stat-box {
+    flex: 1 1 120px;
+    border: 1px solid #d0d0d0;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    background: #f8f9fa;
+    text-align: center;
+  }
+  .roster-print .stat-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #555;
+  }
+  .roster-print .stat-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+  .roster-print .section-title {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #666;
+    margin-bottom: 0.25rem;
+  }
+  .roster-print .weapon-item {
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
+    background: #fff;
+  }
+  .roster-print .weapon-name {
+    font-weight: 600;
+  }
+  .roster-print .weapon-meta,
+  .roster-print .weapon-traits {
+    font-size: 0.85rem;
+    color: #444;
+  }
+  .roster-print .ability-line {
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+  }
+  .roster-print .unit-cost {
+    font-weight: 600;
+    font-size: 1rem;
+    white-space: nowrap;
+  }
+  @media print {
+    .roster-print .card {
+      page-break-inside: avoid;
+    }
+  }
+</style>
 
-<div class="row row-cols-1 row-cols-md-2 g-4">
-  {% for item in roster_items %}
-  {% set ru = item.instance %}
-  <div class="col">
-    <div class="card roster-card h-100">
-      <div class="card-body">
-        <h5 class="card-title">{{ ru.unit.name }} × {{ ru.count }}</h5>
-        <p class="card-text">
-          Jakość {{ ru.unit.quality }} / Obrona {{ ru.unit.defense }} /
-          Wytrzymałość {{ ru.unit.toughness }}
-        </p>
-        <p class="card-text">
-          Uzbrojenie:
-          {% if ru.selected_weapon %}
-          {{ ru.selected_weapon.effective_name }}
-          {% else %}
-          {{ item.default_summary }}
+<div class="roster-print">
+  <div class="print-header">
+    <h1 class="h3 mb-2">{{ roster.name }}</h1>
+    <div>Armia: {{ roster.army.name if roster.army else '---' }}</div>
+    <div>Limit: {{ roster.points_limit or 'brak' }} | Suma: {{ '%.1f' | format(total_cost) }} pkt</div>
+    <div>Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC</div>
+  </div>
+
+  <div class="row row-cols-1 row-cols-lg-2 g-4">
+    {% for item in roster_items %}
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <h5 class="card-title mb-1">{{ item.custom_name or item.unit_name }} × {{ item.count }}</h5>
+              {% if item.custom_name %}
+              <div class="text-muted small">Jednostka bazowa: {{ item.unit_name }}</div>
+              {% endif %}
+            </div>
+            <div class="unit-cost">{{ '%.1f' | format(item.total_cost) }} pkt</div>
+          </div>
+
+          <div class="stat-grid mt-3">
+            <div class="stat-box">
+              <div class="stat-label">Jakość</div>
+              <div class="stat-value">{{ item.quality }}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Obrona</div>
+              <div class="stat-value">{{ item.defense }}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Wytrzymałość</div>
+              <div class="stat-value">{{ item.toughness }}</div>
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <div class="section-title">Uzbrojenie</div>
+            <div class="weapon-list">
+              {% for weapon in item.weapon_details %}
+              <div class="weapon-item">
+                <div class="weapon-name">{{ weapon.name }} × {{ weapon.count }}</div>
+                <div class="weapon-meta">Zasięg: {{ weapon.range or '-' }} | Ataki: {{ weapon.attacks or '-' }} | AP: {{ weapon.ap if weapon.ap is not none else '-' }}</div>
+                <div class="weapon-traits">Cechy: {{ weapon.traits or '-' }}</div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          {% if item.passive_labels or item.active_labels or item.aura_labels %}
+          <div class="mt-3">
+            <div class="section-title">Zdolności</div>
+            {% if item.passive_labels %}
+            <div class="ability-line"><strong>Pasywne:</strong> {{ item.passive_labels | join(', ') }}</div>
+            {% endif %}
+            {% if item.active_labels %}
+            <div class="ability-line"><strong>Aktywne:</strong> {{ item.active_labels | join(', ') }}</div>
+            {% endif %}
+            {% if item.aura_labels %}
+            <div class="ability-line"><strong>Aury:</strong> {{ item.aura_labels | join(', ') }}</div>
+            {% endif %}
+          </div>
           {% endif %}
-        </p>
-        {% if item.passive_labels %}
-        <p class="card-text"><strong>Zdolności pasywne:</strong> {{ item.passive_labels | join(', ') }}</p>
-        {% endif %}
-        {% if item.active_labels %}
-        <p class="card-text"><strong>Zdolności aktywne:</strong> {{ item.active_labels | join(', ') }}</p>
-        {% endif %}
-        {% if item.aura_labels %}
-        <p class="card-text"><strong>Aury:</strong> {{ item.aura_labels | join(', ') }}</p>
-        {% endif %}
-        <p class="card-text">Koszt pozycji: {{ ru.cached_cost }}</p>
+        </div>
       </div>
     </div>
+    {% endfor %}
   </div>
-  {% endfor %}
-</div>
 
-<div class="print-footer mt-4">
-  <h3>Suma punktów: {{ total_cost }}{% if roster.points_limit %} / {{ roster.points_limit }}{% endif %}</h3>
+  <div class="mt-4">
+    <h3 class="h5">Suma punktów: {{ '%.1f' | format(total_cost) }}{% if roster.points_limit %} / {{ roster.points_limit }}{% endif %}</h3>
+  </div>
 </div>
 {% endblock %}

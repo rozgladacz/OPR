@@ -11,7 +11,7 @@ from typing import Any, Iterable, Sequence
 
 from .. import models
 from ..data import abilities as ability_catalog
-from .utils import parse_flags
+from .utils import parse_flags, passive_flags_to_payload
 
 
 QUALITY_TABLE = {
@@ -517,20 +517,37 @@ def weapon_cost(
     unit_flags: dict | None = None,
 ) -> float:
     unit_traits = flags_to_ability_list(unit_flags)
+    classification_slugs = {"wojownik", "strzelec"}
+    trait_identifiers = {ability_identifier(trait) for trait in unit_traits}
+    trait_variants: list[list[str]] = [unit_traits]
+    if trait_identifiers & classification_slugs:
+        base_without = [
+            trait
+            for trait in unit_traits
+            if ability_identifier(trait) not in classification_slugs
+        ]
+        trait_variants = [base_without]
+        if "wojownik" in trait_identifiers:
+            trait_variants.append(base_without + ["wojownik"])
+        if "strzelec" in trait_identifiers:
+            trait_variants.append(base_without + ["strzelec"])
     range_value = normalize_range_value(weapon.effective_range)
     traits = split_traits(weapon.effective_tags)
     attacks_value = weapon.effective_attacks
-    cost = max(
-        _weapon_cost(
-            unit_quality,
-            range_value,
-            attacks_value,
-            weapon.effective_ap,
-            traits,
-            unit_traits,
-        ),
-        0.0,
-    )
+    cost = 0.0
+    for variant in trait_variants:
+        cost = max(
+            cost,
+            _weapon_cost(
+                unit_quality,
+                range_value,
+                attacks_value,
+                weapon.effective_ap,
+                traits,
+                variant,
+            ),
+        )
+    cost = max(cost, 0.0)
     return round(cost, 2)
   
 def unit_default_weapons(unit: models.Unit | None) -> list[models.Weapon]:
@@ -618,6 +635,26 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
 
     base_per_model = base_value + passive_cost
 
+    passive_entries: list[dict[str, Any]] = []
+    for entry in passive_flags_to_payload(roster_unit.unit.flags):
+        if not entry:
+            continue
+        slug = str(entry.get("slug") or "").strip()
+        if not slug or slug in {"wojownik", "strzelec"}:
+            continue
+        label = entry.get("label") or slug
+        value = entry.get("value")
+        is_default = bool(entry.get("is_default", False))
+        default_count = 1 if is_default else 0
+        cost_value = ability_cost_from_name(label or slug, value, unit_traits)
+        passive_entries.append(
+            {
+                "slug": slug,
+                "default_count": default_count,
+                "cost": float(cost_value),
+            }
+        )
+
     def _weapon_cost_map() -> dict[int, float]:
         results: dict[int, float] = {}
         links = getattr(roster_unit.unit, "weapon_links", None) or []
@@ -703,6 +740,46 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
     weapons_counts = _parse_counts("weapons") if roster_unit.extra_weapons_json else {}
     active_counts = _parse_counts("active") if roster_unit.extra_weapons_json else {}
     aura_counts = _parse_counts("aura") if roster_unit.extra_weapons_json else {}
+    passive_counts: dict[str, int] = {}
+
+    def _parse_passives() -> dict[str, int]:
+        result: dict[str, int] = {}
+        if not isinstance(raw_data, dict):
+            return result
+        raw_section = raw_data.get("passive")
+        if isinstance(raw_section, dict):
+            iterable = raw_section.items()
+        elif isinstance(raw_section, list):
+            iterable = []
+            for entry in raw_section:
+                if not isinstance(entry, dict):
+                    continue
+                key = entry.get("slug") or entry.get("id")
+                if key is None:
+                    continue
+                iterable.append((key, entry.get("count") or entry.get("per_model") or entry.get("enabled")))
+        else:
+            return result
+        for raw_key, raw_value in iterable:
+            slug = str(raw_key).strip()
+            if not slug:
+                continue
+            value = raw_value
+            if isinstance(value, bool):
+                result[slug] = 1 if value else 0
+                continue
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError):
+                try:
+                    parsed = int(float(value))
+                except (TypeError, ValueError):
+                    parsed = 1 if value else 0
+            result[slug] = 1 if parsed > 0 else 0
+        return result
+
+    if roster_unit.extra_weapons_json:
+        passive_counts = _parse_passives()
 
     if roster_unit.extra_weapons_json:
         total = base_per_model * max(roster_unit.count, 1)
@@ -723,6 +800,23 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
             if cost_value is None:
                 continue
             total += cost_value * _to_total(stored_count)
+        passive_diff = 0.0
+        for entry in passive_entries:
+            slug = entry.get("slug")
+            if not slug:
+                continue
+            default_value = 1 if entry.get("default_count") else 0
+            selected_value = passive_counts.get(str(slug), default_value)
+            selected_flag = 1 if selected_value else 0
+            diff = selected_flag - default_value
+            if diff == 0:
+                continue
+            cost_value = float(entry.get("cost") or 0.0)
+            if cost_value == 0.0:
+                continue
+            passive_diff += cost_value * diff
+        if passive_diff:
+            total += passive_diff * model_multiplier
         return round(total, 2)
 
     legacy_unit_cost = base_per_model + active_total
