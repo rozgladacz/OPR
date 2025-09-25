@@ -171,12 +171,12 @@ def edit_roster(
         passive_items = _passive_entries(unit)
         active_items = _ability_entries(unit, "active")
         aura_items = _ability_entries(unit, "aura")
-    loadout = _roster_unit_loadout(
-        roster_unit,
-        weapon_options=weapon_options,
-        active_items=active_items,
-        aura_items=aura_items,
-        passive_items=passive_items,
+        loadout = _roster_unit_loadout(
+            roster_unit,
+            weapon_options=weapon_options,
+            active_items=active_items,
+            aura_items=aura_items,
+            passive_items=passive_items,
     )
         roster_items.append(
             {
