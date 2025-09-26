@@ -547,10 +547,22 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
         is_default = bool(item.get("is_default", False))
         try:
             cost_value = float(
-                costs.ability_cost_from_name(label or slug, value, unit_traits)
+                costs.ability_cost_from_name(
+                    label or slug,
+                    value,
+                    unit_traits,
+                    toughness=unit.toughness,
+                )
             )
         except Exception:  # pragma: no cover - fallback for unexpected input
-            cost_value = float(costs.ability_cost_from_name(slug, value, unit_traits))
+            cost_value = float(
+                costs.ability_cost_from_name(
+                    slug,
+                    value,
+                    unit_traits,
+                    toughness=unit.toughness,
+                )
+            )
         entries.append(
             {
                 "slug": slug,
@@ -724,7 +736,11 @@ def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
                     is_default = bool(params.get("default"))
                 elif "is_default" in params:
                     is_default = bool(params.get("is_default"))
-        cost_value = costs.ability_cost(link, unit_traits)
+        cost_value = costs.ability_cost(
+            link,
+            unit_traits,
+            toughness=unit.toughness,
+        )
         entries.append(
             {
                 "ability_id": ability.id,
@@ -752,7 +768,11 @@ def _base_cost_per_model(unit: models.Unit) -> float:
     for link in getattr(unit, "abilities", []):
         ability = link.ability
         if ability and ability.type == "passive":
-            passive_cost += costs.ability_cost(link, unit_traits)
+            passive_cost += costs.ability_cost(
+                link,
+                unit_traits,
+                toughness=unit.toughness,
+            )
     return round(base_value + passive_cost, 2)
 
 

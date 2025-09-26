@@ -317,6 +317,8 @@ def ability_cost_from_name(
     name: str,
     value: str | None = None,
     unit_abilities: Sequence[str] | None = None,
+    *,
+    toughness: int | float | None = None,
 ) -> float:
     desc = normalize_name(name)
     if not desc:
@@ -359,6 +361,14 @@ def ability_cost_from_name(
 
     if desc == "radio":
         return 3.0
+
+    tou_value = float(toughness) if toughness is not None else 1.0
+    slug = ability_identifier(name)
+    definition = ability_catalog.find_definition(slug) if slug else None
+    if definition and definition.type == "passive":
+        return passive_cost(name, tou_value)
+    if slug and not definition:
+        return passive_cost(name, tou_value)
 
     return 0.0
 
@@ -583,7 +593,11 @@ def unit_default_weapons(unit: models.Unit | None) -> list[models.Weapon]:
                 seen.add(default_id)
     return weapons
 
-def ability_cost(ability_link: models.UnitAbility, unit_traits: Sequence[str] | None = None) -> float:
+def ability_cost(
+    ability_link: models.UnitAbility,
+    unit_traits: Sequence[str] | None = None,
+    toughness: int | float | None = None,
+) -> float:
     ability = ability_link.ability
     if not ability:
         return 0.0
@@ -596,7 +610,12 @@ def ability_cost(ability_link: models.UnitAbility, unit_traits: Sequence[str] | 
         except json.JSONDecodeError:
             data = {}
         value = data.get("value")
-    return ability_cost_from_name(ability.name or "", value, unit_traits)
+    return ability_cost_from_name(
+        ability.name or "",
+        value,
+        unit_traits,
+        toughness=toughness,
+    )
 
 
 def unit_total_cost(unit: models.Unit) -> float:
@@ -605,7 +624,10 @@ def unit_total_cost(unit: models.Unit) -> float:
     cost = base_model_cost(unit.quality, unit.defense, unit.toughness, unit_traits)
     for weapon in unit_default_weapons(unit):
         cost += weapon_cost(weapon, unit.quality, flags)
-    cost += sum(ability_cost(link, unit_traits) for link in unit.abilities)
+    cost += sum(
+        ability_cost(link, unit_traits, toughness=unit.toughness)
+        for link in unit.abilities
+    )
     return round(cost, 2)
 
 
@@ -626,7 +648,11 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
         ability = link.ability
         if not ability:
             continue
-        cost_value = ability_cost(link, unit_traits)
+        cost_value = ability_cost(
+            link,
+            unit_traits,
+            toughness=roster_unit.unit.toughness,
+        )
         if ability.type == "passive":
             passive_cost += cost_value
         else:
@@ -646,7 +672,12 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
         value = entry.get("value")
         is_default = bool(entry.get("is_default", False))
         default_count = 1 if is_default else 0
-        cost_value = ability_cost_from_name(label or slug, value, unit_traits)
+        cost_value = ability_cost_from_name(
+            label or slug,
+            value,
+            unit_traits,
+            toughness=roster_unit.unit.toughness,
+        )
         passive_entries.append(
             {
                 "slug": slug,
@@ -655,7 +686,7 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
             }
         )
 
-    def _weapon_cost_map() -> dict[int, float]:
+    def _weapon_cost_map(current_flags: dict | None) -> dict[int, float]:
         results: dict[int, float] = {}
         links = getattr(roster_unit.unit, "weapon_links", None) or []
         for link in links:
@@ -667,7 +698,7 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
             results[link.weapon_id] = weapon_cost(
                 weapon,
                 roster_unit.unit.quality,
-                flags,
+                current_flags,
             )
         if roster_unit.unit.default_weapon and roster_unit.unit.default_weapon_id:
             weapon_id = roster_unit.unit.default_weapon_id
@@ -675,17 +706,15 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
                 results[weapon_id] = weapon_cost(
                     roster_unit.unit.default_weapon,
                     roster_unit.unit.quality,
-                    flags,
+                    current_flags,
                 )
         if roster_unit.selected_weapon and roster_unit.selected_weapon.id not in results:
             results[roster_unit.selected_weapon.id] = weapon_cost(
                 roster_unit.selected_weapon,
                 roster_unit.unit.quality,
-                flags,
+                current_flags,
             )
         return results
-
-    weapon_costs = _weapon_cost_map()
 
     raw_data: dict[str, Any] | None = None
     loadout_mode: str | None = None
@@ -781,6 +810,55 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
     if roster_unit.extra_weapons_json:
         passive_counts = _parse_passives()
 
+    def _passive_identifier(text: str) -> str:
+        identifier = ability_identifier(text)
+        if identifier:
+            return identifier
+        norm = normalize_name(text)
+        if norm.endswith("?"):
+            return norm[:-1]
+        return norm
+
+    weapon_flags: dict[str, Any] = dict(flags)
+    identifier_keys: dict[str, list[str]] = {}
+    for key in flags:
+        ident = _passive_identifier(key)
+        identifier_keys.setdefault(ident, []).append(key)
+
+    tracked_passives: dict[str, dict[str, Any]] = {}
+    for entry in passive_entries:
+        slug = entry.get("slug")
+        if not slug:
+            continue
+        ident = _passive_identifier(slug)
+        if not ident:
+            continue
+        tracked_passives[ident] = entry
+
+    for ident, entry in tracked_passives.items():
+        slug = entry.get("slug")
+        default_flag = 1 if entry.get("default_count") else 0
+        selected_flag = passive_counts.get(str(slug), default_flag)
+        enabled = selected_flag > 0
+        keys = identifier_keys.get(ident, [])
+        if enabled:
+            if keys:
+                key = keys[0]
+                value = flags.get(key)
+                if isinstance(value, bool):
+                    weapon_flags[key] = True
+                elif value in (None, "", 0):
+                    weapon_flags[key] = True
+                else:
+                    weapon_flags[key] = value
+            else:
+                weapon_flags[slug] = True
+        else:
+            for key in keys:
+                weapon_flags.pop(key, None)
+
+    weapon_costs = _weapon_cost_map(weapon_flags)
+
     if roster_unit.extra_weapons_json:
         total = base_per_model * max(roster_unit.count, 1)
         total_mode = loadout_mode == "total"
@@ -825,14 +903,14 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
         legacy_unit_cost += weapon_cost(
             roster_unit.selected_weapon,
             roster_unit.unit.quality,
-            flags,
+            weapon_flags,
         )
     else:
         for weapon in default_weapons:
             legacy_unit_cost += weapon_cost(
                 weapon,
                 roster_unit.unit.quality,
-                flags,
+                weapon_flags,
             )
 
     total = legacy_unit_cost * max(roster_unit.count, 1)

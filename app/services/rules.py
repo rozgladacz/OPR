@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import json
 from dataclasses import dataclass
 from typing import Iterable, List
 
@@ -39,12 +40,60 @@ def _unit_is_hero(unit: models.Unit) -> bool:
     return False
 
 
-def _active_count(unit: models.Unit) -> int:
-    return sum(
-        1
-        for link in getattr(unit, "abilities", [])
-        if getattr(getattr(link, "ability", None), "type", "") == "active"
-    )
+def _parse_ability_counts(roster_unit: models.RosterUnit, section: str) -> dict[int, int]:
+    raw_payload = getattr(roster_unit, "extra_weapons_json", None)
+    if not raw_payload:
+        return {}
+    try:
+        data = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    raw_section = data.get(section)
+    if isinstance(raw_section, dict):
+        iterable = raw_section.items()
+    elif isinstance(raw_section, list):
+        iterable = []
+        for entry in raw_section:
+            if not isinstance(entry, dict):
+                continue
+            key = entry.get("id") or entry.get("ability_id")
+            if key is None:
+                continue
+            iterable.append((key, entry.get("count") or entry.get("per_model")))
+    else:
+        return {}
+    counts: dict[int, int] = {}
+    for raw_id, raw_value in iterable:
+        try:
+            ability_id = int(raw_id)
+        except (TypeError, ValueError):
+            try:
+                ability_id = int(float(raw_id))
+            except (TypeError, ValueError):
+                continue
+        try:
+            count_value = int(raw_value)
+        except (TypeError, ValueError):
+            try:
+                count_value = int(float(raw_value))
+            except (TypeError, ValueError):
+                count_value = 0
+        if count_value > 0:
+            counts[ability_id] = count_value
+    return counts
+
+
+def _active_count(roster_unit: models.RosterUnit) -> int:
+    counts = _parse_ability_counts(roster_unit, "active")
+    if counts:
+        return sum(1 for value in counts.values() if value > 0)
+    unit = getattr(roster_unit, "unit", None)
+    if unit is None:
+        return 0
+    payload = ability_registry.unit_ability_payload(unit, "active")
+    return sum(1 for entry in payload if entry.get("is_default"))
 
 
 def _has_aura(unit: models.Unit) -> bool:
@@ -70,7 +119,7 @@ def _summaries(roster: models.Roster) -> Iterable[UnitSummary]:
         if cost_value is None:
             cost_value = costs.roster_unit_cost(roster_unit)
         total_cost = float(cost_value)
-        active_cnt = _active_count(unit)
+        active_cnt = _active_count(roster_unit)
         summary = UnitSummary(
             name=getattr(unit, "name", "Jednostka"),
             models=models_count,
@@ -110,10 +159,6 @@ def collect_roster_warnings(roster: models.Roster) -> List[str]:
         if summary.active_count > 1:
             warnings.append(
                 f"[ACTIVE] Jednostka '{summary.name}' ma więcej niż jedną zdolność aktywną."
-            )
-        if summary.active_count >= 1 and summary.has_aura:
-            warnings.append(
-                f"[AURA] Jednostka '{summary.name}' ma jednocześnie aurę i zdolność aktywną."
             )
         if summary.models > max_models:
             warnings.append(
