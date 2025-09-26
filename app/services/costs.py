@@ -79,12 +79,19 @@ def flags_to_ability_list(flags: dict | None) -> list[str]:
     for key, value in (flags or {}).items():
         if key is None:
             continue
-        name = str(key).strip()
+        raw_name = str(key).strip()
+        if not raw_name:
+            continue
+        is_optional = raw_name.endswith("?")
+        name = raw_name[:-1] if is_optional else raw_name
         if not name:
             continue
-        if name.endswith("?"):
-            name = name[:-1]
         slug = ability_catalog.slug_for_name(name) or name
+        if is_optional:
+            # Zdolności oznaczone znakiem zapytania są dostępne do kupienia,
+            # ale nie wchodzą w skład podstawowego profilu jednostki.
+            # Nie powinny więc wpływać na koszt ani statystyki bazowe.
+            continue
         if isinstance(value, bool):
             if value:
                 abilities.append(slug)
