@@ -3,8 +3,8 @@ from __future__ import annotations
 """Embedded compressed font payloads used for PDF exports."""
 
 PDF_FONT_DATA = {
-    'DejaVuSans':
-        'eNrsvQl8FEX6P1xVfUzPPdPVSQ+BHBwmAcIhInKJiBEQwmGIiIhIuI8QMEREBERERJZlEZFFZBGRBRYRERGQRUREvNBFRGUxsogs
+    'DejaVuSans': """
+eNrsvQl8FEX6P1xVfUzPPdPVSQ+BHBwmAcIhInKJiBEQwmGIiIhIuI8QMEREBERERJZlEZFFZBGRBRYRERGQRUREvNBFRGUxsogs
 YmARMSACJv+nnu5kOhcL6u7P9/3s1Ke+/cxT1dXVVU89z1PVF6GEEANAJu07dszq9uyPz35KCM0Abq1O6Td3nHNi/pvwfzghbF6n
 nj169Z6681pCpIuELJnVqddtHd7Y0/4OQpbNJCTmYLcbszqvbNZyMiGbIb/arkevJs3uaDS+ESHbVkF5vQeNzh572t0L/r8Of2vO
 HTQ+P4mMiG9FyIG5cIzioWOHjb6n+fiRhBTAf/L8sOxxY4kLAvmiLfz3Dcu5f6grKbU9/O9MtId2Dh+SPTjljoyexH23D9JbDAeG
@@ -5095,9 +5095,9 @@ nzl4QJrc/36nDe5/ZnK/++4d3O+cX5+W3Hdvcp9JMpokrkoH7nhS2dMHVZpYs3tgT0/M7kTfJin3JqJ2
 d3L2vXYOzj49udfO5J6S3OPu+wf3mEvufrczB3ffn9ztzOSud9k/uGud3GV/cuf9uwd3Pi3Zvzu50yS54yS5w2nJ7bt53v7M5HZz
 yW2PJ7fppnCbueTWe5NbdVfwVpPklseTWzTJWd3JWZNkOJcU3ZUqJknefSk/K8kmSTpJZibJmV2DMyfJGd1cz2iS069PTptL9k2S
 vXvywd5JsqdrvSdPdk+SXacnOyfJqV2zUyfJjjTZPpds6/64rbsDsqT7NJkkp3Tnp9wrufnpyc0myc3ffvO5pz//5vf4/8P/3ez/
-06O79f8DdrfvAQ==',
-    'DejaVuSans-Bold':
-        'eNrsvQucTlUXP773uT3329l75jwxZgZjMMYlSUiSJLmlMS5JzLiO29CYJMkrSfJKkiRJkpCQvJI0SZIkSfJ6JUmSpqFJEnKZ57/2
+06O79f8DdrfvAQ==""",
+    'DejaVuSans-Bold': """
+eNrsvQucTlUXP773uT3329l75jwxZgZjMMYlSUiSJLmlMS5JzLiO29CYJMkrSfJKkiRJkpCQvJI0SZIkSfJ6JUmSpqFJEnKZ57/2
 OmfmOXOTLu/v//t//u/sz/qeNfvss8++rL3W2vvZ5xxCCSEMQCGN2rVL7/ziby/uI4S2hNi4W9ve0u7Rs4+vg/97ESI1vbXr7d32
 xmUsJ0SeRci0prd2697mnX+k9iDkn9sJidl/e7eGjXv3nDeHkBcXwfU9BozMHD3v+a9vgf/PEVJl54CxuYmt3rraSUjeVsgvffDo
 ISPvkoafJOTdMKRfOSRzzGjigEDehfPEO2TE/YOzk/VP4f/dxHG2WdagzIF1hnW6gTjfhDxI0yyI8L+WsAT+bw3/J2WNzB03oYVv
@@ -9795,5 +9795,5 @@ z7ouXhl1Ry6mY8Yr7trLz42uTd3LX3Z29PJz7mVn3ed97pnR5110n3vG/ZEN9+jUtRdcmDp/v2vqB0fN
 XXDV08ulrI7KC668tiyrrlh776iYurV0/LX3uj+86q7e7z7nkUdHn3PkHnngyuiRR91LN9wf2nB/cOr+wAPus59zfvTZl91Lnu+u
 XHYvflE6AS998WX3ovPuhUtnRi88ci84515wbfn5F9xnrbjLl93zHr40et4V9/C5+0cPX3IPvz/ljLcvP3TGPXjpsdGDT7lLSfTS
 Y+65U/ec8+5iUrt45B5Irz1wxV3YcPefd8+euvNp//zU3bfhzp29b3Tufnfuw8tn73Nnn14+k945c+RWxZ1OTTt90Z1+ennljFu5
-tnxq6u6dunum7uRoZXRy6kYrbnRtefnIuQ33rPSpZ01T9jozOnHeLZ1xJ95/YuMrvu7ES39//Ft66e/ff89b+j29XVtY',
+tnxq6u6dunum7uRoZXRy6kYrbnRtefnIuQ33rPSpZ01T9jozOnHeLZ1xJ95/YuMrvu7ES39//Ft66e/ff89b+j29XVtY""",
 }
