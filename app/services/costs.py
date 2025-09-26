@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from .. import models
 from ..data import abilities as ability_catalog
-from .utils import parse_flags, passive_flags_to_payload
+from .utils import passive_flags_to_payload
 
 
 QUALITY_TABLE = {
@@ -97,6 +98,125 @@ def _apply_ruleset_overrides() -> None:
 
 
 _apply_ruleset_overrides()
+
+
+@dataclass
+class PassiveState:
+    payload: list[dict[str, Any]]
+    counts: dict[str, int]
+    traits: list[str]
+
+
+def _ensure_extra_data(extra: Any) -> dict[str, Any] | None:
+    if isinstance(extra, dict):
+        return extra
+    if isinstance(extra, str):
+        try:
+            parsed = json.loads(extra)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+def _passive_payload(unit: models.Unit | None) -> list[dict[str, Any]]:
+    if unit is None:
+        return []
+    payload: list[dict[str, Any]] = []
+    for entry in passive_flags_to_payload(getattr(unit, "flags", None)):
+        if not isinstance(entry, dict):
+            continue
+        slug = str(entry.get("slug") or "").strip()
+        if not slug:
+            continue
+        is_default = bool(entry.get("is_default", False))
+        payload.append(
+            {
+                "slug": slug,
+                "label": entry.get("label") or slug,
+                "value": entry.get("value"),
+                "is_default": is_default,
+                "default_count": 1 if is_default else 0,
+            }
+        )
+    return payload
+
+
+def _parse_passive_counts(extra: dict[str, Any] | None) -> dict[str, int]:
+    result: dict[str, int] = {}
+    if not isinstance(extra, dict):
+        return result
+    raw_section = extra.get("passive")
+    if isinstance(raw_section, dict):
+        iterable = raw_section.items()
+    elif isinstance(raw_section, list):
+        iterable = []
+        for entry in raw_section:
+            if not isinstance(entry, dict):
+                continue
+            key = entry.get("slug") or entry.get("id")
+            if key is None:
+                continue
+            iterable.append((key, entry.get("count") or entry.get("per_model") or entry.get("enabled")))
+    else:
+        return result
+    for raw_key, raw_value in iterable:
+        slug = str(raw_key).strip()
+        if not slug:
+            continue
+        value = raw_value
+        if isinstance(value, bool):
+            result[slug] = 1 if value else 0
+            continue
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            try:
+                parsed = int(float(value))
+            except (TypeError, ValueError):
+                parsed = 1 if value else 0
+        result[slug] = 1 if parsed > 0 else 0
+    return result
+
+
+def _active_traits_from_payload(
+    payload: Sequence[dict[str, Any]], counts: dict[str, int]
+) -> list[str]:
+    traits: list[str] = []
+    for entry in payload:
+        slug = str(entry.get("slug") or "").strip()
+        if not slug:
+            continue
+        default_count = int(entry.get("default_count") or 0)
+        selected = counts.get(str(slug), default_count)
+        if selected <= 0:
+            continue
+        value = entry.get("value")
+        if isinstance(value, bool):
+            if value:
+                traits.append(slug)
+            continue
+        if value is None:
+            traits.append(slug)
+            continue
+        value_str = str(value).strip()
+        if not value_str or value_str.casefold() in {"true", "yes"}:
+            traits.append(slug)
+        elif value_str.casefold() in {"false", "no", "0"}:
+            continue
+        else:
+            traits.append(f"{slug}({value_str})")
+    return traits
+
+
+def compute_passive_state(
+    unit: models.Unit | None, extra: dict[str, Any] | str | None = None
+) -> PassiveState:
+    payload = _passive_payload(unit)
+    extra_data = _ensure_extra_data(extra)
+    counts = _parse_passive_counts(extra_data)
+    traits = _active_traits_from_payload(payload, counts)
+    return PassiveState(payload=payload, counts=counts, traits=traits)
 
 
 def normalize_name(text: str | None) -> str:
@@ -524,9 +644,14 @@ def _weapon_cost(
 def weapon_cost(
     weapon: models.Weapon,
     unit_quality: int = 4,
-    unit_flags: dict | None = None,
+    unit_flags: dict | Sequence[str] | None = None,
 ) -> float:
-    unit_traits = flags_to_ability_list(unit_flags)
+    if isinstance(unit_flags, dict):
+        unit_traits = flags_to_ability_list(unit_flags)
+    elif unit_flags is None:
+        unit_traits = []
+    else:
+        unit_traits = list(unit_flags)
     classification_slugs = {"wojownik", "strzelec"}
     trait_identifiers = {ability_identifier(trait) for trait in unit_traits}
     trait_variants: list[list[str]] = [unit_traits]
@@ -619,11 +744,11 @@ def ability_cost(
 
 
 def unit_total_cost(unit: models.Unit) -> float:
-    flags = parse_flags(unit.flags)
-    unit_traits = flags_to_ability_list(flags)
+    passive_state = compute_passive_state(unit)
+    unit_traits = passive_state.traits
     cost = base_model_cost(unit.quality, unit.defense, unit.toughness, unit_traits)
     for weapon in unit_default_weapons(unit):
-        cost += weapon_cost(weapon, unit.quality, flags)
+        cost += weapon_cost(weapon, unit.quality, unit_traits)
     cost += sum(
         ability_cost(link, unit_traits, toughness=unit.toughness)
         for link in unit.abilities
@@ -632,26 +757,38 @@ def unit_total_cost(unit: models.Unit) -> float:
 
 
 def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
-    flags = parse_flags(roster_unit.unit.flags)
-    unit_traits = flags_to_ability_list(flags)
+    unit = getattr(roster_unit, "unit", None)
+    if unit is None:
+        return 0.0
+
+    raw_data = _ensure_extra_data(getattr(roster_unit, "extra_weapons_json", None))
+    loadout_mode: str | None = None
+    if isinstance(raw_data, dict):
+        mode_value = raw_data.get("mode")
+        if isinstance(mode_value, str):
+            loadout_mode = mode_value
+
+    passive_state = compute_passive_state(unit, raw_data)
+    unit_traits = passive_state.traits
+
     base_value = base_model_cost(
-        roster_unit.unit.quality,
-        roster_unit.unit.defense,
-        roster_unit.unit.toughness,
+        unit.quality,
+        unit.defense,
+        unit.toughness,
         unit_traits,
     )
 
     passive_cost = 0.0
     ability_costs: dict[int, float] = {}
     active_total = 0.0
-    for link in getattr(roster_unit.unit, "abilities", []):
+    for link in getattr(unit, "abilities", []):
         ability = link.ability
         if not ability:
             continue
         cost_value = ability_cost(
             link,
             unit_traits,
-            toughness=roster_unit.unit.toughness,
+            toughness=unit.toughness,
         )
         if ability.type == "passive":
             passive_cost += cost_value
@@ -662,21 +799,18 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
     base_per_model = base_value + passive_cost
 
     passive_entries: list[dict[str, Any]] = []
-    for entry in passive_flags_to_payload(roster_unit.unit.flags):
-        if not entry:
-            continue
+    for entry in passive_state.payload:
         slug = str(entry.get("slug") or "").strip()
         if not slug or slug in {"wojownik", "strzelec"}:
             continue
         label = entry.get("label") or slug
         value = entry.get("value")
-        is_default = bool(entry.get("is_default", False))
-        default_count = 1 if is_default else 0
+        default_count = int(entry.get("default_count") or 0)
         cost_value = ability_cost_from_name(
             label or slug,
             value,
             unit_traits,
-            toughness=roster_unit.unit.toughness,
+            toughness=unit.toughness,
         )
         passive_entries.append(
             {
@@ -686,7 +820,9 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
             }
         )
 
-    def _weapon_cost_map(current_flags: dict | None) -> dict[int, float]:
+    passive_counts = passive_state.counts
+
+    def _weapon_cost_map(current_traits: Sequence[str]) -> dict[int, float]:
         results: dict[int, float] = {}
         links = getattr(roster_unit.unit, "weapon_links", None) or []
         for link in links:
@@ -698,7 +834,7 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
             results[link.weapon_id] = weapon_cost(
                 weapon,
                 roster_unit.unit.quality,
-                current_flags,
+                current_traits,
             )
         if roster_unit.unit.default_weapon and roster_unit.unit.default_weapon_id:
             weapon_id = roster_unit.unit.default_weapon_id
@@ -706,28 +842,15 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
                 results[weapon_id] = weapon_cost(
                     roster_unit.unit.default_weapon,
                     roster_unit.unit.quality,
-                    current_flags,
+                    current_traits,
                 )
         if roster_unit.selected_weapon and roster_unit.selected_weapon.id not in results:
             results[roster_unit.selected_weapon.id] = weapon_cost(
                 roster_unit.selected_weapon,
                 roster_unit.unit.quality,
-                current_flags,
+                current_traits,
             )
         return results
-
-    raw_data: dict[str, Any] | None = None
-    loadout_mode: str | None = None
-    if roster_unit.extra_weapons_json:
-        try:
-            parsed = json.loads(roster_unit.extra_weapons_json)
-        except json.JSONDecodeError:
-            parsed = None
-        if isinstance(parsed, dict):
-            raw_data = parsed
-            mode_value = parsed.get("mode")
-            if isinstance(mode_value, str):
-                loadout_mode = mode_value
 
     def _parse_counts(section: str) -> dict[int, int]:
         raw: dict[str, Any] = {}
@@ -766,100 +889,13 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
             counts[parsed_id] = parsed_value
         return counts
 
-    weapons_counts = _parse_counts("weapons") if roster_unit.extra_weapons_json else {}
-    active_counts = _parse_counts("active") if roster_unit.extra_weapons_json else {}
-    aura_counts = _parse_counts("aura") if roster_unit.extra_weapons_json else {}
-    passive_counts: dict[str, int] = {}
+    weapons_counts = _parse_counts("weapons") if isinstance(raw_data, dict) else {}
+    active_counts = _parse_counts("active") if isinstance(raw_data, dict) else {}
+    aura_counts = _parse_counts("aura") if isinstance(raw_data, dict) else {}
 
-    def _parse_passives() -> dict[str, int]:
-        result: dict[str, int] = {}
-        if not isinstance(raw_data, dict):
-            return result
-        raw_section = raw_data.get("passive")
-        if isinstance(raw_section, dict):
-            iterable = raw_section.items()
-        elif isinstance(raw_section, list):
-            iterable = []
-            for entry in raw_section:
-                if not isinstance(entry, dict):
-                    continue
-                key = entry.get("slug") or entry.get("id")
-                if key is None:
-                    continue
-                iterable.append((key, entry.get("count") or entry.get("per_model") or entry.get("enabled")))
-        else:
-            return result
-        for raw_key, raw_value in iterable:
-            slug = str(raw_key).strip()
-            if not slug:
-                continue
-            value = raw_value
-            if isinstance(value, bool):
-                result[slug] = 1 if value else 0
-                continue
-            try:
-                parsed = int(value)
-            except (TypeError, ValueError):
-                try:
-                    parsed = int(float(value))
-                except (TypeError, ValueError):
-                    parsed = 1 if value else 0
-            result[slug] = 1 if parsed > 0 else 0
-        return result
+    weapon_costs = _weapon_cost_map(unit_traits)
 
-    if roster_unit.extra_weapons_json:
-        passive_counts = _parse_passives()
-
-    def _passive_identifier(text: str) -> str:
-        identifier = ability_identifier(text)
-        if identifier:
-            return identifier
-        norm = normalize_name(text)
-        if norm.endswith("?"):
-            return norm[:-1]
-        return norm
-
-    weapon_flags: dict[str, Any] = dict(flags)
-    identifier_keys: dict[str, list[str]] = {}
-    for key in flags:
-        ident = _passive_identifier(key)
-        identifier_keys.setdefault(ident, []).append(key)
-
-    tracked_passives: dict[str, dict[str, Any]] = {}
-    for entry in passive_entries:
-        slug = entry.get("slug")
-        if not slug:
-            continue
-        ident = _passive_identifier(slug)
-        if not ident:
-            continue
-        tracked_passives[ident] = entry
-
-    for ident, entry in tracked_passives.items():
-        slug = entry.get("slug")
-        default_flag = 1 if entry.get("default_count") else 0
-        selected_flag = passive_counts.get(str(slug), default_flag)
-        enabled = selected_flag > 0
-        keys = identifier_keys.get(ident, [])
-        if enabled:
-            if keys:
-                key = keys[0]
-                value = flags.get(key)
-                if isinstance(value, bool):
-                    weapon_flags[key] = True
-                elif value in (None, "", 0):
-                    weapon_flags[key] = True
-                else:
-                    weapon_flags[key] = value
-            else:
-                weapon_flags[slug] = True
-        else:
-            for key in keys:
-                weapon_flags.pop(key, None)
-
-    weapon_costs = _weapon_cost_map(weapon_flags)
-
-    if roster_unit.extra_weapons_json:
+    if isinstance(raw_data, dict):
         total = base_per_model * max(roster_unit.count, 1)
         total_mode = loadout_mode == "total"
         model_multiplier = max(roster_unit.count, 1)
@@ -903,14 +939,14 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
         legacy_unit_cost += weapon_cost(
             roster_unit.selected_weapon,
             roster_unit.unit.quality,
-            weapon_flags,
+            unit_traits,
         )
     else:
         for weapon in default_weapons:
             legacy_unit_cost += weapon_cost(
                 weapon,
                 roster_unit.unit.quality,
-                weapon_flags,
+                unit_traits,
             )
 
     total = legacy_unit_cost * max(roster_unit.count, 1)
@@ -925,7 +961,6 @@ def roster_unit_weapon_mix(roster_unit: models.RosterUnit) -> dict[str, float]:
     unit = getattr(roster_unit, "unit", None)
     if unit is None:
         return {"melee_cost": 0.0, "ranged_cost": 0.0}
-    flags = parse_flags(unit.flags)
     model_multiplier = max(int(getattr(roster_unit, "count", 0)), 0)
     weapon_profiles: dict[int, models.Weapon] = {}
     for link in getattr(unit, "weapon_links", []) or []:
@@ -939,18 +974,15 @@ def roster_unit_weapon_mix(roster_unit: models.RosterUnit) -> dict[str, float]:
     if roster_unit.selected_weapon and roster_unit.selected_weapon.id is not None:
         weapon_profiles.setdefault(roster_unit.selected_weapon.id, roster_unit.selected_weapon)
 
-    raw_data: dict[str, Any] | None = None
+    raw_data = _ensure_extra_data(getattr(roster_unit, "extra_weapons_json", None))
     loadout_mode: str | None = None
-    if roster_unit.extra_weapons_json:
-        try:
-            parsed = json.loads(roster_unit.extra_weapons_json)
-        except json.JSONDecodeError:
-            parsed = None
-        if isinstance(parsed, dict):
-            raw_data = parsed
-            mode_value = parsed.get("mode")
-            if isinstance(mode_value, str):
-                loadout_mode = mode_value
+    if isinstance(raw_data, dict):
+        mode_value = raw_data.get("mode")
+        if isinstance(mode_value, str):
+            loadout_mode = mode_value
+
+    passive_state = compute_passive_state(unit, raw_data)
+    unit_traits = passive_state.traits
 
     def _parse_weapon_counts() -> dict[int, int]:
         result: dict[int, int] = {}
@@ -1005,7 +1037,7 @@ def roster_unit_weapon_mix(roster_unit: models.RosterUnit) -> dict[str, float]:
         nonlocal melee_cost, ranged_cost
         if not weapon or total_count <= 0:
             return
-        cost_value = weapon_cost(weapon, unit.quality, flags)
+        cost_value = weapon_cost(weapon, unit.quality, unit_traits)
         if cost_value <= 0:
             return
         range_value = normalize_range_value(weapon.effective_range)

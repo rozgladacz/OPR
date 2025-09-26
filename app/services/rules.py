@@ -7,7 +7,7 @@ from typing import Iterable, List
 
 from .. import models
 from ..data import abilities as ability_catalog
-from . import ability_registry, costs, utils
+from . import ability_registry, costs
 
 
 @dataclass
@@ -22,7 +22,9 @@ class UnitSummary:
     hero_models: int
 
 
-def _unit_is_hero(unit: models.Unit) -> bool:
+def _unit_is_hero(
+    unit: models.Unit, roster_unit: models.RosterUnit | None = None
+) -> bool:
     for link in getattr(unit, "abilities", []):
         ability = getattr(link, "ability", None)
         if not ability:
@@ -32,10 +34,11 @@ def _unit_is_hero(unit: models.Unit) -> bool:
             slug = ability_catalog.slug_for_name(ability.name)
         if slug == "bohater":
             return True
-    flags = utils.parse_flags(getattr(unit, "flags", None))
-    for key in flags:
-        slug = ability_catalog.slug_for_name(str(key)) or str(key).casefold()
-        if slug == "bohater":
+    passive_state = costs.compute_passive_state(
+        unit, getattr(roster_unit, "extra_weapons_json", None)
+    )
+    for trait in passive_state.traits:
+        if costs.ability_identifier(trait) == "bohater":
             return True
     return False
 
@@ -126,7 +129,7 @@ def _summaries(roster: models.Roster) -> Iterable[UnitSummary]:
             total_cost=total_cost,
             active_count=active_cnt,
             has_aura=_has_aura(unit),
-            hero_models=models_count if _unit_is_hero(unit) else 0,
+            hero_models=models_count if _unit_is_hero(unit, roster_unit) else 0,
         )
         yield summary
 
