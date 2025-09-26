@@ -1,24 +1,78 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import io
-from datetime import datetime
 import textwrap
+from datetime import datetime
+import zlib
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from sqlalchemy.orm import Session
 
 from .. import models
 from ..db import get_db
 from ..security import get_current_user
+from ..pdf_font_data import PDF_FONT_DATA
 from ..services import costs
 from .rosters import _ensure_roster_view_access, _roster_unit_export_data
 
 router = APIRouter(prefix="/rosters", tags=["export"])
 templates = Jinja2Templates(directory="app/templates")
+
+PDF_BASE_FONT = "DejaVuSans"
+PDF_BOLD_FONT = "DejaVuSans-Bold"
+PDF_ITALIC_FONT = "DejaVuSans"
+_PDF_FONTS_REGISTERED = False
+_PDF_FONT_BYTES: dict[str, bytes] = {}
+
+
+def _ensure_pdf_fonts() -> None:
+    global _PDF_FONTS_REGISTERED
+    if _PDF_FONTS_REGISTERED:
+        return
+    def _font_bytes(font_name: str) -> bytes:
+        cached = _PDF_FONT_BYTES.get(font_name)
+        if cached is not None:
+            return cached
+        encoded = PDF_FONT_DATA.get(font_name)
+        if not encoded:
+            raise HTTPException(
+                status_code=500,
+                detail="Brak zdefiniowanych danych czcionki wymaganej do eksportu PDF.",
+            )
+        try:
+            compressed = base64.b64decode(encoded)
+            raw = zlib.decompress(compressed)
+        except (binascii.Error, zlib.error):
+            raise HTTPException(
+                status_code=500,
+                detail="Nie udało się przygotować czcionek dla eksportu PDF.",
+            )
+        _PDF_FONT_BYTES[font_name] = raw
+        return raw
+
+    regular_bytes = _font_bytes(PDF_BASE_FONT)
+    bold_bytes = _font_bytes(PDF_BOLD_FONT)
+    registered = set(pdfmetrics.getRegisteredFontNames())
+    if PDF_BASE_FONT not in registered:
+        pdfmetrics.registerFont(TTFont(PDF_BASE_FONT, io.BytesIO(regular_bytes)))
+    if PDF_BOLD_FONT not in registered:
+        pdfmetrics.registerFont(TTFont(PDF_BOLD_FONT, io.BytesIO(bold_bytes)))
+    pdfmetrics.registerFontFamily(
+        PDF_BASE_FONT,
+        normal=PDF_BASE_FONT,
+        bold=PDF_BOLD_FONT,
+        italic=PDF_ITALIC_FONT,
+        boldItalic=PDF_BOLD_FONT,
+    )
+    _PDF_FONTS_REGISTERED = True
 
 
 @router.get("/{roster_id}/print", response_class=HTMLResponse)
@@ -101,15 +155,17 @@ def roster_pdf(
     total_cost = costs.roster_total(roster)
     roster_items = [_roster_unit_export_data(ru) for ru in roster.roster_units]
 
+    _ensure_pdf_fonts()
+
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
 
     y = height - 50
-    line_height = 14
+    line_height = 12
     margin = 60
 
-    def wrap_line(text: str, width_limit: int = 95) -> list[str]:
+    def wrap_line(text: str, width_limit: int = 110) -> list[str]:
         if not text:
             return [""]
         wrapped = textwrap.wrap(text, width=width_limit)
@@ -117,20 +173,20 @@ def roster_pdf(
 
     def draw_page_header() -> None:
         nonlocal y
-        pdf.setFont("Helvetica-Bold", 16)
+        pdf.setFont(PDF_BOLD_FONT, 14)
         pdf.drawString(40, y, f"Rozpiska: {roster.name}")
-        y -= 18
-        pdf.setFont("Helvetica", 12)
+        y -= 16
+        pdf.setFont(PDF_BASE_FONT, 10)
         army_name = roster.army.name if roster.army else "---"
         pdf.drawString(40, y, f"Armia: {army_name}")
-        y -= 16
+        y -= 14
         pdf.drawString(40, y, f"Limit punktów: {roster.points_limit or 'brak'}")
-        y -= 16
+        y -= 14
         pdf.drawString(40, y, f"Suma punktów: {total_cost:.1f} pkt")
-        y -= 16
+        y -= 14
         pdf.drawString(40, y, f"Wygenerowano: {generated_at.strftime('%Y-%m-%d %H:%M')} UTC")
-        y -= 20
-        pdf.setFont("Helvetica", 11)
+        y -= 18
+        pdf.setFont(PDF_BASE_FONT, 10)
 
     draw_page_header()
 
@@ -138,18 +194,28 @@ def roster_pdf(
         name = item.get("custom_name") or item.get("unit_name") or "Jednostka"
         header_line = f"{name} × {item.get('count', 0)} (Koszt: {item.get('total_cost', 0.0):.1f} pkt)"
         line_specs: list[tuple[str, float, int, str]] = [
-            ("Helvetica-Bold", 12, 40, header_line)
+            (PDF_BOLD_FONT, 11, 40, header_line)
         ]
         if item.get("custom_name"):
             base_line = f"Jednostka bazowa: {item.get('unit_name') or '-'}"
-            line_specs.append(("Helvetica-Oblique", 11, 40, base_line))
+            line_specs.append((PDF_BASE_FONT, 10, 40, base_line))
         stats_line = (
             f"Jakość: {item.get('quality', '-')} | "
             f"Obrona: {item.get('defense', '-')} | "
             f"Wytrzymałość: {item.get('toughness', '-')}"
         )
-        line_specs.append(("Helvetica", 11, 40, stats_line))
-        line_specs.append(("Helvetica", 11, 40, "Uzbrojenie:"))
+        line_specs.append((PDF_BASE_FONT, 10, 40, stats_line))
+        classification = item.get("classification") or {}
+        label = classification.get("label")
+        if label:
+            summary = classification.get("summary") or ""
+            if summary:
+                text = f"Klasyfikacja: {label} ({summary})"
+            else:
+                text = f"Klasyfikacja: {label}"
+            for segment in wrap_line(text):
+                line_specs.append((PDF_BASE_FONT, 10, 40, segment))
+        line_specs.append((PDF_BASE_FONT, 10, 40, "Uzbrojenie:"))
 
         for weapon in item.get("weapon_details", []):
             weapon_name = weapon.get("name") or "Broń"
@@ -163,7 +229,7 @@ def roster_pdf(
                 f"Ataki: {attacks} | AP: {ap_value} | Cechy: {traits}"
             )
             for segment in wrap_line(weapon_line):
-                line_specs.append(("Helvetica", 11, 50, segment))
+                line_specs.append((PDF_BASE_FONT, 10, 50, segment))
 
         ability_sections: list[tuple[str, list[str]]] = []
         if item.get("passive_labels"):
@@ -174,11 +240,11 @@ def roster_pdf(
             ability_sections.append(("Aury", item["aura_labels"]))
 
         if ability_sections:
-            line_specs.append(("Helvetica", 11, 40, "Zdolności:"))
+            line_specs.append((PDF_BASE_FONT, 10, 40, "Zdolności:"))
             for label, values in ability_sections:
                 base = f"{label}: {', '.join(values)}"
                 for segment in wrap_line(base):
-                    line_specs.append(("Helvetica", 11, 50, segment))
+                    line_specs.append((PDF_BASE_FONT, 10, 50, segment))
 
         required_space = line_height * (len(line_specs) + 1)
         if y - required_space < margin:
@@ -196,7 +262,7 @@ def roster_pdf(
         pdf.showPage()
         y = height - 50
         draw_page_header()
-    pdf.setFont("Helvetica-Bold", 12)
+    pdf.setFont(PDF_BOLD_FONT, 11)
     pdf.drawString(40, y, f"Suma punktów: {total_cost:.1f} pkt")
 
     pdf.showPage()
