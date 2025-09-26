@@ -1057,21 +1057,41 @@ def _loadout_weapon_mix(
     return costs.roster_unit_weapon_mix(snapshot)
 
 
-def _classification_from_mix(mix: dict[str, float]) -> dict[str, Any] | None:
+def _classification_from_mix(
+    mix: dict[str, float],
+    available_slugs: set[str] | None = None,
+) -> dict[str, Any] | None:
     melee = float(mix.get("melee_cost", 0.0) or 0.0)
     ranged = float(mix.get("ranged_cost", 0.0) or 0.0)
     melee = max(melee, 0.0)
     ranged = max(ranged, 0.0)
     if melee <= 0 and ranged <= 0:
         return None
-    if melee > 0 and ranged <= 0:
-        slug = "wojownik"
-    elif ranged > 0 and melee <= 0:
-        slug = "strzelec"
-    elif melee <= ranged:
-        slug = "wojownik"
+    pool = {slug for slug in available_slugs or set() if slug in {"wojownik", "strzelec"}}
+    preferred: str | None = None
+    if ranged > melee:
+        preferred = "strzelec"
+    elif melee > ranged:
+        preferred = "wojownik"
+
+    slug: str | None = None
+    if pool:
+        if preferred and preferred in pool:
+            slug = preferred
+        elif len(pool) == 1:
+            slug = next(iter(pool))
+        elif preferred and preferred not in pool:
+            slug = next(iter(pool - {preferred}), None)
+        elif preferred is None:
+            # Costs are tied – prefer strzelec if available, otherwise wojownik.
+            slug = "strzelec" if "strzelec" in pool else "wojownik"
     else:
-        slug = "strzelec"
+        if preferred:
+            slug = preferred
+        else:
+            slug = "strzelec"
+    if not slug:
+        return None
     label = "Wojownik" if slug == "wojownik" else "Strzelec"
     summary = (
         f"Walka wręcz {int(round(melee))} pkt / Strzelcy {int(round(ranged))} pkt"
@@ -1090,7 +1110,15 @@ def _roster_unit_classification(
     loadout: dict[str, dict[str, int]] | None,
 ) -> dict[str, Any] | None:
     mix = _loadout_weapon_mix(roster_unit, loadout)
-    return _classification_from_mix(mix)
+    available_slugs: set[str] = set()
+    unit = getattr(roster_unit, "unit", None)
+    if unit is not None:
+        flags = utils.parse_flags(getattr(unit, "flags", None))
+        traits = costs.flags_to_ability_list(flags)
+        available_slugs = {
+            costs.ability_identifier(trait) for trait in traits
+        }
+    return _classification_from_mix(mix, available_slugs)
 
 
 def _loadout_weapon_details(
