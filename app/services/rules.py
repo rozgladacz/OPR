@@ -170,14 +170,18 @@ def collect_roster_warnings(roster: models.Roster) -> List[str]:
                 warnings.append(
                     f"[LIMIT] '{summary.name}' kosztuje {summary.total_cost:.0f} pkt (> {int(max_share * 100)}% całości)."
                 )
-            if summary.total_cost < min_unit_cost:
+            if summary.hero_models <= 0 and summary.total_cost < min_unit_cost:
                 warnings.append(
                     f"[LIMIT] '{summary.name}' kosztuje {summary.total_cost:.0f} pkt (< {int(min_unit_cost)} pkt)."
                 )
 
-    if heroes_per_points > 0 and total_cost > 0:
+    if heroes_per_points > 0:
         hero_models = sum(item.hero_models for item in summaries)
-        allowed = max(1, math.floor(total_cost / heroes_per_points))
+        reference_points = points_limit if points_limit > 0 else total_cost
+        if reference_points <= 0:
+            allowed = 1
+        else:
+            allowed = max(1, math.ceil(reference_points / heroes_per_points))
         if hero_models > allowed:
             warnings.append(
                 f"[HERO] Bohaterów {hero_models}, standard: ≤ {allowed} (1/{heroes_per_points} pkt)."

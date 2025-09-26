@@ -44,11 +44,64 @@
             </div>
             <div class="col-md-4">
               <label class="form-label" for="attacks">Ataki</label>
-              <input class="form-control" id="attacks" name="attacks" value="{{ form_values.attacks }}" />
+              <div
+                class="number-picker"
+                data-number-picker
+                data-target-input="attacks"
+                data-selected="{{ form_values.attacks | default('', true) }}"
+                data-mode="float"
+              >
+                <select class="form-select number-picker-select">
+                  <option value="">Domyślne</option>
+                  {% for value in [1, 2, 3, 4, 5, 6] %}
+                  <option value="{{ value }}">{{ value }}</option>
+                  {% endfor %}
+                  <option value="__custom__">Inna…</option>
+                </select>
+                <input
+                  class="form-control mt-2 number-picker-custom d-none"
+                  type="number"
+                  step="0.1"
+                  placeholder="Własna wartość"
+                />
+                <input
+                  class="number-picker-value"
+                  id="attacks"
+                  name="attacks"
+                  type="hidden"
+                  value="{{ form_values.attacks | default('', true) }}"
+                />
+              </div>
             </div>
             <div class="col-md-4">
               <label class="form-label" for="ap">AP</label>
-              <input class="form-control" id="ap" name="ap" value="{{ form_values.ap }}" />
+              <div
+                class="number-picker"
+                data-number-picker
+                data-target-input="ap"
+                data-selected="{{ form_values.ap | default('', true) }}"
+              >
+                <select class="form-select number-picker-select">
+                  <option value="">Domyślne</option>
+                  {% for value in [-1, 0, 1, 2, 3, 4, 5] %}
+                  <option value="{{ value }}">{{ value }}</option>
+                  {% endfor %}
+                  <option value="__custom__">Inne…</option>
+                </select>
+                <input
+                  class="form-control mt-2 number-picker-custom d-none"
+                  type="number"
+                  step="1"
+                  placeholder="Własna wartość"
+                />
+                <input
+                  class="number-picker-value"
+                  id="ap"
+                  name="ap"
+                  type="hidden"
+                  value="{{ form_values.ap | default('', true) }}"
+                />
+              </div>
             </div>
           </div>
           <div class="mb-3">

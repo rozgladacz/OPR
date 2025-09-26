@@ -187,6 +187,7 @@
             data-unit-toughness="{{ ru.unit.toughness }}"
             data-unit-custom-name="{{ ru.custom_name or '' }}"
             data-default-summary="{{ item.default_summary }}"
+            data-unit-flags='{{ ru.unit.flags | default('', true) | e }}'
             data-weapon-options='{{ item.weapon_options | tojson | e }}'
             data-selected-weapon-id="{{ ru.selected_weapon_id or '' }}"
             data-passives='{{ item.passive_items | tojson | e }}'

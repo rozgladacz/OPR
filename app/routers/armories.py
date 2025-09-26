@@ -273,6 +273,14 @@ def _parent_chain(armory: models.Armory) -> list[models.Armory]:
     return chain
 
 
+def _sync_descendant_variants(db: Session, armory: models.Armory) -> None:
+    stack: list[models.Armory] = list(armory.variants)
+    while stack:
+        variant = stack.pop()
+        utils.ensure_armory_variant_sync(db, variant)
+        stack.extend(variant.variants)
+
+
 @router.get("", response_class=HTMLResponse)
 def list_armories(
     request: Request,
@@ -666,6 +674,8 @@ def create_weapon(
     )
     weapon.cached_cost = costs.weapon_cost(weapon)
     db.add(weapon)
+    db.flush()
+    _sync_descendant_variants(db, armory)
     db.commit()
     return RedirectResponse(url=f"/armories/{armory.id}", status_code=303)
 

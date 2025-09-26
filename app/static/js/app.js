@@ -79,6 +79,33 @@ function initAbilityPicker(root) {
     };
   }
 
+  function abilityKey(item) {
+    if (!item) {
+      return '';
+    }
+    const slug = (item.slug || '').toString().trim().toLowerCase();
+    const value = (item.value || '').toString().trim().toLowerCase();
+    const raw = (item.raw || item.label || '').toString().trim().toLowerCase();
+    if (!slug || slug === '__custom__') {
+      return raw ? `custom::${raw}` : '';
+    }
+    if (slug === 'aura' || slug === 'rozkaz') {
+      return `${slug}::${value || raw}`;
+    }
+    if (slug === 'rozprysk' || slug === 'zabojczy') {
+      return slug;
+    }
+    return slug;
+  }
+
+  function isDuplicateAbility(entry) {
+    const key = abilityKey(entry);
+    if (!key) {
+      return false;
+    }
+    return items.some((existing) => abilityKey(existing) === key);
+  }
+
   function parseInitial() {
     if (!hiddenInput || !hiddenInput.value) {
       items = [];
@@ -305,6 +332,17 @@ function initAbilityPicker(root) {
         : null,
       is_default: allowDefaultToggle ? defaultInitial : false,
     });
+    if (isDuplicateAbility(entry)) {
+      if (selectEl) {
+        selectEl.classList.add('is-invalid');
+        selectEl.addEventListener(
+          'change',
+          () => selectEl.classList.remove('is-invalid'),
+          { once: true },
+        );
+      }
+      return;
+    }
     items.push(entry);
     updateHidden();
     renderList();
@@ -335,6 +373,569 @@ function initAbilityPicker(root) {
 function initAbilityPickers() {
   document.querySelectorAll('[data-ability-picker]').forEach((element) => {
     initAbilityPicker(element);
+  });
+}
+
+const RANGE_TABLE = { 0: 0.6, 12: 0.65, 18: 1.0, 24: 1.25, 30: 1.45, 36: 1.55 };
+const AP_BASE = { '-1': 0.8, 0: 1.0, 1: 1.5, 2: 1.9, 3: 2.25, 4: 2.5, 5: 2.65 };
+const AP_NO_COVER = { '-1': 0.1, 0: 0.25, 1: 0.2, 2: 0.15, 3: 0.1, 4: 0.1, 5: 0.05 };
+const AP_LANCE = { '-1': 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05 };
+const AP_CORROSIVE = { '-1': 0.05, 0: 0.05, 1: 0.1, 2: 0.25, 3: 0.4, 4: 0.5, 5: 0.55 };
+const BLAST_MULTIPLIER = { 2: 1.95, 3: 2.8, 6: 4.3 };
+const DEADLY_MULTIPLIER = { 2: 1.9, 3: 2.6, 6: 3.8 };
+const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
+
+function splitTraits(text) {
+  if (!text) {
+    return [];
+  }
+  if (Array.isArray(text)) {
+    return text;
+  }
+  return String(text)
+    .split(/[,;]/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+function normalizeName(text) {
+  if (text === undefined || text === null) {
+    return '';
+  }
+  let value = String(text);
+  try {
+    value = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  } catch (err) {
+    value = value
+      .replace(/ą/g, 'a')
+      .replace(/ć/g, 'c')
+      .replace(/ę/g, 'e')
+      .replace(/ł/g, 'l')
+      .replace(/ń/g, 'n')
+      .replace(/ó/g, 'o')
+      .replace(/ś/g, 's')
+      .replace(/ż/g, 'z')
+      .replace(/ź/g, 'z');
+  }
+  value = value.replace(/[-_]/g, ' ');
+  value = value.replace(/\s+/g, ' ').trim();
+  return value.toLowerCase();
+}
+
+function extractNumber(text) {
+  if (text === undefined || text === null) {
+    return 0;
+  }
+  const match = String(text).match(/[0-9]+(?:[.,][0-9]+)?/);
+  if (!match) {
+    return 0;
+  }
+  return Number(match[0].replace(',', '.'));
+}
+
+function abilityIdentifier(text) {
+  if (text === undefined || text === null) {
+    return '';
+  }
+  let base = String(text).trim();
+  if (!base) {
+    return '';
+  }
+  ['(', '=', ':'].forEach((separator) => {
+    if (base.includes(separator)) {
+      base = base.split(separator, 1)[0].trim();
+    }
+  });
+  base = base.replace(/[“”]/g, '"');
+  if (base.endsWith('?')) {
+    base = base.slice(0, -1);
+  }
+  return normalizeName(base);
+}
+
+function passiveIdentifier(text) {
+  const ident = abilityIdentifier(text);
+  if (ident) {
+    return ident;
+  }
+  const norm = normalizeName(text);
+  if (norm.endsWith('?')) {
+    return norm.slice(0, -1);
+  }
+  return norm;
+}
+
+function parseFlagString(text) {
+  if (!text) {
+    return {};
+  }
+  const entries = String(text)
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  const result = {};
+  entries.forEach((entry) => {
+    const separatorIndex = entry.indexOf('=');
+    if (separatorIndex >= 0) {
+      const key = entry.slice(0, separatorIndex).trim();
+      const value = entry.slice(separatorIndex + 1).trim();
+      if (key) {
+        result[key] = value;
+      }
+    } else {
+      result[entry] = true;
+    }
+  });
+  return result;
+}
+
+function flagsToAbilityList(flags) {
+  const abilities = [];
+  Object.entries(flags || {}).forEach(([key, value]) => {
+    if (key === undefined || key === null) {
+      return;
+    }
+    let name = String(key).trim();
+    if (!name) {
+      return;
+    }
+    if (name.endsWith('?')) {
+      name = name.slice(0, -1);
+    }
+    const slug = abilityIdentifier(name) || normalizeName(name);
+    if (typeof value === 'boolean') {
+      if (value) {
+        abilities.push(slug);
+      }
+      return;
+    }
+    if (value === null || value === undefined) {
+      abilities.push(slug);
+      return;
+    }
+    const trimmed = String(value).trim();
+    if (!trimmed) {
+      abilities.push(slug);
+      return;
+    }
+    const lowered = trimmed.toLowerCase();
+    if (lowered === 'true' || lowered === 'yes') {
+      abilities.push(slug);
+      return;
+    }
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      abilities.push(slug);
+    }
+  });
+  return abilities;
+}
+
+function lookupWithNearest(table, key) {
+  if (table === undefined || table === null) {
+    return 0;
+  }
+  const numericKey = Number(key);
+  if (Number.isFinite(numericKey) && Object.prototype.hasOwnProperty.call(table, numericKey)) {
+    return Number(table[numericKey]);
+  }
+  const entries = Object.keys(table).map((entry) => Number(entry));
+  if (!entries.length) {
+    return 0;
+  }
+  const target = Number.isFinite(numericKey) ? numericKey : entries[0];
+  let nearest = entries[0];
+  let minDiff = Math.abs(nearest - target);
+  entries.forEach((entry) => {
+    const diff = Math.abs(entry - target);
+    if (diff < minDiff) {
+      nearest = entry;
+      minDiff = diff;
+    }
+  });
+  return Number(table[nearest]);
+}
+
+function rangeMultiplier(rangeValue) {
+  const numeric = Number(rangeValue);
+  if (Number.isFinite(numeric) && Object.prototype.hasOwnProperty.call(RANGE_TABLE, numeric)) {
+    return RANGE_TABLE[numeric];
+  }
+  const keys = Object.keys(RANGE_TABLE).map((entry) => Number(entry));
+  if (!keys.length) {
+    return 1;
+  }
+  const target = Number.isFinite(numeric) ? numeric : keys[0];
+  let nearest = keys[0];
+  let minDiff = Math.abs(nearest - target);
+  keys.forEach((entry) => {
+    const diff = Math.abs(entry - target);
+    if (diff < minDiff) {
+      nearest = entry;
+      minDiff = diff;
+    }
+  });
+  return RANGE_TABLE[nearest];
+}
+
+function normalizeRangeValue(value) {
+  if (value === undefined || value === null) {
+    return 0;
+  }
+  if (typeof value === 'number') {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return 0;
+    }
+    return Math.round(numeric);
+  }
+  const text = String(value).trim();
+  if (!text) {
+    return 0;
+  }
+  const lowered = text.toLowerCase();
+  if (['wręcz', 'wrecz', 'melee', 'm'].includes(lowered)) {
+    return 0;
+  }
+  const numeric = extractNumber(text);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return 0;
+  }
+  return Math.round(numeric);
+}
+
+function buildTraitVariants(unitTraits) {
+  const base = Array.isArray(unitTraits) ? unitTraits.slice() : [];
+  const identifiers = new Set(base.map((trait) => abilityIdentifier(trait)));
+  if (![...identifiers].some((slug) => CLASSIFICATION_SLUGS.has(slug))) {
+    return [base];
+  }
+  const withoutClassification = base.filter((trait) => !CLASSIFICATION_SLUGS.has(abilityIdentifier(trait)));
+  const variants = [withoutClassification];
+  if (identifiers.has('wojownik')) {
+    variants.push([...withoutClassification, 'wojownik']);
+  }
+  if (identifiers.has('strzelec')) {
+    variants.push([...withoutClassification, 'strzelec']);
+  }
+  return variants;
+}
+
+function buildWeaponFlags(baseFlags, passiveItems, passiveState) {
+  const result = { ...(baseFlags || {}) };
+  const identifierKeys = new Map();
+  Object.keys(baseFlags || {}).forEach((key) => {
+    const ident = passiveIdentifier(key);
+    if (!ident) {
+      return;
+    }
+    if (!identifierKeys.has(ident)) {
+      identifierKeys.set(ident, []);
+    }
+    identifierKeys.get(ident).push(key);
+  });
+  const stateMap = passiveState instanceof Map ? passiveState : new Map();
+  (Array.isArray(passiveItems) ? passiveItems : []).forEach((entry) => {
+    if (!entry || !entry.slug) {
+      return;
+    }
+    const slug = String(entry.slug);
+    const ident = passiveIdentifier(slug);
+    const defaultCount = Number(entry.default_count ?? (entry.is_default ? 1 : 0));
+    const defaultFlag = Number.isFinite(defaultCount) && defaultCount > 0 ? 1 : 0;
+    const stored = stateMap.get(slug);
+    const selectedFlag = Number.isFinite(stored) ? (stored > 0 ? 1 : 0) : defaultFlag;
+    const enabled = selectedFlag > 0;
+    const keys = identifierKeys.get(ident) || [];
+    if (enabled) {
+      if (keys.length) {
+        const key = keys[0];
+        const original = baseFlags ? baseFlags[key] : undefined;
+        if (typeof original === 'boolean') {
+          result[key] = true;
+        } else if (original === null || original === '' || original === 0) {
+          result[key] = true;
+        } else if (original !== undefined) {
+          result[key] = original;
+        } else {
+          result[key] = true;
+        }
+      } else {
+        result[slug] = true;
+      }
+    } else if (keys.length) {
+      keys.forEach((key) => {
+        delete result[key];
+      });
+    } else {
+      delete result[slug];
+    }
+  });
+  return result;
+}
+
+function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unitTraits, allowAssaultExtra = true) {
+  let chance = 7;
+  const attacksValue = Math.max(Number(attacks) || 0, 0);
+  const apValue = Number.isFinite(Number(ap)) ? Number(ap) : 0;
+  const normalizedRange = normalizeRangeValue(rangeValue);
+  const rangeMod = rangeMultiplier(normalizedRange);
+  let apMod = lookupWithNearest(AP_BASE, apValue);
+  let mult = 1;
+  let q = Number(quality);
+  if (!Number.isFinite(q)) {
+    q = 4;
+  }
+  const traitSet = new Set((Array.isArray(unitTraits) ? unitTraits : []).map((trait) => abilityIdentifier(trait)));
+  const melee = normalizedRange === 0;
+
+  if (melee && traitSet.has('furia')) {
+    chance += 0.65;
+  }
+  if (!melee && traitSet.has('nieustepliwy')) {
+    chance += 0.65;
+  }
+  if (!melee && traitSet.has('wojownik')) {
+    mult *= 0.5;
+  }
+  if (melee && traitSet.has('strzelec')) {
+    mult *= 0.5;
+  }
+  if (!melee && traitSet.has('zle_strzela')) {
+    q = 5;
+  }
+  if (!melee && traitSet.has('dobrze_strzela')) {
+    q = 4;
+  }
+
+  let assault = false;
+  let overcharge = false;
+  const traitList = Array.isArray(weaponTraits) ? weaponTraits : splitTraits(weaponTraits);
+
+  traitList.forEach((trait) => {
+    const norm = normalizeName(trait);
+    if (!norm) {
+      return;
+    }
+    if (norm.startsWith('rozprysk') || norm.startsWith('blast')) {
+      const value = Math.round(extractNumber(trait));
+      if (BLAST_MULTIPLIER[value]) {
+        mult *= BLAST_MULTIPLIER[value];
+      }
+      return;
+    }
+    if (norm.startsWith('zabojczy') || norm.startsWith('deadly')) {
+      const value = Math.round(extractNumber(trait));
+      if (DEADLY_MULTIPLIER[value]) {
+        mult *= DEADLY_MULTIPLIER[value];
+      }
+      return;
+    }
+    if (['rozrywajacy', 'rozrywajaca', 'rozrwyajaca', 'rending'].includes(norm)) {
+      chance += 1;
+    } else if (['lanca', 'lance'].includes(norm)) {
+      chance += 0.65;
+    } else if (['namierzanie', 'lock on'].includes(norm)) {
+      chance += 0.35;
+      mult *= 1.1;
+      apMod += lookupWithNearest(AP_NO_COVER, apValue);
+    } else if (['ciezki', 'heavy'].includes(norm)) {
+      chance -= 0.35;
+    } else if (['impet', 'impact'].includes(norm)) {
+      apMod += lookupWithNearest(AP_LANCE, apValue);
+    } else if (['bez oslon', 'bez oslony', 'no cover'].includes(norm)) {
+      apMod += lookupWithNearest(AP_NO_COVER, apValue);
+    } else if (['zracy', 'corrosive'].includes(norm)) {
+      apMod += lookupWithNearest(AP_CORROSIVE, apValue);
+    } else if (['niebezposredni', 'indirect'].includes(norm)) {
+      mult *= 1.2;
+    } else if (['zuzywalny', 'limited'].includes(norm)) {
+      mult *= 0.5;
+    } else if (['precyzyjny', 'precise'].includes(norm)) {
+      mult *= 1.5;
+    } else if (['niezawodny', 'niezawodna', 'reliable'].includes(norm)) {
+      q = 2;
+    } else if (['szturmowy', 'szturmowa', 'assault'].includes(norm)) {
+      assault = true;
+    } else if (
+      ['bez regeneracji', 'bez regegenracji', 'no regen', 'no regeneration'].includes(norm)
+    ) {
+      // no modifier
+    } else if (['podkrecenie', 'overcharge', 'overclock'].includes(norm)) {
+      overcharge = true;
+    }
+  });
+
+  chance = Math.max(chance - q, 1);
+  let cost = attacksValue * 2 * rangeMod * chance * apMod * mult;
+
+  if (overcharge && (!assault || normalizedRange !== 0)) {
+    cost *= 1.4;
+  }
+
+  if (assault && allowAssaultExtra && normalizedRange !== 0) {
+    const extra = weaponCostInternal(quality, 0, attacksValue, apValue, traitList, unitTraits, false);
+    cost += extra;
+  }
+
+  return cost;
+}
+
+function buildWeaponCostMap(options, unitQuality, baseFlags, passiveItems, passiveState) {
+  const result = new Map();
+  const weaponFlags = buildWeaponFlags(baseFlags, passiveItems, passiveState);
+  const unitTraits = flagsToAbilityList(weaponFlags);
+  const variants = buildTraitVariants(unitTraits);
+  const quality = Number.isFinite(Number(unitQuality)) ? Number(unitQuality) : 4;
+  (Array.isArray(options) ? options : []).forEach((option) => {
+    if (!option || option.id === undefined || option.id === null) {
+      return;
+    }
+    const weaponId = Number(option.id);
+    if (!Number.isFinite(weaponId)) {
+      return;
+    }
+    const attacks = option.attacks ?? option.display_attacks ?? 0;
+    const ap = option.ap ?? 0;
+    const traits = splitTraits(option.traits);
+    let bestCost = 0;
+    variants.forEach((variant) => {
+      const value = weaponCostInternal(quality, option.range, attacks, ap, traits, variant, true);
+      if (Number.isFinite(value) && value > bestCost) {
+        bestCost = value;
+      }
+    });
+    if (Number.isFinite(bestCost)) {
+      const rounded = Math.max(0, Math.round(bestCost * 100) / 100);
+      result.set(weaponId, rounded);
+    }
+  });
+  return result;
+}
+
+function initNumberPicker(root) {
+  const selectEl = root.querySelector('.number-picker-select');
+  const customInput = root.querySelector('.number-picker-custom');
+  const hiddenInput = root.querySelector('.number-picker-value');
+  const initialValue = root.dataset.selected || '';
+
+  const syncHidden = (value) => {
+    const text = value !== undefined && value !== null ? String(value) : '';
+    if (hiddenInput) {
+      hiddenInput.value = text;
+    }
+    root.dataset.selected = text;
+  };
+
+  const hideCustom = () => {
+    if (customInput) {
+      customInput.classList.add('d-none');
+      customInput.value = '';
+    }
+  };
+
+  const showCustom = () => {
+    if (customInput) {
+      customInput.classList.remove('d-none');
+    }
+  };
+
+  const findMatchingOption = (value) => {
+    if (!selectEl) {
+      return '';
+    }
+    const textValue = String(value).trim();
+    if (!textValue) {
+      return '';
+    }
+    const numeric = Number(textValue);
+    let matched = '';
+    Array.from(selectEl.options || []).forEach((option) => {
+      if (!option.value || option.value === '__custom__') {
+        if (!matched && option.value === textValue) {
+          matched = option.value;
+        }
+        return;
+      }
+      if (option.value === textValue) {
+        matched = option.value;
+        return;
+      }
+      const optionNumeric = Number(option.value);
+      if (Number.isFinite(optionNumeric) && Number.isFinite(numeric) && optionNumeric === numeric) {
+        matched = option.value;
+      }
+    });
+    return matched;
+  };
+
+  const setValue = (rawValue) => {
+    const textValue = rawValue !== undefined && rawValue !== null ? String(rawValue).trim() : '';
+    if (!textValue) {
+      if (selectEl) {
+        selectEl.value = '';
+      }
+      hideCustom();
+      syncHidden('');
+      return;
+    }
+    const matched = findMatchingOption(textValue);
+    if (matched) {
+      if (selectEl) {
+        selectEl.value = matched;
+      }
+      hideCustom();
+      syncHidden(matched);
+      return;
+    }
+    if (selectEl) {
+      selectEl.value = '__custom__';
+    }
+    showCustom();
+    if (customInput) {
+      customInput.value = textValue;
+    }
+    syncHidden(textValue);
+  };
+
+  if (selectEl) {
+    selectEl.addEventListener('change', () => {
+      const value = selectEl.value;
+      if (value === '__custom__') {
+        showCustom();
+        if (customInput && !customInput.value) {
+          customInput.focus();
+        }
+        syncHidden(customInput ? customInput.value || '' : '');
+      } else if (value === '') {
+        hideCustom();
+        syncHidden('');
+      } else {
+        hideCustom();
+        syncHidden(value);
+      }
+    });
+  }
+
+  if (customInput) {
+    customInput.addEventListener('input', () => {
+      if (selectEl && selectEl.value !== '__custom__') {
+        selectEl.value = '__custom__';
+      }
+      syncHidden(customInput.value || '');
+    });
+  }
+
+  setValue(initialValue);
+
+  root.numberPicker = {
+    setValue: (value) => setValue(value),
+  };
+}
+
+function initNumberPickers() {
+  document.querySelectorAll('[data-number-picker]').forEach((element) => {
+    initNumberPicker(element);
   });
 }
 
@@ -498,13 +1099,23 @@ function initWeaponDefaults() {
       if (rangePicker && rangePicker.rangePicker && typeof rangePicker.rangePicker.setValue === 'function') {
         rangePicker.rangePicker.setValue(defaults.range || '');
       }
-      const attacksInput = form.querySelector('#attacks');
-      if (attacksInput) {
-        attacksInput.value = defaults.attacks || '';
+      const attacksPicker = form.querySelector('[data-number-picker][data-target-input="attacks"]');
+      if (attacksPicker && attacksPicker.numberPicker && typeof attacksPicker.numberPicker.setValue === 'function') {
+        attacksPicker.numberPicker.setValue(defaults.attacks || '');
+      } else {
+        const attacksInput = form.querySelector('#attacks');
+        if (attacksInput) {
+          attacksInput.value = defaults.attacks || '';
+        }
       }
-      const apInput = form.querySelector('#ap');
-      if (apInput) {
-        apInput.value = defaults.ap || '';
+      const apPicker = form.querySelector('[data-number-picker][data-target-input="ap"]');
+      if (apPicker && apPicker.numberPicker && typeof apPicker.numberPicker.setValue === 'function') {
+        apPicker.numberPicker.setValue(defaults.ap || '');
+      } else {
+        const apInput = form.querySelector('#ap');
+        if (apInput) {
+          apInput.value = defaults.ap || '';
+        }
       }
       const notesInput = form.querySelector('#notes');
       if (notesInput) {
@@ -754,22 +1365,24 @@ function renderPassiveEditor(container, items, stateMap, modelCount, editable, o
     const cost = document.createElement('span');
     cost.className = 'roster-ability-cost';
     const costValue = Number(entry.cost);
-    const defaultFlag = Number(entry.default_count ?? (entry.is_default ? 1 : 0)) > 0 ? 1 : 0;
-    const computeDeltaText = (selectedFlag) => {
-      if (!Number.isFinite(costValue) || costValue === 0) {
-        return 'Δ 0 pkt';
-      }
-      const diff = selectedFlag - defaultFlag;
-      if (diff === 0) {
-        return 'Δ 0 pkt';
-      }
-      const multiplier = Math.max(totalModels, 1);
-      const delta = costValue * diff * multiplier;
-      const prefix = delta > 0 ? '+' : '';
-      return `Δ ${prefix}${formatPoints(delta)} pkt`;
-    };
+    const multiplier = Math.max(totalModels, 1);
+    const baseDelta = Number.isFinite(costValue) ? costValue * multiplier : 0;
+    const baseFlagRaw = Number(entry.default_count ?? (entry.is_default ? 1 : 0));
+    const baseFlag = Number.isFinite(baseFlagRaw) && baseFlagRaw > 0 ? 1 : 0;
     let currentFlag = currentValue > 0 ? 1 : 0;
-    cost.textContent = computeDeltaText(currentFlag);
+    const formatDeltaText = () => {
+      if (!Number.isFinite(baseDelta) || Math.abs(baseDelta) < 1e-9) {
+        return 'Δ 0 pkt';
+      }
+      const diff = currentFlag - baseFlag;
+      if (diff === 0) {
+        return `Δ +${formatPoints(Math.abs(baseDelta))} pkt`;
+      }
+      const deltaValue = baseDelta * diff;
+      const prefix = deltaValue > 0 ? '+' : '-';
+      return `Δ ${prefix}${formatPoints(Math.abs(deltaValue))} pkt`;
+    };
+    cost.textContent = formatDeltaText();
     info.appendChild(cost);
     row.appendChild(info);
 
@@ -795,7 +1408,7 @@ function renderPassiveEditor(container, items, stateMap, modelCount, editable, o
         const flag = input.checked ? 1 : 0;
         stateMap.set(slug, flag);
         currentFlag = flag;
-        cost.textContent = computeDeltaText(currentFlag);
+        cost.textContent = formatDeltaText();
         updateLabel();
         if (typeof onChange === 'function') {
           onChange();
@@ -1175,7 +1788,15 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
   return true;
 }
 
-function computeTotalCost(basePerModel, modelCount, weaponOptions, state, costMaps, passiveItems) {
+function computeTotalCost(
+  basePerModel,
+  modelCount,
+  weaponOptions,
+  state,
+  costMaps,
+  passiveItems,
+  weaponCostOverrides
+) {
   const count = Math.max(Number(modelCount) || 0, 0);
   if (count <= 0) {
     return 0;
@@ -1193,6 +1814,15 @@ function computeTotalCost(basePerModel, modelCount, weaponOptions, state, costMa
     return stateMode === 'total' ? numeric : numeric * count;
   };
   const weaponCostMap = new Map();
+  if (weaponCostOverrides instanceof Map) {
+    weaponCostOverrides.forEach((value, key) => {
+      const weaponId = Number(key);
+      const numericValue = Number(value);
+      if (Number.isFinite(weaponId) && Number.isFinite(numericValue)) {
+        weaponCostMap.set(weaponId, numericValue);
+      }
+    });
+  }
   const safeOptions = Array.isArray(weaponOptions) ? weaponOptions : [];
   safeOptions.forEach((option) => {
     if (!option || option.id === undefined || option.id === null) {
@@ -1200,7 +1830,11 @@ function computeTotalCost(basePerModel, modelCount, weaponOptions, state, costMa
     }
     const weaponId = Number(option.id);
     const costValue = Number(option.cost);
-    if (Number.isFinite(weaponId) && Number.isFinite(costValue)) {
+    if (
+      Number.isFinite(weaponId)
+      && Number.isFinite(costValue)
+      && !weaponCostMap.has(weaponId)
+    ) {
       weaponCostMap.set(weaponId, costValue);
     }
   });
@@ -1373,6 +2007,9 @@ function initRosterEditor() {
   let currentActives = [];
   let currentAuras = [];
   let currentPassives = [];
+  let currentBaseFlags = {};
+  let currentQuality = 4;
+  let currentWeaponCostMap = new Map();
   let abilityCostMap = { active: new Map(), passive: new Map() };
   let baseCostPerModel = 0;
   let currentClassification = null;
@@ -1876,6 +2513,7 @@ function initRosterEditor() {
       loadoutState,
       abilityCostMap,
       currentPassives,
+      currentWeaponCostMap,
     );
     const formatted = formatPoints(total);
     if (costValueEl) {
@@ -1898,6 +2536,7 @@ function initRosterEditor() {
     if (loadoutState) {
       loadoutState.mode = 'total';
     }
+    renderEditors();
     if (loadoutInput && loadoutState) {
       loadoutInput.value = serializeLoadoutState(loadoutState);
     }
@@ -1919,10 +2558,31 @@ function initRosterEditor() {
   }
 
   function renderEditors() {
+    const passiveState = loadoutState && loadoutState.passive instanceof Map ? loadoutState.passive : new Map();
+    currentWeaponCostMap = buildWeaponCostMap(
+      currentWeapons,
+      currentQuality,
+      currentBaseFlags,
+      currentPassives,
+      passiveState,
+    );
+    const decoratedWeapons = Array.isArray(currentWeapons)
+      ? currentWeapons.map((option) => {
+          if (!option || option.id === undefined || option.id === null) {
+            return option;
+          }
+          const weaponId = Number(option.id);
+          const override = currentWeaponCostMap.get(weaponId);
+          if (!Number.isFinite(override)) {
+            return option;
+          }
+          return { ...option, cost: override };
+        })
+      : [];
     const hasPassives = renderPassiveEditor(
       passiveContainer,
       currentPassives,
-      loadoutState.passive,
+      passiveState,
       currentCount,
       isEditable,
       handleStateChange,
@@ -1948,7 +2608,7 @@ function initRosterEditor() {
     toggleSectionVisibility(auraContainer, hasAuras);
     const hasWeapons = renderWeaponEditor(
       loadoutContainer,
-      currentWeapons,
+      decoratedWeapons,
       loadoutState.weapons,
       currentCount,
       isEditable,
@@ -2008,9 +2668,12 @@ function initRosterEditor() {
     currentActives = parseList(item.getAttribute('data-actives'));
     currentAuras = parseList(item.getAttribute('data-auras'));
     currentWeapons = parseList(item.getAttribute('data-weapon-options'));
+    currentBaseFlags = parseFlagString(item.getAttribute('data-unit-flags'));
 
     const unitName = item.getAttribute('data-unit-name') || 'Jednostka';
     const quality = item.getAttribute('data-unit-quality') || '-';
+    const qualityNumeric = Number(quality);
+    currentQuality = Number.isFinite(qualityNumeric) ? qualityNumeric : 4;
     const defense = item.getAttribute('data-unit-defense') || '-';
     const toughness = item.getAttribute('data-unit-toughness') || '-';
     const countValue = Number(item.getAttribute('data-unit-count') || '1');
@@ -2069,7 +2732,6 @@ function initRosterEditor() {
     baseCostPerModel = Number.isFinite(baseCostValue) && baseCostValue >= 0 ? baseCostValue : 0;
 
     ignoreNextSave = true;
-    renderEditors();
     handleStateChange();
 
     if (form && rosterUnitId) {
@@ -2100,7 +2762,6 @@ function initRosterEditor() {
       }
       syncDefaultEquipment(currentCount, nextValue);
       currentCount = nextValue;
-      renderEditors();
       handleStateChange();
     });
   }
@@ -2146,6 +2807,7 @@ function initRosterEditor() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initAbilityPickers();
+  initNumberPickers();
   initRangePickers();
   initWeaponPickers();
   initRosterEditor();
