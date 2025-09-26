@@ -1322,7 +1322,15 @@ function formatPoints(value) {
   return number.toLocaleString('pl-PL', baseOptions);
 }
 
-function renderPassiveEditor(container, items, stateMap, modelCount, editable, onChange) {
+function renderPassiveEditor(
+  container,
+  items,
+  stateMap,
+  modelCount,
+  editable,
+  onChange,
+  getDelta,
+) {
   if (!container) {
     return false;
   }
@@ -1366,19 +1374,41 @@ function renderPassiveEditor(container, items, stateMap, modelCount, editable, o
     cost.className = 'roster-ability-cost';
     const costValue = Number(entry.cost);
     const multiplier = Math.max(totalModels, 1);
-    const baseDelta = Number.isFinite(costValue) ? costValue * multiplier : 0;
-    const baseFlagRaw = Number(entry.default_count ?? (entry.is_default ? 1 : 0));
-    const baseFlag = Number.isFinite(baseFlagRaw) && baseFlagRaw > 0 ? 1 : 0;
     let currentFlag = currentValue > 0 ? 1 : 0;
+    const computeDelta = () => {
+      if (typeof getDelta === 'function') {
+        try {
+          const context = {
+            slug,
+            entry,
+            currentFlag,
+            models: totalModels,
+          };
+          const deltaResult = getDelta(context);
+          if (deltaResult && typeof deltaResult === 'object' && Object.prototype.hasOwnProperty.call(deltaResult, 'diff')) {
+            const diffValue = Number(deltaResult.diff);
+            if (Number.isFinite(diffValue)) {
+              return diffValue;
+            }
+          }
+          const numericResult = Number(deltaResult);
+          if (Number.isFinite(numericResult)) {
+            return numericResult;
+          }
+        } catch (err) {
+          console.warn('Nie udało się obliczyć kosztu zdolności pasywnej', slug, err);
+        }
+      }
+      if (Number.isFinite(costValue)) {
+        return costValue * multiplier;
+      }
+      return Number.NaN;
+    };
+    let deltaValue = computeDelta();
     const formatDeltaText = () => {
-      if (!Number.isFinite(baseDelta) || Math.abs(baseDelta) < 1e-9) {
+      if (!Number.isFinite(deltaValue) || Math.abs(deltaValue) < 1e-9) {
         return 'Δ 0 pkt';
       }
-      const diff = currentFlag - baseFlag;
-      if (diff === 0) {
-        return `Δ +${formatPoints(Math.abs(baseDelta))} pkt`;
-      }
-      const deltaValue = baseDelta * diff;
       const prefix = deltaValue > 0 ? '+' : '-';
       return `Δ ${prefix}${formatPoints(Math.abs(deltaValue))} pkt`;
     };
@@ -1408,6 +1438,7 @@ function renderPassiveEditor(container, items, stateMap, modelCount, editable, o
         const flag = input.checked ? 1 : 0;
         stateMap.set(slug, flag);
         currentFlag = flag;
+        deltaValue = computeDelta();
         cost.textContent = formatDeltaText();
         updateLabel();
         if (typeof onChange === 'function') {
@@ -1517,6 +1548,31 @@ function createLoadoutState(rawLoadout) {
     });
   }
   return state;
+}
+
+function cloneLoadoutState(state) {
+  const cloneSection = (section) => {
+    if (section instanceof Map) {
+      return new Map(section);
+    }
+    return new Map();
+  };
+  if (!state || typeof state !== 'object') {
+    return {
+      weapons: new Map(),
+      active: new Map(),
+      aura: new Map(),
+      passive: new Map(),
+      mode: 'per_model',
+    };
+  }
+  return {
+    weapons: cloneSection(state.weapons),
+    active: cloneSection(state.active),
+    aura: cloneSection(state.aura),
+    passive: cloneSection(state.passive),
+    mode: state.mode === 'total' ? 'total' : 'per_model',
+  };
 }
 
 function serializeLoadoutState(state) {
@@ -2566,6 +2622,40 @@ function initRosterEditor() {
       currentPassives,
       passiveState,
     );
+    const computePassiveDeltaForSlug = (slug) => {
+      if (!slug) {
+        return Number.NaN;
+      }
+      const normalizedSlug = String(slug);
+      const evaluateTotal = (flag) => {
+        const nextState = cloneLoadoutState(loadoutState);
+        const passiveClone = nextState.passive instanceof Map ? nextState.passive : new Map();
+        passiveClone.set(normalizedSlug, flag > 0 ? 1 : 0);
+        nextState.passive = passiveClone;
+        const nextWeaponMap = buildWeaponCostMap(
+          currentWeapons,
+          currentQuality,
+          currentBaseFlags,
+          currentPassives,
+          passiveClone,
+        );
+        return computeTotalCost(
+          baseCostPerModel,
+          currentCount,
+          currentWeapons,
+          nextState,
+          abilityCostMap,
+          currentPassives,
+          nextWeaponMap,
+        );
+      };
+      const enabledTotal = evaluateTotal(1);
+      const disabledTotal = evaluateTotal(0);
+      if (!Number.isFinite(enabledTotal) || !Number.isFinite(disabledTotal)) {
+        return Number.NaN;
+      }
+      return enabledTotal - disabledTotal;
+    };
     const decoratedWeapons = Array.isArray(currentWeapons)
       ? currentWeapons.map((option) => {
           if (!option || option.id === undefined || option.id === null) {
@@ -2586,6 +2676,12 @@ function initRosterEditor() {
       currentCount,
       isEditable,
       handleStateChange,
+      (context) => {
+        if (!context || !context.slug) {
+          return Number.NaN;
+        }
+        return computePassiveDeltaForSlug(context.slug);
+      },
     );
     toggleSectionVisibility(passiveContainer, hasPassives);
     const hasActives = renderAbilityEditor(
