@@ -615,8 +615,7 @@ def _weapon_cost(
         elif norm in {"szturmowy", "szturmowa", "assault"}:
             assault = True
         elif norm in {"bez regeneracji", "bez regegenracji", "no regen", "no regeneration"}:
-            # Brak regeneracji nie zwiększa kosztu broni – cecha przeniesiona z modelu.
-            continue
+             mult *= 1.5
         elif norm in {"podkrecenie", "overcharge", "overclock"}:
             overcharge = True
 
@@ -636,8 +635,13 @@ def _weapon_cost(
             unit_traits,
             allow_assault_extra=False,
         )
-        cost += extra
-
+        if overcharge:
+            cost += extra + max(cost, extra) * 0.4
+        else:
+            cost += extra
+    else:
+        if overcharge:
+            cost *= 1.4
     return cost
 
 
@@ -652,40 +656,19 @@ def weapon_cost(
         unit_traits = []
     else:
         unit_traits = list(unit_flags)
-    classification_slugs = {"wojownik", "strzelec"}
-    trait_identifiers = {ability_identifier(trait) for trait in unit_traits}
-    trait_variants: list[list[str]] = [unit_traits]
-    if trait_identifiers & classification_slugs:
-        base_without = [
-            trait
-            for trait in unit_traits
-            if ability_identifier(trait) not in classification_slugs
-        ]
-        trait_variants = [base_without]
-        if "wojownik" in trait_identifiers:
-            trait_variants.append(base_without + ["wojownik"])
-        if "strzelec" in trait_identifiers:
-            trait_variants.append(base_without + ["strzelec"])
     range_value = normalize_range_value(weapon.effective_range)
     traits = split_traits(weapon.effective_tags)
     attacks_value = weapon.effective_attacks
     cost: float | None = None
-    prefer_min = bool(trait_identifiers & classification_slugs)
-    for variant in trait_variants:
-        candidate = _weapon_cost(
-            unit_quality,
-            range_value,
-            attacks_value,
-            weapon.effective_ap,
-            traits,
-            variant,
-        )
-        if cost is None:
-            cost = candidate
-        elif prefer_min:
-            cost = min(cost, candidate)
-        else:
-            cost = max(cost, candidate)
+    cost = _weapon_cost(
+        unit_quality,
+        range_value,
+        attacks_value,
+        weapon.effective_ap,
+        traits,
+        unit_traits,
+    )
+
     if cost is None:
         cost = 0.0
     cost = max(cost, 0.0)
