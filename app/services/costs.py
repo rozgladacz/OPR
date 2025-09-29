@@ -669,19 +669,25 @@ def weapon_cost(
     range_value = normalize_range_value(weapon.effective_range)
     traits = split_traits(weapon.effective_tags)
     attacks_value = weapon.effective_attacks
-    cost = 0.0
+    cost: float | None = None
+    prefer_min = bool(trait_identifiers & classification_slugs)
     for variant in trait_variants:
-        cost = max(
-            cost,
-            _weapon_cost(
-                unit_quality,
-                range_value,
-                attacks_value,
-                weapon.effective_ap,
-                traits,
-                variant,
-            ),
+        candidate = _weapon_cost(
+            unit_quality,
+            range_value,
+            attacks_value,
+            weapon.effective_ap,
+            traits,
+            variant,
         )
+        if cost is None:
+            cost = candidate
+        elif prefer_min:
+            cost = min(cost, candidate)
+        else:
+            cost = max(cost, candidate)
+    if cost is None:
+        cost = 0.0
     cost = max(cost, 0.0)
     return round(cost, 2)
   
