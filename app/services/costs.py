@@ -107,6 +107,46 @@ def flags_to_ability_list(flags: dict | None) -> list[str]:
     return abilities
 
 
+def ability_choices(ability: str | None) -> list[str]:
+    identifier = ability_identifier(ability)
+    if not identifier:
+        return []
+    normalized = identifier.replace("\\", "/")
+    if "/" not in normalized:
+        return [identifier]
+    options: list[str] = []
+    for part in normalized.split("/"):
+        part = part.strip()
+        if not part:
+            continue
+        slug = ability_catalog.slug_for_name(part)
+        if slug:
+            options.append(slug)
+        else:
+            options.append(normalize_name(part))
+    return options or [identifier]
+
+
+def unit_trait_variants(unit_flags: dict | None) -> list[tuple[str, ...]]:
+    base_traits = flags_to_ability_list(unit_flags)
+    variants: list[tuple[str, ...]] = [tuple()]
+    for trait in base_traits:
+        options = ability_choices(trait)
+        if not options:
+            continue
+        next_variants: list[tuple[str, ...]] = []
+        for existing in variants:
+            for option in options:
+                next_variants.append(existing + (option,))
+        variants = next_variants if next_variants else variants
+    if not variants:
+        return [tuple()]
+    dedup: dict[tuple[str, ...], None] = {}
+    for variant in variants:
+        dedup.setdefault(variant, None)
+    return list(dedup.keys())
+
+
 def split_traits(text: str | None) -> list[str]:
     if not text:
         return []
@@ -478,8 +518,9 @@ def weapon_cost(
     weapon: models.Weapon,
     unit_quality: int = 4,
     unit_flags: dict | None = None,
+    unit_traits_override: Sequence[str] | None = None,
 ) -> float:
-    unit_traits = flags_to_ability_list(unit_flags)
+    unit_traits = list(unit_traits_override) if unit_traits_override is not None else flags_to_ability_list(unit_flags)
     range_value = normalize_range_value(weapon.effective_range)
     traits = split_traits(weapon.effective_tags)
     attacks_value = weapon.effective_attacks
@@ -547,34 +588,51 @@ def ability_cost(ability_link: models.UnitAbility, unit_traits: Sequence[str] | 
 
 def unit_total_cost(unit: models.Unit) -> float:
     flags = parse_flags(unit.flags)
-    unit_traits = flags_to_ability_list(flags)
-    cost = base_model_cost(unit.quality, unit.defense, unit.toughness, unit_traits)
-    for weapon in unit_default_weapons(unit):
-        cost += weapon_cost(weapon, unit.quality, flags)
-    cost += sum(ability_cost(link, unit_traits) for link in unit.abilities)
-    return round(cost, 2)
+    trait_variants = unit_trait_variants(flags)
+    default_weapons = unit_default_weapons(unit)
+    ability_links = list(unit.abilities)
+    best_cost = 0.0
+    for traits in trait_variants or [tuple()]:
+        cost = base_model_cost(unit.quality, unit.defense, unit.toughness, traits)
+        for weapon in default_weapons:
+            cost += weapon_cost(weapon, unit.quality, flags, traits)
+        cost += sum(ability_cost(link, traits) for link in ability_links)
+        if cost > best_cost:
+            best_cost = cost
+    return round(best_cost, 2)
 
 
 def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
     flags = parse_flags(roster_unit.unit.flags)
-    unit_traits = flags_to_ability_list(flags)
-    unit_cost = base_model_cost(
-        roster_unit.unit.quality,
-        roster_unit.unit.defense,
-        roster_unit.unit.toughness,
-        unit_traits,
-    )
-
+    trait_variants = unit_trait_variants(flags)
     default_weapons = unit_default_weapons(roster_unit.unit)
-    if roster_unit.selected_weapon:
-        unit_cost += weapon_cost(roster_unit.selected_weapon, roster_unit.unit.quality, flags)
-    else:
-        for weapon in default_weapons:
-            unit_cost += weapon_cost(weapon, roster_unit.unit.quality, flags)
+    ability_links = list(roster_unit.unit.abilities)
+    best_unit_cost = 0.0
 
-    unit_cost += sum(ability_cost(link, unit_traits) for link in roster_unit.unit.abilities)
+    for traits in trait_variants or [tuple()]:
+        unit_cost = base_model_cost(
+            roster_unit.unit.quality,
+            roster_unit.unit.defense,
+            roster_unit.unit.toughness,
+            traits,
+        )
 
-    total = unit_cost * max(roster_unit.count, 1)
+        if roster_unit.selected_weapon:
+            unit_cost += weapon_cost(
+                roster_unit.selected_weapon,
+                roster_unit.unit.quality,
+                flags,
+                traits,
+            )
+        else:
+            for weapon in default_weapons:
+                unit_cost += weapon_cost(weapon, roster_unit.unit.quality, flags, traits)
+
+        unit_cost += sum(ability_cost(link, traits) for link in ability_links)
+        if unit_cost > best_unit_cost:
+            best_unit_cost = unit_cost
+
+    total = best_unit_cost * max(roster_unit.count, 1)
     if roster_unit.extra_weapons_json:
         total += 5
     return round(total, 2)
