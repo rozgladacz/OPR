@@ -33,19 +33,6 @@
 
 <div class="row">
   <div class="col-lg-6">
-    <h4>Ostatnie armie</h4>
-    <ul class="list-group mb-4">
-      {% for army in armies %}
-      <li class="list-group-item d-flex justify-content-between align-items-center">
-        <span>{{ army.name }}</span>
-        <a class="btn btn-sm btn-outline-secondary" href="/armies/{{ army.id }}">Pokaż</a>
-      </li>
-      {% else %}
-      <li class="list-group-item">Brak armii</li>
-      {% endfor %}
-    </ul>
-  </div>
-  <div class="col-lg-6">
     <h4>Ostatnie rozpiski</h4>
     <ul class="list-group mb-4">
       {% for roster in rosters %}
@@ -58,6 +45,19 @@
       </li>
       {% else %}
       <li class="list-group-item">Brak rozpisek</li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="col-lg-6">
+    <h4>Ostatnie armie</h4>
+    <ul class="list-group mb-4">
+      {% for army in armies %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <span>{{ army.name }}</span>
+        <a class="btn btn-sm btn-outline-secondary" href="/armies/{{ army.id }}">Pokaż</a>
+      </li>
+      {% else %}
+      <li class="list-group-item">Brak armii</li>
       {% endfor %}
     </ul>
   </div>
