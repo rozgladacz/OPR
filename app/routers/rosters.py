@@ -195,7 +195,7 @@ def edit_roster(
                 "weapon_options": weapon_options,
                 "loadout": loadout,
                 "loadout_summary": _loadout_display_summary(roster_unit, loadout, weapon_options),
-                "base_cost_per_model": _base_cost_per_model(unit),
+                "base_cost_per_model": _base_cost_per_model(unit, classification),
                 "classification": classification,
             }
         )
@@ -398,7 +398,9 @@ def update_roster_unit(
                         weapon_options,
                     ),
                     "default_summary": _default_loadout_summary(roster_unit.unit),
-                    "base_cost_per_model": _base_cost_per_model(roster_unit.unit),
+                    "base_cost_per_model": _base_cost_per_model(
+                        roster_unit.unit, classification
+                    ),
                     "classification": classification,
                     "selected_passive_items": selected_passives,
                     "selected_active_items": selected_actives,
@@ -754,24 +756,51 @@ def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
     return entries
 
 
-def _base_cost_per_model(unit: models.Unit) -> float:
-    flags = utils.parse_flags(unit.flags)
-    unit_traits = costs.flags_to_ability_list(flags)
+def _base_cost_per_model(
+    unit: models.Unit, classification: dict[str, Any] | None = None
+) -> float:
+    passive_state = costs.compute_passive_state(unit)
+    base_traits = [
+        trait
+        for trait in passive_state.traits
+        if costs.ability_identifier(trait) not in costs.ROLE_SLUGS
+    ]
+    slug: str | None = None
+    if isinstance(classification, dict):
+        raw_slug = classification.get("slug")
+        if isinstance(raw_slug, str):
+            normalized = raw_slug.strip().casefold()
+            if normalized in costs.ROLE_SLUGS:
+                slug = normalized
+    if slug:
+        base_traits.append(slug)
     base_value = costs.base_model_cost(
         unit.quality,
         unit.defense,
         unit.toughness,
-        unit_traits,
+        base_traits,
     )
     passive_cost = 0.0
-    for link in getattr(unit, "abilities", []):
-        ability = link.ability
-        if ability and ability.type == "passive":
-            passive_cost += costs.ability_cost(
-                link,
-                unit_traits,
-                toughness=unit.toughness,
-            )
+    for entry in passive_state.payload:
+        slug_value = str(entry.get("slug") or "").strip()
+        if not slug_value:
+            continue
+        if costs.ability_identifier(slug_value) in costs.ROLE_SLUGS:
+            continue
+        try:
+            default_count = int(entry.get("default_count") or 0)
+        except (TypeError, ValueError):
+            default_count = 0
+        if default_count <= 0:
+            continue
+        label = entry.get("label") or slug_value
+        value = entry.get("value")
+        passive_cost += costs.ability_cost_from_name(
+            label or slug_value,
+            value,
+            base_traits,
+            toughness=unit.toughness,
+        )
     return round(base_value + passive_cost, 2)
 
 

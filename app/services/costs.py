@@ -222,6 +222,34 @@ def compute_passive_state(
     return PassiveState(payload=payload, counts=counts, traits=traits)
 
 
+def _passive_flag_maps(passive_state: PassiveState) -> tuple[dict[str, int], dict[str, int]]:
+    default_map: dict[str, int] = {}
+    selected_map: dict[str, int] = {}
+    for entry in passive_state.payload:
+        slug = str(entry.get("slug") or "").strip()
+        if not slug:
+            continue
+        try:
+            default_count = int(entry.get("default_count") or 0)
+        except (TypeError, ValueError):
+            default_count = 0
+        default_flag = 1 if default_count > 0 else 0
+        selected_value = passive_state.counts.get(str(slug), default_flag)
+        selected_flag = 1 if selected_value else 0
+        identifiers: set[str] = set()
+        for token in (slug, entry.get("label")):
+            if not token:
+                continue
+            identifiers.add(normalize_name(token))
+            ident = ability_identifier(token)
+            if ident:
+                identifiers.add(ident)
+        for ident in {value for value in identifiers if value}:
+            default_map[ident] = default_flag
+            selected_map[ident] = selected_flag
+    return default_map, selected_map
+
+
 def _strip_role_traits(traits: Sequence[str]) -> list[str]:
     clean: list[str] = []
     for trait in traits:
@@ -898,6 +926,14 @@ def roster_unit_role_totals(
             )
         return entries
 
+    passive_defaults, _ = _passive_flag_maps(passive_state)
+
+    def _passive_default_flag(name: str | None) -> int | None:
+        for key in (ability_identifier(name), normalize_name(name)):
+            if key and key in passive_defaults:
+                return passive_defaults[key]
+        return None
+
     def _ability_cost_map(current_traits: Sequence[str]) -> tuple[dict[int, float], float, float]:
         ability_map: dict[int, float] = {}
         passive_total = 0.0
@@ -912,7 +948,9 @@ def roster_unit_role_totals(
                 toughness=unit.toughness,
             )
             if ability.type == "passive":
-                passive_total += cost_value
+                default_flag = _passive_default_flag(ability.name)
+                if default_flag is None or default_flag > 0:
+                    passive_total += cost_value
             else:
                 ability_map[ability.id] = cost_value
                 active_total += cost_value
