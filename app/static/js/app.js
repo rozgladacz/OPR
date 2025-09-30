@@ -781,9 +781,38 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
   return cost;
 }
 
-function buildWeaponCostMap(options, unitQuality, baseFlags, passiveItems, passiveState) {
+function buildWeaponCostMap(
+  options,
+  unitQuality,
+  baseFlags,
+  passiveItems,
+  passiveState,
+  classification,
+) {
   const result = new Map();
   const weaponFlags = buildWeaponFlags(baseFlags, passiveItems, passiveState);
+  if (classification && typeof classification === 'object' && classification.slug) {
+    const slugText = String(classification.slug).trim();
+    if (slugText) {
+      const normalizedSlug = passiveIdentifier(slugText);
+      let hasMatchingKey = false;
+      Object.keys(weaponFlags).forEach((key) => {
+        const ident = passiveIdentifier(key);
+        if (CLASSIFICATION_SLUGS.has(ident)) {
+          if (ident === normalizedSlug) {
+            hasMatchingKey = true;
+            weaponFlags[key] = true;
+          } else {
+            delete weaponFlags[key];
+          }
+        }
+      });
+      if (!hasMatchingKey) {
+        const key = normalizedSlug || slugText.toLowerCase();
+        weaponFlags[key] = true;
+      }
+    }
+  }
   const unitTraits = flagsToAbilityList(weaponFlags);
   const variants = buildTraitVariants(unitTraits);
   const quality = Number.isFinite(Number(unitQuality)) ? Number(unitQuality) : 4;
@@ -2635,6 +2664,7 @@ function initRosterEditor() {
       currentBaseFlags,
       currentPassives,
       passiveState,
+      currentClassification,
     );
     const computePassiveDeltaForSlug = (slug) => {
       if (!slug) {
@@ -2652,6 +2682,7 @@ function initRosterEditor() {
           currentBaseFlags,
           currentPassives,
           passiveClone,
+          currentClassification,
         );
         return computeTotalCost(
           baseCostPerModel,
