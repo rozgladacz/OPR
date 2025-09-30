@@ -2631,9 +2631,46 @@ function initRosterEditor() {
     return total;
   }
 
+  function applyClassificationToState(state, classification) {
+    if (!state || !(state.passive instanceof Map)) {
+      return;
+    }
+    let targetIdentifier = null;
+    let targetKey = null;
+    if (classification && typeof classification === 'object' && classification.slug) {
+      const slugText = String(classification.slug);
+      const normalized = abilityIdentifier(slugText);
+      if (normalized && CLASSIFICATION_SLUGS.has(normalized)) {
+        targetIdentifier = normalized;
+        const stripped = slugText.trim();
+        if (stripped) {
+          targetKey = stripped;
+        }
+      }
+    }
+    const passiveMap = state.passive;
+    Array.from(passiveMap.keys()).forEach((key) => {
+      const ident = passiveIdentifier(key);
+      if (!CLASSIFICATION_SLUGS.has(ident)) {
+        return;
+      }
+      if (targetIdentifier && ident === targetIdentifier && targetKey === null) {
+        targetKey = String(key);
+        passiveMap.set(key, 1);
+        return;
+      }
+      passiveMap.delete(key);
+    });
+    if (targetIdentifier) {
+      const finalKey = targetKey !== null && targetKey !== undefined ? String(targetKey) : targetIdentifier;
+      passiveMap.set(finalKey, 1);
+    }
+  }
+
   function handleStateChange() {
     if (loadoutState) {
       loadoutState.mode = 'total';
+      applyClassificationToState(loadoutState, currentClassification);
     }
     renderEditors();
     if (loadoutInput && loadoutState) {
