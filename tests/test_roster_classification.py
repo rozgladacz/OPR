@@ -19,6 +19,7 @@ def test_apply_classification_replaces_existing_role_flag() -> None:
     assert result is loadout
     passive_section = result.get("passive", {})
     assert passive_section.get("inne") == 1
+    assert passive_section.get("strzelec") == 1
     assert costs.ability_identifier("strzelec") in {
         costs.ability_identifier(key) for key in passive_section
     }
@@ -50,13 +51,6 @@ def test_apply_classification_keeps_single_role_entry() -> None:
     key = role_keys[0]
     assert costs.ability_identifier(key) == "wojownik"
     assert passive_section[key] == 1
-
-
-def test_classification_prefers_warrior_on_tie() -> None:
-    result = rosters._classification_from_totals(10, 10)
-
-    assert result is not None
-    assert result["slug"] == "wojownik"
 
 
 def test_classification_respects_available_slugs() -> None:

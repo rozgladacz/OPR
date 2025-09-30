@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Mapping
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -346,6 +346,7 @@ def update_roster_unit(
     active_items = _ability_entries(roster_unit.unit, "active")
     aura_items = _ability_entries(roster_unit.unit, "aura")
     passive_items = _passive_entries(roster_unit.unit)
+    role_slug_map = _role_slug_map(roster_unit.unit)
 
     parsed_loadout = _parse_loadout_json(loadout_json) if loadout_json is not None else None
     loadout = _sanitize_loadout(
@@ -360,6 +361,7 @@ def update_roster_unit(
 
     weapon_id: int | None = roster_unit.selected_weapon_id
     weapon: models.Weapon | None = roster_unit.selected_weapon
+
     if loadout_json is None:
         allowed_weapon_ids = _unit_allowed_weapon_ids(roster_unit.unit)
         requested_weapon_id = int(selected_weapon_id) if selected_weapon_id else None
@@ -731,9 +733,30 @@ def _selected_passive_entries(
     return selected
 
 
+def _role_slug_map(unit: models.Unit | None) -> dict[str, str]:
+    if unit is None:
+        return {}
+    mapping: dict[str, str] = {}
+    flags = utils.parse_flags(getattr(unit, "flags", None))
+    for raw_key in flags.keys():
+        if raw_key is None:
+            continue
+        value = str(raw_key).strip()
+        if not value:
+            continue
+        if value.endswith("?"):
+            value = value[:-1].strip()
+        identifier = costs.ability_identifier(value)
+        if identifier in costs.ROLE_SLUGS and identifier not in mapping:
+            mapping[identifier] = value
+    return mapping
+
+
 def _apply_classification_to_loadout(
     loadout: dict[str, Any] | None,
     classification: dict[str, Any] | None,
+    *,
+    role_slug_map: Mapping[str, str] | None = None,
 ) -> dict[str, Any] | None:
     if not isinstance(loadout, dict):
         return loadout
@@ -754,18 +777,31 @@ def _apply_classification_to_loadout(
                 stripped = raw_slug.strip()
                 target_key = stripped or normalized
 
+    existing_map: dict[str, str] = {}
     for key in list(passive_section.keys()):
         identifier = costs.ability_identifier(key)
         if identifier not in costs.ROLE_SLUGS:
             continue
-        if target_identifier and identifier == target_identifier and target_key is None:
-            target_key = str(key)
-            passive_section[key] = 1
-            continue
-        passive_section.pop(key, None)
+        if identifier not in existing_map:
+            existing_map[identifier] = str(key)
+        if not target_identifier or identifier != target_identifier:
+            passive_section.pop(key, None)
 
     if target_identifier:
-        passive_section[str(target_key or target_identifier)] = 1
+        preferred_map = dict(existing_map)
+        if role_slug_map:
+            for ident, slug in role_slug_map.items():
+                if ident in costs.ROLE_SLUGS and ident not in preferred_map:
+                    preferred_map[ident] = slug
+        candidate = preferred_map.get(target_identifier)
+        if candidate:
+            target_key = candidate
+        if target_key is None:
+            target_key = target_identifier
+        cleaned_key = str(target_key).strip()
+        if cleaned_key.endswith("?"):
+            cleaned_key = cleaned_key[:-1].strip()
+        passive_section[cleaned_key or target_identifier] = 1
 
     return loadout
 
@@ -1184,6 +1220,8 @@ def _classification_from_totals(
         preferred = "wojownik"
     elif shooter > warrior:
         preferred = "strzelec"
+    else:
+        preferred = "wojownik" if "wojownik" in pool or not pool else "strzelec"
 
     fallback_slug = "wojownik"
 
@@ -1196,6 +1234,7 @@ def _classification_from_totals(
         elif preferred and preferred not in pool:
             slug = next(iter(pool - {preferred}), None)
         elif preferred is None:
+          
             slug = (
                 "wojownik"
                 if "wojownik" in pool
