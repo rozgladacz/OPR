@@ -53,9 +53,14 @@
         <td class="small">
           {% if entry.classification %}
             <strong>{{ entry.classification.label }}</strong>
-            {% if entry.classification.summary %}<br />
-            <span class="text-muted">{{ entry.classification.summary }}</span>
+            {% set classification_display = entry.classification.display %}
+            {% if not classification_display %}
+              {% set warrior_points = entry.classification.warrior_cost | default(0) | round | int %}
+              {% set shooter_points = entry.classification.shooter_cost | default(0) | round | int %}
+              {% set classification_display = 'Wojownik ' ~ warrior_points ~ ' pkt / Strzelec ' ~ shooter_points ~ ' pkt' %}
             {% endif %}
+            <br />
+            <span class="text-muted">{{ classification_display }}</span>
           {% else %}
             -
           {% endif %}

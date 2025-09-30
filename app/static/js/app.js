@@ -1322,6 +1322,20 @@ function formatPoints(value) {
   return number.toLocaleString('pl-PL', baseOptions);
 }
 
+function formatClassificationDisplay(classification) {
+  if (!classification || typeof classification !== 'object') {
+    return '';
+  }
+  if (classification.display) {
+    return classification.display;
+  }
+  const warrior = Math.round(Number(classification.warrior_cost ?? 0));
+  const shooter = Math.round(Number(classification.shooter_cost ?? 0));
+  const warriorText = formatPoints(Number.isFinite(warrior) ? warrior : 0);
+  const shooterText = formatPoints(Number.isFinite(shooter) ? shooter : 0);
+  return `Wojownik ${warriorText} pkt / Strzelec ${shooterText} pkt`;
+}
+
 function renderPassiveEditor(
   container,
   items,
@@ -2243,9 +2257,9 @@ function initRosterEditor() {
     if (!roleEl) {
       return;
     }
-    if (classification && classification.label) {
-      const suffix = classification.summary ? ` (${classification.summary})` : '';
-      roleEl.textContent = `Klasyfikacja: ${classification.label}${suffix}`;
+    const text = formatClassificationDisplay(classification);
+    if (text) {
+      roleEl.textContent = `Klasyfikacja: ${text}`;
       roleEl.classList.remove('d-none');
     } else {
       roleEl.textContent = '';
@@ -2266,9 +2280,9 @@ function initRosterEditor() {
     if (!roleNode) {
       return;
     }
-    if (classification && classification.label) {
-      const suffix = classification.summary ? ` (${classification.summary})` : '';
-      roleNode.textContent = `Klasyfikacja: ${classification.label}${suffix}`;
+    const text = formatClassificationDisplay(classification);
+    if (text) {
+      roleNode.textContent = `Klasyfikacja: ${text}`;
       roleNode.classList.remove('d-none');
     } else {
       roleNode.textContent = '';

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 from typing import Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -1037,42 +1036,22 @@ def _loadout_display_summary(
     return ", ".join(summary)
 
 
-def _loadout_weapon_mix(
-    roster_unit: models.RosterUnit,
-    loadout: dict[str, dict[str, int]] | None,
-) -> dict[str, float]:
-    serialized = "{}"
-    if isinstance(loadout, dict):
-        try:
-            serialized = json.dumps(loadout, ensure_ascii=False)
-        except (TypeError, ValueError):  # pragma: no cover - defensive fallback
-            serialized = "{}"
-    snapshot = SimpleNamespace(
-        unit=roster_unit.unit,
-        count=roster_unit.count,
-        selected_weapon=roster_unit.selected_weapon,
-        selected_weapon_id=roster_unit.selected_weapon_id,
-        extra_weapons_json=serialized,
-    )
-    return costs.roster_unit_weapon_mix(snapshot)
-
-
-def _classification_from_mix(
-    mix: dict[str, float],
+def _classification_from_totals(
+    warrior: float,
+    shooter: float,
     available_slugs: set[str] | None = None,
 ) -> dict[str, Any] | None:
-    melee = float(mix.get("melee_cost", 0.0) or 0.0)
-    ranged = float(mix.get("ranged_cost", 0.0) or 0.0)
-    melee = max(melee, 0.0)
-    ranged = max(ranged, 0.0)
-    if melee <= 0 and ranged <= 0:
+    warrior = max(float(warrior or 0.0), 0.0)
+    shooter = max(float(shooter or 0.0), 0.0)
+    if warrior <= 0 and shooter <= 0:
         return None
+
     pool = {slug for slug in available_slugs or set() if slug in {"wojownik", "strzelec"}}
     preferred: str | None = None
-    if ranged > melee:
-        preferred = "strzelec"
-    elif melee > ranged:
+    if warrior > shooter:
         preferred = "wojownik"
+    elif shooter > warrior:
+        preferred = "strzelec"
 
     slug: str | None = None
     if pool:
@@ -1083,25 +1062,23 @@ def _classification_from_mix(
         elif preferred and preferred not in pool:
             slug = next(iter(pool - {preferred}), None)
         elif preferred is None:
-            # Costs are tied – prefer strzelec if available, otherwise wojownik.
             slug = "strzelec" if "strzelec" in pool else "wojownik"
     else:
-        if preferred:
-            slug = preferred
-        else:
-            slug = "strzelec"
+        slug = preferred or "strzelec"
+
     if not slug:
         return None
-    label = "Wojownik" if slug == "wojownik" else "Strzelec"
-    summary = (
-        f"Walka wręcz {int(round(melee))} pkt / Strzelcy {int(round(ranged))} pkt"
-    )
+
+    selected_label = "Wojownik" if slug == "wojownik" else "Strzelec"
+    warrior_points = int(round(warrior))
+    shooter_points = int(round(shooter))
+    display = f"Wojownik {warrior_points} pkt / Strzelec {shooter_points} pkt"
     return {
         "slug": slug,
-        "label": label,
-        "melee_cost": round(melee, 2),
-        "ranged_cost": round(ranged, 2),
-        "summary": summary,
+        "label": selected_label,
+        "warrior_cost": round(warrior, 2),
+        "shooter_cost": round(shooter, 2),
+        "display": display,
     }
 
 
@@ -1109,7 +1086,9 @@ def _roster_unit_classification(
     roster_unit: models.RosterUnit,
     loadout: dict[str, dict[str, int]] | None,
 ) -> dict[str, Any] | None:
-    mix = _loadout_weapon_mix(roster_unit, loadout)
+    totals = costs.roster_unit_role_totals(roster_unit, loadout)
+    warrior_total = totals.get("wojownik", 0.0)
+    shooter_total = totals.get("strzelec", 0.0)
     available_slugs: set[str] = set()
     unit = getattr(roster_unit, "unit", None)
     if unit is not None:
@@ -1118,7 +1097,7 @@ def _roster_unit_classification(
         available_slugs = {
             costs.ability_identifier(trait) for trait in traits
         }
-    return _classification_from_mix(mix, available_slugs)
+    return _classification_from_totals(warrior_total, shooter_total, available_slugs)
 
 
 def _loadout_weapon_details(

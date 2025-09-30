@@ -206,13 +206,17 @@ def roster_pdf(
         )
         line_specs.append((PDF_BASE_FONT, 10, 40, stats_line))
         classification = item.get("classification") or {}
-        label = classification.get("label")
-        if label:
-            summary = classification.get("summary") or ""
-            if summary:
-                text = f"Klasyfikacja: {label} ({summary})"
-            else:
-                text = f"Klasyfikacja: {label}"
+        display = classification.get("display")
+        if not display:
+            warrior = classification.get("warrior_cost") or 0.0
+            shooter = classification.get("shooter_cost") or 0.0
+            warrior_points = int(round(float(warrior)))
+            shooter_points = int(round(float(shooter)))
+            display = (
+                f"Wojownik {warrior_points} pkt / Strzelec {shooter_points} pkt"
+            )
+        if display:
+            text = f"Klasyfikacja: {display}"
             for segment in wrap_line(text):
                 line_specs.append((PDF_BASE_FONT, 10, 40, segment))
         line_specs.append((PDF_BASE_FONT, 10, 40, "Uzbrojenie:"))
