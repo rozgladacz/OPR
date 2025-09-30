@@ -353,6 +353,9 @@ def update_roster_unit(
         passive_items=passive_items,
     )
 
+    classification = _roster_unit_classification(roster_unit, loadout)
+    loadout = _apply_classification_to_loadout(loadout, classification) or loadout
+
     weapon_id: int | None = None
     if loadout_json is None:
         allowed_weapon_ids = _unit_allowed_weapon_ids(roster_unit.unit)
@@ -715,6 +718,45 @@ def _selected_passive_entries(
                 if identifier:
                     seen_identifiers.add(identifier)
     return selected
+
+
+def _apply_classification_to_loadout(
+    loadout: dict[str, Any] | None,
+    classification: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not isinstance(loadout, dict):
+        return loadout
+
+    passive_section = loadout.get("passive")
+    if not isinstance(passive_section, dict):
+        passive_section = {}
+        loadout["passive"] = passive_section
+
+    target_identifier: str | None = None
+    target_key: str | None = None
+    if isinstance(classification, dict):
+        raw_slug = classification.get("slug")
+        if isinstance(raw_slug, str):
+            normalized = costs.ability_identifier(raw_slug)
+            if normalized in costs.ROLE_SLUGS:
+                target_identifier = normalized
+                stripped = raw_slug.strip()
+                target_key = stripped or normalized
+
+    for key in list(passive_section.keys()):
+        identifier = costs.ability_identifier(key)
+        if identifier not in costs.ROLE_SLUGS:
+            continue
+        if target_identifier and identifier == target_identifier and target_key is None:
+            target_key = str(key)
+            passive_section[key] = 1
+            continue
+        passive_section.pop(key, None)
+
+    if target_identifier:
+        passive_section[str(target_key or target_identifier)] = 1
+
+    return loadout
 
 
 def _selected_ability_entries(
