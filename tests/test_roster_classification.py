@@ -50,3 +50,29 @@ def test_apply_classification_keeps_single_role_entry() -> None:
     key = role_keys[0]
     assert costs.ability_identifier(key) == "wojownik"
     assert passive_section[key] == 1
+
+
+def test_apply_classification_uses_role_slug_map() -> None:
+    loadout = {"passive": {}}
+    classification = {"slug": "strzelec"}
+
+    result = rosters._apply_classification_to_loadout(
+        loadout,
+        classification,
+        role_slug_map={"strzelec": "Strzelec"},
+    )
+
+    passive_section = result.get("passive", {})
+    assert passive_section.get("Strzelec") == 1
+    assert list(passive_section.keys()) == ["Strzelec"]
+
+
+def test_classification_prefers_warrior_on_tie() -> None:
+    classification = rosters._classification_from_totals(
+        10,
+        10,
+        {"wojownik", "strzelec"},
+    )
+
+    assert classification is not None
+    assert classification.get("slug") == "wojownik"
