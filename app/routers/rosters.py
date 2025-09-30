@@ -306,8 +306,13 @@ def add_roster_unit(
         unit=unit,
         count=count,
         selected_weapon=weapon,
-        extra_weapons_json=json.dumps(loadout, ensure_ascii=False),
+        selected_weapon_id=weapon.id if weapon else None,
     )
+
+    classification = _roster_unit_classification(roster_unit, loadout)
+    loadout = _apply_classification_to_loadout(loadout, classification) or loadout
+
+    roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
     roster_unit.cached_cost = costs.roster_unit_cost(roster_unit)
     db.add(roster_unit)
     db.commit()
@@ -353,30 +358,36 @@ def update_roster_unit(
         passive_items=passive_items,
     )
 
-    classification = _roster_unit_classification(roster_unit, loadout)
-    loadout = _apply_classification_to_loadout(loadout, classification) or loadout
-
-    weapon_id: int | None = None
+    weapon_id: int | None = roster_unit.selected_weapon_id
+    weapon: models.Weapon | None = roster_unit.selected_weapon
     if loadout_json is None:
         allowed_weapon_ids = _unit_allowed_weapon_ids(roster_unit.unit)
-        weapon_id = int(selected_weapon_id) if selected_weapon_id else None
-        if weapon_id:
-            weapon = db.get(models.Weapon, weapon_id)
+        requested_weapon_id = int(selected_weapon_id) if selected_weapon_id else None
+        if requested_weapon_id:
+            weapon = db.get(models.Weapon, requested_weapon_id)
             if (
                 not weapon
                 or weapon.id not in allowed_weapon_ids
                 or weapon.armory_id != roster.army.armory_id
             ):
+                weapon = None
                 weapon_id = None
             elif not current_user.is_admin and weapon.owner_id not in (None, current_user.id):
                 raise HTTPException(status_code=403, detail="Brak dostępu do broni")
+            else:
+                weapon_id = requested_weapon_id
         if weapon_id:
             selected_key = str(weapon_id)
             for key in list(loadout["weapons"].keys()):
                 loadout["weapons"][key] = 1 if key == selected_key else 0
             if selected_key not in loadout["weapons"]:
                 loadout["weapons"][selected_key] = 1
+
     roster_unit.selected_weapon_id = weapon_id
+    roster_unit.selected_weapon = weapon
+
+    classification = _roster_unit_classification(roster_unit, loadout)
+    loadout = _apply_classification_to_loadout(loadout, classification) or loadout
     roster_unit.custom_name = custom_name.strip() if custom_name else None
     roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
     roster_unit.cached_cost = costs.roster_unit_cost(roster_unit)
@@ -1174,6 +1185,8 @@ def _classification_from_totals(
     elif shooter > warrior:
         preferred = "strzelec"
 
+    fallback_slug = "wojownik"
+
     slug: str | None = None
     if pool:
         if preferred and preferred in pool:
@@ -1183,9 +1196,13 @@ def _classification_from_totals(
         elif preferred and preferred not in pool:
             slug = next(iter(pool - {preferred}), None)
         elif preferred is None:
-            slug = "strzelec" if "strzelec" in pool else "wojownik"
+            slug = (
+                "wojownik"
+                if "wojownik" in pool
+                else ("strzelec" if "strzelec" in pool else next(iter(pool), None))
+            )
     else:
-        slug = preferred or "strzelec"
+        slug = preferred or fallback_slug
 
     if not slug:
         return None
