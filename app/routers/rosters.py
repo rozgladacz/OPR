@@ -179,7 +179,9 @@ def edit_roster(
             passive_items=passive_items,
         )
         classification = _roster_unit_classification(roster_unit, loadout)
-        selected_passives = _selected_passive_entries(roster_unit, loadout, passive_items)
+        selected_passives = _selected_passive_entries(
+            roster_unit, loadout, passive_items, classification
+        )
         selected_actives = _selected_ability_entries(loadout, active_items, "active")
         selected_auras = _selected_ability_entries(loadout, aura_items, "aura")
         roster_items.append(
@@ -380,7 +382,9 @@ def update_roster_unit(
     if "application/json" in accept_header:
         total_cost = costs.roster_total(roster)
         classification = _roster_unit_classification(roster_unit, loadout)
-        selected_passives = _selected_passive_entries(roster_unit, loadout, passive_items)
+        selected_passives = _selected_passive_entries(
+            roster_unit, loadout, passive_items, classification
+        )
         selected_actives = _selected_ability_entries(loadout, active_items, "active")
         selected_auras = _selected_ability_entries(loadout, aura_items, "aura")
         warnings = collect_roster_warnings(roster)
@@ -639,31 +643,77 @@ def _selected_passive_entries(
     roster_unit: models.RosterUnit,
     loadout: dict[str, Any] | None,
     passive_items: list[dict] | None,
+    classification: dict[str, Any] | None = None,
 ) -> list[dict]:
     entries = passive_items if passive_items is not None else _passive_entries(roster_unit.unit)
     flags = _loadout_passive_flags(loadout)
     selected: list[dict] = []
-    seen: set[str] = set()
+    seen_slugs: set[str] = set()
+    seen_identifiers: set[str] = set()
     for entry in entries:
         if not entry:
             continue
         slug = str(entry.get("slug") or "").strip()
         if not slug:
             continue
+        identifier = costs.ability_identifier(slug)
         default_flag = 1 if entry.get("is_default") or entry.get("default_count") else 0
         selected_flag = flags.get(slug, default_flag)
         if selected_flag <= 0:
-            seen.add(slug)
+            seen_slugs.add(slug)
+            if identifier:
+                seen_identifiers.add(identifier)
             continue
         item = dict(entry)
         item["selected"] = True
         item["count"] = 1
         selected.append(item)
-        seen.add(slug)
+        seen_slugs.add(slug)
+        if identifier:
+            seen_identifiers.add(identifier)
     for slug, flag in flags.items():
-        if slug in seen or flag <= 0:
+        slug_value = str(slug).strip()
+        if not slug_value or flag <= 0:
+            if slug_value:
+                seen_slugs.add(slug_value)
+                identifier = costs.ability_identifier(slug_value)
+                if identifier:
+                    seen_identifiers.add(identifier)
             continue
-        selected.append({"slug": slug, "label": slug, "description": "", "selected": True, "count": 1})
+        identifier = costs.ability_identifier(slug_value)
+        if slug_value in seen_slugs or (identifier and identifier in seen_identifiers):
+            continue
+        selected.append(
+            {
+                "slug": slug_value,
+                "label": slug_value,
+                "description": "",
+                "selected": True,
+                "count": 1,
+            }
+        )
+        seen_slugs.add(slug_value)
+        if identifier:
+            seen_identifiers.add(identifier)
+    if isinstance(classification, dict):
+        class_slug = str(classification.get("slug") or "").strip()
+        if class_slug:
+            identifier = costs.ability_identifier(class_slug)
+            if class_slug not in seen_slugs and (
+                not identifier or identifier not in seen_identifiers
+            ):
+                label = classification.get("label") or class_slug
+                entry = {
+                    "slug": class_slug,
+                    "label": label,
+                    "description": "",
+                    "selected": True,
+                    "count": 1,
+                }
+                selected.append(entry)
+                seen_slugs.add(class_slug)
+                if identifier:
+                    seen_identifiers.add(identifier)
     return selected
 
 
@@ -1229,7 +1279,9 @@ def _roster_unit_export_data(
     weapon_summary = _loadout_display_summary(roster_unit, loadout, weapon_options)
     if not weapon_summary:
         weapon_summary = _default_loadout_summary(unit)
-    selected_passives = _selected_passive_entries(roster_unit, loadout, passive_items)
+    selected_passives = _selected_passive_entries(
+        roster_unit, loadout, passive_items, classification
+    )
     selected_actives = _selected_ability_entries(loadout, active_items, "active")
     selected_auras = _selected_ability_entries(loadout, aura_items, "aura")
     passive_labels = [
@@ -1273,8 +1325,11 @@ def _selected_passive_labels(
     roster_unit: models.RosterUnit,
     loadout: dict[str, dict[str, int]],
     passive_items: list[dict],
+    classification: dict[str, Any] | None = None,
 ) -> list[str]:
-    selected_entries = _selected_passive_entries(roster_unit, loadout, passive_items)
+    selected_entries = _selected_passive_entries(
+        roster_unit, loadout, passive_items, classification
+    )
     return [
         entry.get("label") or entry.get("raw") or entry.get("slug") or ""
         for entry in selected_entries
