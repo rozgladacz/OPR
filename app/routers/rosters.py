@@ -351,4 +351,16 @@ def _unit_allowed_weapon_ids(unit: models.Unit) -> set[int]:
 
 def _passive_labels(unit: models.Unit) -> list[str]:
     payload = utils.passive_flags_to_payload(unit.flags)
-    return [item.get("label") or item.get("slug") or "" for item in payload if item]
+    labels: list[str] = []
+    for item in payload:
+        if not item:
+            continue
+        label = (item.get("label") or item.get("slug") or "").strip()
+        value = (item.get("value") or "").strip()
+        if value:
+            normalized_label = label.casefold()
+            normalized_value = value.casefold()
+            if not normalized_value or normalized_value not in normalized_label:
+                label = f"{label}: {value}" if label else value
+        labels.append(label)
+    return labels
