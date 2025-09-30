@@ -100,6 +100,9 @@ def _apply_ruleset_overrides() -> None:
 _apply_ruleset_overrides()
 
 
+ROLE_SLUGS = {"wojownik", "strzelec"}
+
+
 @dataclass
 class PassiveState:
     payload: list[dict[str, Any]]
@@ -217,6 +220,23 @@ def compute_passive_state(
     counts = _parse_passive_counts(extra_data)
     traits = _active_traits_from_payload(payload, counts)
     return PassiveState(payload=payload, counts=counts, traits=traits)
+
+
+def _strip_role_traits(traits: Sequence[str]) -> list[str]:
+    clean: list[str] = []
+    for trait in traits:
+        identifier = ability_identifier(trait)
+        if identifier in ROLE_SLUGS:
+            continue
+        clean.append(trait)
+    return clean
+
+
+def _with_role_trait(traits: Sequence[str], slug: str | None) -> list[str]:
+    base = list(traits)
+    if slug and slug in ROLE_SLUGS:
+        base.append(slug)
+    return base
 
 
 def normalize_name(text: str | None) -> str:
@@ -745,120 +765,51 @@ def unit_total_cost(unit: models.Unit) -> float:
     return round(cost, 2)
 
 
-def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
+def roster_unit_role_totals(
+    roster_unit: models.RosterUnit,
+    payload: dict[str, dict[str, int]] | None = None,
+) -> dict[str, float]:
     unit = getattr(roster_unit, "unit", None)
     if unit is None:
-        return 0.0
+        return {"wojownik": 0.0, "strzelec": 0.0}
 
-    raw_data = _ensure_extra_data(getattr(roster_unit, "extra_weapons_json", None))
+    extra_data = payload if isinstance(payload, dict) else _ensure_extra_data(
+        getattr(roster_unit, "extra_weapons_json", None)
+    )
+    has_structured_loadout = isinstance(extra_data, dict)
+    raw_data: dict[str, Any] = extra_data if has_structured_loadout else {}
+
     loadout_mode: str | None = None
-    if isinstance(raw_data, dict):
+    if has_structured_loadout:
         mode_value = raw_data.get("mode")
         if isinstance(mode_value, str):
             loadout_mode = mode_value
 
-    passive_state = compute_passive_state(unit, raw_data)
-    unit_traits = passive_state.traits
-
-    base_value = base_model_cost(
-        unit.quality,
-        unit.defense,
-        unit.toughness,
-        unit_traits,
-    )
-
-    passive_cost = 0.0
-    ability_costs: dict[int, float] = {}
-    active_total = 0.0
-    for link in getattr(unit, "abilities", []):
-        ability = link.ability
-        if not ability:
-            continue
-        cost_value = ability_cost(
-            link,
-            unit_traits,
-            toughness=unit.toughness,
-        )
-        if ability.type == "passive":
-            passive_cost += cost_value
-        else:
-            ability_costs[ability.id] = cost_value
-            active_total += cost_value
-
-    base_per_model = base_value + passive_cost
-
-    passive_entries: list[dict[str, Any]] = []
-    for entry in passive_state.payload:
-        slug = str(entry.get("slug") or "").strip()
-        if not slug or slug in {"wojownik", "strzelec"}:
-            continue
-        label = entry.get("label") or slug
-        value = entry.get("value")
-        default_count = int(entry.get("default_count") or 0)
-        cost_value = ability_cost_from_name(
-            label or slug,
-            value,
-            unit_traits,
-            toughness=unit.toughness,
-        )
-        passive_entries.append(
-            {
-                "slug": slug,
-                "default_count": default_count,
-                "cost": float(cost_value),
-            }
-        )
-
-    passive_counts = passive_state.counts
-
-    def _weapon_cost_map(current_traits: Sequence[str]) -> dict[int, float]:
-        results: dict[int, float] = {}
-        links = getattr(roster_unit.unit, "weapon_links", None) or []
-        for link in links:
-            weapon = link.weapon
-            if not weapon or link.weapon_id is None:
-                continue
-            if link.weapon_id in results:
-                continue
-            results[link.weapon_id] = weapon_cost(
-                weapon,
-                roster_unit.unit.quality,
-                current_traits,
-            )
-        if roster_unit.unit.default_weapon and roster_unit.unit.default_weapon_id:
-            weapon_id = roster_unit.unit.default_weapon_id
-            if weapon_id not in results:
-                results[weapon_id] = weapon_cost(
-                    roster_unit.unit.default_weapon,
-                    roster_unit.unit.quality,
-                    current_traits,
-                )
-        if roster_unit.selected_weapon and roster_unit.selected_weapon.id not in results:
-            results[roster_unit.selected_weapon.id] = weapon_cost(
-                roster_unit.selected_weapon,
-                roster_unit.unit.quality,
-                current_traits,
-            )
-        return results
+    passive_state = compute_passive_state(unit, extra_data if has_structured_loadout else None)
+    base_traits = _strip_role_traits(passive_state.traits)
 
     def _parse_counts(section: str) -> dict[int, int]:
-        raw: dict[str, Any] = {}
-        data = raw_data if isinstance(raw_data, dict) else {}
-        raw_section = data.get(section) if isinstance(data, dict) else None
+        raw_section = raw_data.get(section)
+        result: dict[int, int] = {}
         if isinstance(raw_section, dict):
-            raw = raw_section
+            items = raw_section.items()
         elif isinstance(raw_section, list):
-            temp: dict[str, int] = {}
+            temp: list[tuple[Any, Any]] = []
             for entry in raw_section:
                 if not isinstance(entry, dict):
                     continue
-                entry_id = entry.get("id") or entry.get("weapon_id") or entry.get("ability_id")
+                entry_id = (
+                    entry.get("id")
+                    or entry.get("weapon_id")
+                    or entry.get("ability_id")
+                )
                 if entry_id is None:
                     continue
-                temp[str(entry_id)] = entry.get("per_model") or entry.get("count") or 0
-            raw = temp
-        counts: dict[int, int] = {}
-        for raw_id, raw_value in raw.items():
+                temp.append((entry_id, entry.get("per_model") or entry.get("count") or 0))
+            items = temp
+        else:
+            items = []
+        for raw_id, raw_value in items:
             try:
                 parsed_id = int(raw_id)
             except (TypeError, ValueError):
@@ -875,204 +826,173 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
                     parsed_value = 0
             if parsed_value < 0:
                 parsed_value = 0
-            counts[parsed_id] = parsed_value
-        return counts
-
-    weapons_counts = _parse_counts("weapons") if isinstance(raw_data, dict) else {}
-    active_counts = _parse_counts("active") if isinstance(raw_data, dict) else {}
-    aura_counts = _parse_counts("aura") if isinstance(raw_data, dict) else {}
-
-    weapon_costs = _weapon_cost_map(unit_traits)
-
-    if isinstance(raw_data, dict):
-        total = base_per_model * max(roster_unit.count, 1)
-        total_mode = loadout_mode == "total"
-        model_multiplier = max(roster_unit.count, 1)
-
-        def _to_total(value: int) -> int:
-            safe_value = max(int(value), 0)
-            return safe_value if total_mode else safe_value * model_multiplier
-
-        for weapon_id, stored_count in weapons_counts.items():
-            cost_value = weapon_costs.get(weapon_id)
-            if cost_value is None:
-                continue
-            total += cost_value * _to_total(stored_count)
-        for ability_id, stored_count in {**active_counts, **aura_counts}.items():
-            cost_value = ability_costs.get(ability_id)
-            if cost_value is None:
-                continue
-            total += cost_value * _to_total(stored_count)
-        passive_diff = 0.0
-        for entry in passive_entries:
-            slug = entry.get("slug")
-            if not slug:
-                continue
-            default_value = 1 if entry.get("default_count") else 0
-            selected_value = passive_counts.get(str(slug), default_value)
-            selected_flag = 1 if selected_value else 0
-            diff = selected_flag - default_value
-            if diff == 0:
-                continue
-            cost_value = float(entry.get("cost") or 0.0)
-            if cost_value == 0.0:
-                continue
-            passive_diff += cost_value * diff
-        if passive_diff:
-            total += passive_diff * model_multiplier
-        return round(total, 2)
-
-    legacy_unit_cost = base_per_model + active_total
-    default_weapons = unit_default_weapons(roster_unit.unit)
-    if roster_unit.selected_weapon:
-        legacy_unit_cost += weapon_cost(
-            roster_unit.selected_weapon,
-            roster_unit.unit.quality,
-            unit_traits,
-        )
-    else:
-        for weapon in default_weapons:
-            legacy_unit_cost += weapon_cost(
-                weapon,
-                roster_unit.unit.quality,
-                unit_traits,
-            )
-
-    total = legacy_unit_cost * max(roster_unit.count, 1)
-    return round(total, 2)
-
-
-def roster_total(roster: models.Roster) -> float:
-    return round(sum(roster_unit_cost(ru) for ru in roster.roster_units), 2)
-
-
-def roster_unit_weapon_mix(roster_unit: models.RosterUnit) -> dict[str, float]:
-    unit = getattr(roster_unit, "unit", None)
-    if unit is None:
-        return {"melee_cost": 0.0, "ranged_cost": 0.0}
-    model_multiplier = max(int(getattr(roster_unit, "count", 0)), 0)
-    weapon_profiles: dict[int, models.Weapon] = {}
-    for link in getattr(unit, "weapon_links", []) or []:
-        if not link.weapon or link.weapon_id is None:
-            continue
-        if link.weapon_id in weapon_profiles:
-            continue
-        weapon_profiles[link.weapon_id] = link.weapon
-    if unit.default_weapon and unit.default_weapon_id is not None:
-        weapon_profiles.setdefault(unit.default_weapon_id, unit.default_weapon)
-    if roster_unit.selected_weapon and roster_unit.selected_weapon.id is not None:
-        weapon_profiles.setdefault(roster_unit.selected_weapon.id, roster_unit.selected_weapon)
-
-    raw_data = _ensure_extra_data(getattr(roster_unit, "extra_weapons_json", None))
-    loadout_mode: str | None = None
-    if isinstance(raw_data, dict):
-        mode_value = raw_data.get("mode")
-        if isinstance(mode_value, str):
-            loadout_mode = mode_value
-
-    passive_state = compute_passive_state(unit, raw_data)
-    unit_traits = passive_state.traits
-
-    def _parse_weapon_counts() -> dict[int, int]:
-        result: dict[int, int] = {}
-        if not isinstance(raw_data, dict):
-            return result
-        raw_section = raw_data.get("weapons")
-        if isinstance(raw_section, dict):
-            iterable = raw_section.items()
-        elif isinstance(raw_section, list):
-            iterable = []
-            for entry in raw_section:
-                if not isinstance(entry, dict):
-                    continue
-                entry_id = entry.get("id") or entry.get("weapon_id")
-                if entry_id is None:
-                    continue
-                iterable.append((entry_id, entry.get("count") or entry.get("per_model")))
-        else:
-            return result
-        for raw_id, raw_value in iterable:
-            try:
-                weapon_id = int(raw_id)
-            except (TypeError, ValueError):
-                try:
-                    weapon_id = int(float(raw_id))
-                except (TypeError, ValueError):
-                    continue
-            try:
-                count_value = int(raw_value)
-            except (TypeError, ValueError):
-                try:
-                    count_value = int(float(raw_value))
-                except (TypeError, ValueError):
-                    count_value = 0
-            if count_value < 0:
-                count_value = 0
-            result[weapon_id] = count_value
+            result[parsed_id] = parsed_value
         return result
 
-    weapons_counts = _parse_weapon_counts()
+    weapons_counts = _parse_counts("weapons") if has_structured_loadout else {}
+    active_counts = _parse_counts("active") if has_structured_loadout else {}
+    aura_counts = _parse_counts("aura") if has_structured_loadout else {}
+    passive_counts = passive_state.counts
+
     total_mode = loadout_mode == "total"
+    model_multiplier = max(int(getattr(roster_unit, "count", 0)), 0)
     model_count = max(model_multiplier, 1)
 
     def _to_total(value: int) -> int:
         safe_value = max(int(value), 0)
         return safe_value if total_mode else safe_value * model_count
 
-    melee_cost = 0.0
-    ranged_cost = 0.0
+    def _weapon_cost_map(current_traits: Sequence[str]) -> dict[int, float]:
+        results: dict[int, float] = {}
+        links = getattr(unit, "weapon_links", None) or []
+        for link in links:
+            weapon = link.weapon
+            if not weapon or link.weapon_id is None:
+                continue
+            if link.weapon_id in results:
+                continue
+            results[link.weapon_id] = weapon_cost(
+                weapon,
+                unit.quality,
+                current_traits,
+            )
+        if unit.default_weapon and unit.default_weapon_id is not None:
+            weapon_id = unit.default_weapon_id
+            if weapon_id not in results:
+                results[weapon_id] = weapon_cost(
+                    unit.default_weapon,
+                    unit.quality,
+                    current_traits,
+                )
+        if roster_unit.selected_weapon and roster_unit.selected_weapon.id is not None:
+            weapon_id = roster_unit.selected_weapon.id
+            if weapon_id not in results:
+                results[weapon_id] = weapon_cost(
+                    roster_unit.selected_weapon,
+                    unit.quality,
+                    current_traits,
+                )
+        return results
 
-    def _add_weapon_cost(weapon: models.Weapon | None, total_count: int) -> None:
-        nonlocal melee_cost, ranged_cost
-        if not weapon or total_count <= 0:
-            return
-        cost_value = weapon_cost(weapon, unit.quality, unit_traits)
-        if cost_value <= 0:
-            return
-        range_value = normalize_range_value(weapon.effective_range)
-        contribution = cost_value * total_count
-        if range_value == 0:
-            melee_cost += contribution
+    def _passive_entries(current_traits: Sequence[str]) -> list[dict[str, Any]]:
+        entries: list[dict[str, Any]] = []
+        for entry in passive_state.payload:
+            slug = str(entry.get("slug") or "").strip()
+            if not slug or slug in ROLE_SLUGS:
+                continue
+            label = entry.get("label") or slug
+            value = entry.get("value")
+            default_count = int(entry.get("default_count") or 0)
+            cost_value = ability_cost_from_name(
+                label or slug,
+                value,
+                current_traits,
+                toughness=unit.toughness,
+            )
+            entries.append(
+                {
+                    "slug": slug,
+                    "default_count": default_count,
+                    "cost": float(cost_value),
+                }
+            )
+        return entries
+
+    def _ability_cost_map(current_traits: Sequence[str]) -> tuple[dict[int, float], float, float]:
+        ability_map: dict[int, float] = {}
+        passive_total = 0.0
+        active_total = 0.0
+        for link in getattr(unit, "abilities", []):
+            ability = link.ability
+            if not ability:
+                continue
+            cost_value = ability_cost(
+                link,
+                current_traits,
+                toughness=unit.toughness,
+            )
+            if ability.type == "passive":
+                passive_total += cost_value
+            else:
+                ability_map[ability.id] = cost_value
+                active_total += cost_value
+        return ability_map, passive_total, active_total
+
+    def _compute_total(current_traits: Sequence[str]) -> float:
+        ability_map, passive_total, active_total = _ability_cost_map(current_traits)
+        base_value = base_model_cost(
+            unit.quality,
+            unit.defense,
+            unit.toughness,
+            current_traits,
+        )
+        base_per_model = base_value + passive_total
+        passive_entries = _passive_entries(current_traits)
+        weapon_costs = _weapon_cost_map(current_traits)
+
+        if has_structured_loadout:
+            total = base_per_model * model_count
+            for weapon_id, stored_count in weapons_counts.items():
+                cost_value = weapon_costs.get(weapon_id)
+                if cost_value is None:
+                    continue
+                total += cost_value * _to_total(stored_count)
+            for ability_id, stored_count in {**active_counts, **aura_counts}.items():
+                cost_value = ability_map.get(ability_id)
+                if cost_value is None:
+                    continue
+                total += cost_value * _to_total(stored_count)
+            passive_diff = 0.0
+            for entry in passive_entries:
+                slug = entry.get("slug")
+                if not slug:
+                    continue
+                default_value = 1 if entry.get("default_count") else 0
+                selected_value = passive_counts.get(str(slug), default_value)
+                selected_flag = 1 if selected_value else 0
+                diff = selected_flag - default_value
+                if diff == 0:
+                    continue
+                cost_value = float(entry.get("cost") or 0.0)
+                if cost_value == 0.0:
+                    continue
+                passive_diff += cost_value * diff
+            if passive_diff:
+                total += passive_diff * model_multiplier
+            return round(total, 2)
+
+        legacy_unit_cost = base_per_model + active_total
+        default_weapons = unit_default_weapons(unit)
+        if roster_unit.selected_weapon:
+            legacy_unit_cost += weapon_cost(
+                roster_unit.selected_weapon,
+                unit.quality,
+                current_traits,
+            )
         else:
-            ranged_cost += contribution
+            for weapon in default_weapons:
+                legacy_unit_cost += weapon_cost(
+                    weapon,
+                    unit.quality,
+                    current_traits,
+                )
+        total = legacy_unit_cost * model_count
+        return round(total, 2)
 
-    processed_ids: set[int] = set()
-    for weapon_id, stored_count in weapons_counts.items():
-        try:
-            numeric_id = int(weapon_id)
-        except (TypeError, ValueError):
-            continue
-        total_count = _to_total(stored_count)
-        if total_count <= 0:
-            processed_ids.add(numeric_id)
-            continue
-        weapon = weapon_profiles.get(numeric_id)
-        _add_weapon_cost(weapon, total_count)
-        processed_ids.add(numeric_id)
+    warrior_total = _compute_total(_with_role_trait(base_traits, "wojownik"))
+    shooter_total = _compute_total(_with_role_trait(base_traits, "strzelec"))
+    return {"wojownik": warrior_total, "strzelec": shooter_total}
 
-    default_entries = getattr(unit, "default_weapon_loadout", []) or []
-    for weapon_obj, per_model_count in default_entries:
-        if not weapon_obj:
-            continue
-        weapon_id = getattr(weapon_obj, "id", None)
-        if weapon_id is not None and int(weapon_id) in processed_ids:
-            continue
-        total_count = max(int(per_model_count) if per_model_count is not None else 0, 0)
-        total_count *= model_count
-        _add_weapon_cost(weapon_obj, total_count)
-        if weapon_id is not None:
-            processed_ids.add(int(weapon_id))
 
-    if roster_unit.selected_weapon:
-        weapon = roster_unit.selected_weapon
-        weapon_id = getattr(weapon, "id", None)
-        if weapon_id is None or int(weapon_id) not in processed_ids:
-            _add_weapon_cost(weapon, model_count)
+def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
+    totals = roster_unit_role_totals(roster_unit)
+    warrior = float(totals.get("wojownik") or 0.0)
+    shooter = float(totals.get("strzelec") or 0.0)
+    return round(max(warrior, shooter), 2)
 
-    return {
-        "melee_cost": round(melee_cost, 2),
-        "ranged_cost": round(ranged_cost, 2),
-    }
+
+def roster_total(roster: models.Roster) -> float:
+    return round(sum(roster_unit_cost(ru) for ru in roster.roster_units), 2)
 
 
 def update_cached_costs(roster_units: Iterable[models.RosterUnit]) -> None:

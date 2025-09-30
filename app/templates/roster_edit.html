@@ -211,7 +211,15 @@
               class="text-muted small {% if not item.classification %}d-none{% endif %}"
               data-roster-unit-role
             >
-              {% if item.classification %}Klasyfikacja: {{ item.classification.label }} ({{ item.classification.summary }}){% endif %}
+              {% if item.classification %}
+                {% set classification_display = item.classification.display %}
+                {% if not classification_display %}
+                  {% set warrior_points = item.classification.warrior_cost | default(0) | round | int %}
+                  {% set shooter_points = item.classification.shooter_cost | default(0) | round | int %}
+                  {% set classification_display = 'Wojownik ' ~ warrior_points ~ ' pkt / Strzelec ' ~ shooter_points ~ ' pkt' %}
+                {% endif %}
+                Klasyfikacja: {{ classification_display }}
+              {% endif %}
             </div>
             {% set selected_passives = item.selected_passive_items or [] %}
             {% set selected_actives = item.selected_active_items or [] %}

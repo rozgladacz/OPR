@@ -113,7 +113,13 @@
 
           {% if item.classification %}
           <div class="mt-3 text-muted">
-            Klasyfikacja: {{ item.classification.label }} ({{ item.classification.summary }})
+            {% set classification_display = item.classification.display %}
+            {% if not classification_display %}
+              {% set warrior_points = item.classification.warrior_cost | default(0) | round | int %}
+              {% set shooter_points = item.classification.shooter_cost | default(0) | round | int %}
+              {% set classification_display = 'Wojownik ' ~ warrior_points ~ ' pkt / Strzelec ' ~ shooter_points ~ ' pkt' %}
+            {% endif %}
+            Klasyfikacja: {{ classification_display }}
           </div>
           {% endif %}
 
