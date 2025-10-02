@@ -105,8 +105,14 @@
             {% if item.active_items %}
             <span class="d-inline-flex flex-wrap gap-1 align-items-center">
               {% for ability in item.active_items %}
+              {% set base_label = ability.label or ability.raw or ability.slug %}
+              {% if ability.custom_name %}
+              {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+              {% else %}
+              {% set display_label = base_label %}
+              {% endif %}
               <span class="badge text-bg-info text-dark d-inline-flex align-items-center gap-1" title="{{ ability.description }}">
-                <span>{{ ability.label or ability.raw or ability.slug }}</span>
+                <span>{{ display_label }}</span>
                 {% if ability.is_default %}
                 <span class="small text-uppercase ms-1">Domyślna</span>
                 {% endif %}
@@ -122,8 +128,14 @@
             {% if item.aura_items %}
             <span class="d-inline-flex flex-wrap gap-1 align-items-center">
               {% for ability in item.aura_items %}
+              {% set base_label = ability.label or ability.raw or ability.slug %}
+              {% if ability.custom_name %}
+              {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+              {% else %}
+              {% set display_label = base_label %}
+              {% endif %}
               <span class="badge text-bg-warning text-dark d-inline-flex align-items-center gap-1" title="{{ ability.description }}">
-                <span>{{ ability.label or ability.raw or ability.slug }}</span>
+                <span>{{ display_label }}</span>
                 {% if ability.is_default %}
                 <span class="small text-uppercase ms-1">Domyślna</span>
                 {% endif %}
@@ -160,8 +172,14 @@
         {% if item.active_items %}
         <div class="d-flex flex-wrap gap-1">
           {% for ability in item.active_items %}
+          {% set base_label = ability.label or ability.raw or ability.slug %}
+          {% if ability.custom_name %}
+          {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+          {% else %}
+          {% set display_label = base_label %}
+          {% endif %}
           <span class="badge text-bg-info text-dark d-inline-flex align-items-center gap-1" title="{{ ability.description }}">
-            <span>{{ ability.label or ability.raw or ability.slug }}</span>
+            <span>{{ display_label }}</span>
             {% if ability.is_default %}
             <span class="small text-uppercase ms-1">Domyślna</span>
             {% endif %}
@@ -176,8 +194,14 @@
         {% if item.aura_items %}
         <div class="d-flex flex-wrap gap-1">
           {% for ability in item.aura_items %}
+          {% set base_label = ability.label or ability.raw or ability.slug %}
+          {% if ability.custom_name %}
+          {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+          {% else %}
+          {% set display_label = base_label %}
+          {% endif %}
           <span class="badge text-bg-warning text-dark d-inline-flex align-items-center gap-1" title="{{ ability.description }}">
-            <span>{{ ability.label or ability.raw or ability.slug }}</span>
+            <span>{{ display_label }}</span>
             {% if ability.is_default %}
             <span class="small text-uppercase ms-1">Domyślna</span>
             {% endif %}

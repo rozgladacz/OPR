@@ -855,9 +855,15 @@ def _selected_ability_entries(
             continue
         item = dict(entry)
         item["count"] = stored
-        custom_name = name_map.get(key)
-        if custom_name:
-            item["custom_name"] = custom_name
+
+        custom_name = item.get("custom_name") or name_map.get(key)
+        if isinstance(custom_name, str):
+            normalized = custom_name.strip()
+            if normalized:
+                item["custom_name"] = normalized
+            elif "custom_name" in item:
+                item.pop("custom_name", None)
+
         selected.append(item)
         seen.add(key)
     for key, value in counts.items():
@@ -870,9 +876,11 @@ def _selected_ability_entries(
             "count": value,
         }
         custom_name = name_map.get(str(key))
-        if custom_name:
-            fallback["custom_name"] = custom_name
-        selected.append(fallback)
+        if isinstance(custom_name, str):
+            normalized = custom_name.strip()
+            if normalized:
+                fallback["custom_name"] = normalized
+
     return selected
 
 
@@ -927,6 +935,10 @@ def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
             payload_entry = payload_candidates[0]
         payload_entry = payload_entry or {}
         label = payload_entry.get("label") or ability.name or ""
+        custom_name = payload_entry.get("custom_name")
+        if isinstance(custom_name, str):
+            custom_name = custom_name.strip() or None
+        base_label = payload_entry.get("base_label") or label
         description = payload_entry.get("description") or ability.description or ""
         is_default = payload_entry.get("is_default")
         if is_default is None:
@@ -943,11 +955,12 @@ def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
         entries.append(
             {
                 "ability_id": ability.id,
-                "label": label,
+                "label": base_label,
                 "description": description,
                 "cost": cost_value,
                 "is_default": bool(is_default),
                 "default_count": 1 if bool(is_default) else 0,
+                "custom_name": custom_name,
             }
         )
     entries.sort(key=lambda entry: (not entry.get("is_default", False), entry.get("label", "").casefold()))
@@ -1231,19 +1244,10 @@ def _sanitize_loadout(
     _merge("active")
     _merge("aura")
     _merge("passive", clamp=1)
-    for section in ("active", "aura"):
-        label_key = f"{section}_labels"
-        raw_labels = safe_payload.get(label_key)
-        cleaned: dict[str, str] = {}
-        if raw_labels:
-            normalized = _extract_label_map(raw_labels)
-            for key, count in defaults.get(section, {}).items():
-                if count <= 0:
-                    continue
-                value = normalized.get(str(key)) or normalized.get(key)
-                if value:
-                    cleaned[str(key)] = value[:ABILITY_NAME_MAX_LENGTH]
-        defaults[label_key] = cleaned
+
+    defaults["active_labels"] = {}
+    defaults["aura_labels"] = {}
+
     if mode_value:
         defaults["mode"] = mode_value
     return defaults

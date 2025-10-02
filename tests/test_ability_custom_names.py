@@ -1,3 +1,6 @@
+
+import json
+
 import sys
 from pathlib import Path
 
@@ -7,6 +10,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from app import models
 from app.routers import rosters
+
 
 
 def _make_unit() -> models.Unit:
@@ -22,42 +26,71 @@ def _make_unit() -> models.Unit:
     return unit
 
 
-def test_sanitize_loadout_preserves_valid_custom_names():
-    unit = _make_unit()
-    payload = {
-        "active": {"7": 2, "8": 0},
-        "aura": {"9": 1},
-        "active_labels": {"7": "Medyk", "8": "Unused"},
-        "aura_labels": {"9": "Psyker"},
-    }
-    active_items = [{"ability_id": 7, "default_count": 0}]
-    aura_items = [{"ability_id": 9, "default_count": 0}]
 
-    sanitized = rosters._sanitize_loadout(
-        unit,
-        model_count=3,
-        payload=payload,
-        weapon_options=[],
-        active_items=active_items,
-        aura_items=aura_items,
-        passive_items=[],
+def test_unit_ability_payload_includes_custom_name():
+    unit = _make_unit()
+    ability = models.Ability(
+        id=7,
+        name="Mag(2)",
+        type="active",
+        description="",
+    )
+    ability.config_json = json.dumps({"slug": "mag"})
+    link = models.UnitAbility(
+        ability=ability,
+        params_json=json.dumps({"value": "2", "custom_name": "Psyker"}),
+    )
+    unit.abilities = [link]
+
+    payload = ability_registry.unit_ability_payload(unit, "active")
+
+    assert payload
+    entry = payload[0]
+    assert entry["custom_name"] == "Psyker"
+    assert entry["label"] == "Mag(2)"
+    assert entry["base_label"] == "Mag(2)"
+
+
+def test_build_unit_abilities_stores_trimmed_custom_name():
+    ability = models.Ability(id=5, name="Aura", type="aura", description="")
+    ability.config_json = json.dumps({"slug": "aura"})
+    session = DummySession([ability])
+
+    entries = ability_registry.build_unit_abilities(
+        session,
+        [
+            {
+                "ability_id": ability.id,
+                "value": "",  # optional
+                "custom_name": "  Medyk  ",
+            }
+        ],
+        "aura",
     )
 
-    assert sanitized["active"].get("7") == 2
-    assert sanitized["active_labels"] == {"7": "Medyk"}
-    assert sanitized["aura_labels"] == {"9": "Psyker"}
+    assert entries
+    params = json.loads(entries[0].params_json)
+    assert params["custom_name"] == "Medyk"
+    assert "value" not in params
 
 
-def test_selected_ability_entries_include_custom_names():
-    loadout = {
-        "active": {"7": 1},
-        "active_labels": {"7": "Medyk"},
-    }
-    ability_items = [{"ability_id": 7, "label": "Aura: Regeneracja", "description": ""}]
+def test_selected_ability_entries_use_unit_custom_names():
+    loadout = {"active": {"7": 1}}
+    ability_items = [
+        {
+            "ability_id": 7,
+            "label": "Aura: Regeneracja",
+            "custom_name": "Medyk",
+            "description": "",
+        }
+    ]
+
 
     selected = rosters._selected_ability_entries(loadout, ability_items, "active")
 
     assert selected and selected[0]["custom_name"] == "Medyk"
+    assert selected[0]["label"] == "Aura: Regeneracja"
+
 
 
 def test_ability_label_with_count_uses_custom_name():
