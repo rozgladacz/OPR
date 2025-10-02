@@ -17,7 +17,32 @@ from ..services import ability_registry, costs, utils
 router = APIRouter(prefix="/armies", tags=["armies"])
 templates = Jinja2Templates(directory="app/templates")
 
-PASSIVE_DEFINITIONS = [ability_catalog.to_dict(definition) for definition in ability_catalog.definitions_by_type("passive")]
+
+def _normalized_trait_identifier(slug: str | None) -> str | None:
+    if slug is None:
+        return None
+    identifier = costs.ability_identifier(slug)
+    if identifier:
+        return identifier
+    text = str(slug).strip()
+    if not text:
+        return None
+    return text.casefold()
+
+
+def _is_hidden_trait(slug: str | None) -> bool:
+    normalized = _normalized_trait_identifier(slug)
+    return bool(normalized and normalized in utils.HIDDEN_TRAIT_SLUGS)
+
+
+PASSIVE_DEFINITIONS = [
+    entry
+    for entry in (
+        ability_catalog.to_dict(definition)
+        for definition in ability_catalog.definitions_by_type("passive")
+    )
+    if not _is_hidden_trait(entry.get("slug"))
+]
 
 
 def _ensure_army_view_access(army: models.Army, user: models.User) -> None:
@@ -96,7 +121,15 @@ def _ordered_weapons(db: Session, armory: models.Armory, weapon_ids: list[int]) 
 
 def _passive_payload(unit: models.Unit | None) -> list[dict]:
     flags = unit.flags if unit else None
-    return utils.passive_flags_to_payload(flags)
+    payload = utils.passive_flags_to_payload(flags)
+    result: list[dict] = []
+    for item in payload:
+        if not item:
+            continue
+        if _is_hidden_trait(item.get("slug")):
+            continue
+        result.append(item)
+    return result
 
 
 def _parse_selection_payload(text: str | None) -> list[dict]:

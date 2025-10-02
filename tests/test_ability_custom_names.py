@@ -5,6 +5,7 @@ import json
 
 import sys
 from pathlib import Path
+from typing import Iterable, Sequence
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -14,20 +15,29 @@ from app import models
 from app.routers import rosters
 from app.services import ability_registry
 
+class DummyResult:
+    def __init__(self, abilities: Sequence[models.Ability]):
+        self._abilities = list(abilities)
 
-class DummySession:
-    def __init__(self, abilities: list[models.Ability]):
-        self._abilities = abilities
-
-    def execute(self, _statement):  # pragma: nocover - simple stub
+    def scalars(self) -> "DummyResult":
         return self
 
+    def all(self) -> list[models.Ability]:
+        return list(self._abilities)
+
+
+class DummySession:
+    def __init__(self, abilities: Iterable[models.Ability]):
+        self._abilities = list(abilities)
+
+    def execute(self, *_args, **_kwargs) -> DummyResult:
+        return DummyResult(self._abilities)
+      
     def scalars(self):  # pragma: nocover - simple stub
         return self
 
     def all(self) -> list[models.Ability]:  # pragma: nocover - simple stub
         return list(self._abilities)
-
 
 
 def _make_unit() -> models.Unit:
