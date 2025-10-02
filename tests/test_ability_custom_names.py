@@ -11,13 +11,17 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app import models
+from app.services import ability_registry, utils
+
+if not hasattr(utils, "HIDDEN_TRAIT_SLUGS"):
+    utils.HIDDEN_TRAIT_SLUGS = set()
+
 from app.routers import rosters
-from app.services import ability_registry
 
 
 class DummySession:
-    def __init__(self, abilities: list[models.Ability]):
-        self._abilities = abilities
+    def __init__(self, abilities: list[models.Ability] | None = None):
+        self._abilities = list(abilities) if abilities else []
 
     def execute(self, _statement):  # pragma: nocover - simple stub
         return self
@@ -27,6 +31,12 @@ class DummySession:
 
     def all(self) -> list[models.Ability]:  # pragma: nocover - simple stub
         return list(self._abilities)
+
+    def add(self, ability: models.Ability) -> None:  # pragma: nocover - simple stub
+        self._abilities.append(ability)
+
+    def flush(self) -> None:  # pragma: nocover - simple stub
+        return None
 
 
 
@@ -118,3 +128,33 @@ def test_ability_label_with_count_uses_custom_name():
     entry_with_count = {"label": "Mag", "count": 2, "custom_name": "Psyker"}
 
     assert rosters._ability_label_with_count(entry_with_count) == "Psyker [Mag] ×2"
+
+
+def test_definition_payload_excludes_disallowed_aura_and_order_choices():
+    disallowed = {
+        "zasadzka",
+        "zwiadowca",
+        "nieruchomy",
+        "samolot",
+        "dobrze_strzela",
+        "zle_strzela",
+        "bohater",
+        "transport",
+        "masywny",
+    }
+
+    session = DummySession()
+
+    aura_payload = ability_registry.definition_payload(session, "aura")
+    aura_entry = next(item for item in aura_payload if item["slug"] == "aura")
+    assert aura_entry["value_choices"]
+    for choice in aura_entry["value_choices"]:
+        value = str(choice["value"])
+        ability_slug = value.split("|", 1)[0]
+        assert ability_slug not in disallowed
+
+    active_payload = ability_registry.definition_payload(session, "active")
+    order_entry = next(item for item in active_payload if item["slug"] == "rozkaz")
+    assert order_entry["value_choices"]
+    for choice in order_entry["value_choices"]:
+        assert str(choice["value"]) not in disallowed
