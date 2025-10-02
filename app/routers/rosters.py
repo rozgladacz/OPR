@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Mapping
+import math
+from collections.abc import Mapping, Sequence, Set as AbstractSet
+from decimal import Decimal
+from typing import Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -17,6 +20,27 @@ from ..services.rules import collect_roster_warnings
 
 router = APIRouter(prefix="/rosters", tags=["rosters"])
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, (str, bool)) or value is None:
+        return value
+    if isinstance(value, (int, float)):
+        if isinstance(value, float) and not math.isfinite(value):
+            return 0.0
+        return value
+    if isinstance(value, Decimal):
+        numeric = float(value)
+        if not math.isfinite(numeric):
+            return 0.0
+        return numeric
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(val) for key, val in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, AbstractSet):
+        return [_json_safe(item) for item in value]
+    return None
 
 
 def _ensure_roster_view_access(roster: models.Roster, user: models.User) -> None:
@@ -404,32 +428,31 @@ def update_roster_unit(
         selected_actives = _selected_ability_entries(loadout, active_items, "active")
         selected_auras = _selected_ability_entries(loadout, aura_items, "aura")
         warnings = collect_roster_warnings(roster)
-        return JSONResponse(
-            {
-                "unit": {
-                    "id": roster_unit.id,
-                    "count": roster_unit.count,
-                    "custom_name": roster_unit.custom_name or "",
-                    "cached_cost": roster_unit.cached_cost,
-                    "loadout_json": json.dumps(loadout, ensure_ascii=False),
-                    "loadout_summary": _loadout_display_summary(
-                        roster_unit,
-                        loadout,
-                        weapon_options,
-                    ),
-                    "default_summary": _default_loadout_summary(roster_unit.unit),
-                    "base_cost_per_model": _base_cost_per_model(
-                        roster_unit.unit, classification
-                    ),
-                    "classification": classification,
-                    "selected_passive_items": selected_passives,
-                    "selected_active_items": selected_actives,
-                    "selected_aura_items": selected_auras,
-                },
-                "roster": {"total_cost": total_cost},
-                "warnings": warnings,
-            }
-        )
+        payload = {
+            "unit": {
+                "id": roster_unit.id,
+                "count": roster_unit.count,
+                "custom_name": roster_unit.custom_name or "",
+                "cached_cost": roster_unit.cached_cost,
+                "loadout_json": json.dumps(loadout, ensure_ascii=False),
+                "loadout_summary": _loadout_display_summary(
+                    roster_unit,
+                    loadout,
+                    weapon_options,
+                ),
+                "default_summary": _default_loadout_summary(roster_unit.unit),
+                "base_cost_per_model": _base_cost_per_model(
+                    roster_unit.unit, classification
+                ),
+                "classification": classification,
+                "selected_passive_items": selected_passives,
+                "selected_active_items": selected_actives,
+                "selected_aura_items": selected_auras,
+            },
+            "roster": {"total_cost": total_cost},
+            "warnings": warnings,
+        }
+        return JSONResponse(_json_safe(payload))
     return RedirectResponse(
         url=f"/rosters/{roster.id}?selected={roster_unit.id}",
         status_code=303,
