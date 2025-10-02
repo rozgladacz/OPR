@@ -604,23 +604,6 @@ function normalizeRangeValue(value) {
   return Math.round(numeric);
 }
 
-function buildTraitVariants(unitTraits) {
-  const base = Array.isArray(unitTraits) ? unitTraits.slice() : [];
-  const identifiers = new Set(base.map((trait) => abilityIdentifier(trait)));
-  if (![...identifiers].some((slug) => CLASSIFICATION_SLUGS.has(slug))) {
-    return [base];
-  }
-  const withoutClassification = base.filter((trait) => !CLASSIFICATION_SLUGS.has(abilityIdentifier(trait)));
-  const variants = [withoutClassification];
-  if (identifiers.has('wojownik')) {
-    variants.push([...withoutClassification, 'wojownik']);
-  }
-  if (identifiers.has('strzelec')) {
-    variants.push([...withoutClassification, 'strzelec']);
-  }
-  return variants;
-}
-
 function buildWeaponFlags(baseFlags, passiveItems, passiveState) {
   const result = { ...(baseFlags || {}) };
   const identifierKeys = new Map();
@@ -813,8 +796,7 @@ function buildWeaponCostMap(
       }
     }
   }
-  const unitTraits = flagsToAbilityList(weaponFlags);
-  const variants = buildTraitVariants(unitTraits);
+  const unitTraits = [...new Set(flagsToAbilityList(weaponFlags))];
   const quality = Number.isFinite(Number(unitQuality)) ? Number(unitQuality) : 4;
   (Array.isArray(options) ? options : []).forEach((option) => {
     if (!option || option.id === undefined || option.id === null) {
@@ -827,15 +809,9 @@ function buildWeaponCostMap(
     const attacks = option.attacks ?? option.display_attacks ?? 0;
     const ap = option.ap ?? 0;
     const traits = splitTraits(option.traits);
-    let bestCost = 0;
-    variants.forEach((variant) => {
-      const value = weaponCostInternal(quality, option.range, attacks, ap, traits, variant, true);
-      if (Number.isFinite(value) && value > bestCost) {
-        bestCost = value;
-      }
-    });
-    if (Number.isFinite(bestCost)) {
-      const rounded = Math.max(0, Math.round(bestCost * 100) / 100);
+    const cost = weaponCostInternal(quality, option.range, attacks, ap, traits, unitTraits, true);
+    if (Number.isFinite(cost)) {
+      const rounded = Math.max(0, Math.round(cost * 100) / 100);
       result.set(weaponId, rounded);
     }
   });
@@ -1349,20 +1325,6 @@ function formatPoints(value) {
     baseOptions.minimumFractionDigits = 2;
   }
   return number.toLocaleString('pl-PL', baseOptions);
-}
-
-function formatClassificationDisplay(classification) {
-  if (!classification || typeof classification !== 'object') {
-    return '';
-  }
-  if (classification.display) {
-    return classification.display;
-  }
-  const warrior = Math.round(Number(classification.warrior_cost ?? 0));
-  const shooter = Math.round(Number(classification.shooter_cost ?? 0));
-  const warriorText = formatPoints(Number.isFinite(warrior) ? warrior : 0);
-  const shooterText = formatPoints(Number.isFinite(shooter) ? shooter : 0);
-  return `Wojownik ${warriorText} pkt / Strzelec ${shooterText} pkt`;
 }
 
 function renderPassiveEditor(
@@ -2282,18 +2244,12 @@ function initRosterEditor() {
     });
   }
 
-  function renderClassificationDisplay(classification) {
+  function renderClassificationDisplay() {
     if (!roleEl) {
       return;
     }
-    const text = formatClassificationDisplay(classification);
-    if (text) {
-      roleEl.textContent = `Klasyfikacja: ${text}`;
-      roleEl.classList.remove('d-none');
-    } else {
-      roleEl.textContent = '';
-      roleEl.classList.add('d-none');
-    }
+    roleEl.textContent = '';
+    roleEl.classList.add('d-none');
   }
 
   function updateItemClassification(item, classification) {
@@ -2304,18 +2260,6 @@ function initRosterEditor() {
       item.setAttribute('data-unit-classification', JSON.stringify(classification ?? null));
     } catch (err) {
       item.setAttribute('data-unit-classification', 'null');
-    }
-    const roleNode = item.querySelector('[data-roster-unit-role]');
-    if (!roleNode) {
-      return;
-    }
-    const text = formatClassificationDisplay(classification);
-    if (text) {
-      roleNode.textContent = `Klasyfikacja: ${text}`;
-      roleNode.classList.remove('d-none');
-    } else {
-      roleNode.textContent = '';
-      roleNode.classList.add('d-none');
     }
   }
 
@@ -2668,11 +2612,20 @@ function initRosterEditor() {
   }
 
   function handleStateChange() {
+    let precomputedWeaponMap = null;
     if (loadoutState) {
       loadoutState.mode = 'total';
+      const estimation = estimateClassificationForState();
+      if (estimation) {
+        currentClassification = estimation.classification || null;
+        if (estimation.weaponMap instanceof Map) {
+          precomputedWeaponMap = estimation.weaponMap;
+        }
+      }
       applyClassificationToState(loadoutState, currentClassification);
     }
-    renderEditors();
+    renderClassificationDisplay();
+    renderEditors(precomputedWeaponMap);
     if (loadoutInput && loadoutState) {
       loadoutInput.value = serializeLoadoutState(loadoutState);
     }
@@ -2681,6 +2634,7 @@ function initRosterEditor() {
       activeItem.setAttribute('data-loadout', loadoutInput.value || '{}');
     }
     if (activeItem) {
+      updateItemClassification(activeItem, currentClassification);
       activeItem.setAttribute('data-unit-count', String(currentCount));
     }
     if (ignoreNextSave) {
@@ -2693,16 +2647,167 @@ function initRosterEditor() {
     }
   }
 
-  function renderEditors() {
-    const passiveState = loadoutState && loadoutState.passive instanceof Map ? loadoutState.passive : new Map();
-    currentWeaponCostMap = buildWeaponCostMap(
+function availableClassificationSlugs(flags) {
+  const result = new Set();
+  Object.keys(flags || {}).forEach((key) => {
+    const ident = passiveIdentifier(key);
+    if (CLASSIFICATION_SLUGS.has(ident)) {
+      result.add(ident);
+    }
+  });
+  return result;
+}
+
+function createClassificationPayload(warriorTotal, shooterTotal, availableSlugs) {
+  const warrior = Math.max(Number(warriorTotal) || 0, 0);
+  const shooter = Math.max(Number(shooterTotal) || 0, 0);
+  if (warrior <= 0 && shooter <= 0) {
+    return null;
+  }
+  const pool = new Set();
+  if (availableSlugs instanceof Set) {
+    availableSlugs.forEach((slug) => {
+      if (CLASSIFICATION_SLUGS.has(slug)) {
+        pool.add(slug);
+      }
+    });
+  } else if (Array.isArray(availableSlugs)) {
+    availableSlugs.forEach((slug) => {
+      if (CLASSIFICATION_SLUGS.has(slug)) {
+        pool.add(slug);
+      }
+    });
+  }
+  let preferred = null;
+  if (warrior > shooter) {
+    preferred = 'wojownik';
+  } else if (shooter > warrior) {
+    preferred = 'strzelec';
+  } else if (pool.has('wojownik') || pool.size === 0) {
+    preferred = 'wojownik';
+  } else if (pool.has('strzelec')) {
+    preferred = 'strzelec';
+  }
+  const fallbackSlug = 'wojownik';
+  let slug = null;
+  if (pool.size) {
+    if (preferred && pool.has(preferred)) {
+      slug = preferred;
+    } else if (pool.size === 1) {
+      slug = pool.values().next().value;
+    } else if (preferred && !pool.has(preferred)) {
+      for (const candidate of pool) {
+        if (candidate !== preferred) {
+          slug = candidate;
+          break;
+        }
+      }
+    } else if (!preferred) {
+      if (pool.has('wojownik')) {
+        slug = 'wojownik';
+      } else if (pool.has('strzelec')) {
+        slug = 'strzelec';
+      } else {
+        slug = pool.values().next().value || null;
+      }
+    }
+  } else {
+    slug = preferred || fallbackSlug;
+  }
+  if (!slug) {
+    return null;
+  }
+  const roundedWarrior = Math.round(warrior * 100) / 100;
+  const roundedShooter = Math.round(shooter * 100) / 100;
+  const warriorPoints = Math.round(warrior);
+  const shooterPoints = Math.round(shooter);
+  const display = `Wojownik ${warriorPoints} pkt / Strzelec ${shooterPoints} pkt`;
+  return {
+    slug,
+    label: slug === 'wojownik' ? 'Wojownik' : 'Strzelec',
+    warrior_cost: roundedWarrior,
+    shooter_cost: roundedShooter,
+    display,
+  };
+}
+
+function estimateClassificationForState() {
+  if (!loadoutState) {
+    return { classification: null, weaponMap: null };
+  }
+  const available = availableClassificationSlugs(currentBaseFlags);
+  if (currentClassification && typeof currentClassification === 'object' && currentClassification.slug) {
+    const ident = abilityIdentifier(currentClassification.slug);
+    if (CLASSIFICATION_SLUGS.has(ident)) {
+      available.add(ident);
+    }
+  }
+  if (!available.size) {
+    return { classification: null, weaponMap: null };
+  }
+  const evaluateRole = (slug) => {
+    const classification = { slug };
+    const clone = cloneLoadoutState(loadoutState);
+    if (clone) {
+      clone.mode = 'total';
+    }
+    applyClassificationToState(clone, classification);
+    const passiveMap = clone && clone.passive instanceof Map ? clone.passive : new Map();
+    const weaponMap = buildWeaponCostMap(
       currentWeapons,
       currentQuality,
       currentBaseFlags,
       currentPassives,
-      passiveState,
-      currentClassification,
+      passiveMap,
+      classification,
     );
+    const total = computeTotalCost(
+      baseCostPerModel,
+      currentCount,
+      currentWeapons,
+      clone,
+      abilityCostMap,
+      currentPassives,
+      weaponMap,
+    );
+    return { total, weaponMap };
+  };
+  const warrior = available.has('wojownik') ? evaluateRole('wojownik') : null;
+  const shooter = available.has('strzelec') ? evaluateRole('strzelec') : null;
+  const classification = createClassificationPayload(
+    warrior ? warrior.total : 0,
+    shooter ? shooter.total : 0,
+    available,
+  );
+  let weaponMap = null;
+  if (classification) {
+    if (classification.slug === 'wojownik' && warrior) {
+      weaponMap = warrior.weaponMap;
+    } else if (classification.slug === 'strzelec' && shooter) {
+      weaponMap = shooter.weaponMap;
+    }
+  } else if (warrior && !shooter) {
+    weaponMap = warrior.weaponMap;
+  } else if (shooter && !warrior) {
+    weaponMap = shooter.weaponMap;
+  }
+  return { classification, weaponMap };
+}
+
+function renderEditors(precomputedWeaponMap = null) {
+    const passiveState = loadoutState && loadoutState.passive instanceof Map ? loadoutState.passive : new Map();
+    if (precomputedWeaponMap instanceof Map) {
+      currentWeaponCostMap = precomputedWeaponMap;
+    } else {
+      currentWeaponCostMap = buildWeaponCostMap(
+        currentWeapons,
+        currentQuality,
+        currentBaseFlags,
+        currentPassives,
+        passiveState,
+        currentClassification,
+      );
+    }
     const computePassiveDeltaForSlug = (slug) => {
       if (!slug) {
         return Number.NaN;
@@ -2824,7 +2929,7 @@ function initRosterEditor() {
       }
       updateCustomLabelDisplay('');
       currentClassification = null;
-      renderClassificationDisplay(null);
+      renderClassificationDisplay();
       autoSaveEnabled = false;
       setSaveStatus('idle');
       return;
@@ -2874,7 +2979,7 @@ function initRosterEditor() {
       updateActiveItem: false,
       updateList: false,
     });
-    renderClassificationDisplay(currentClassification);
+    renderClassificationDisplay();
 
     currentCount = Number.isFinite(countValue) && countValue >= 1 ? countValue : 1;
     if (countInput) {
