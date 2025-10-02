@@ -1,4 +1,6 @@
 
+from __future__ import annotations
+
 import json
 
 import sys
@@ -10,6 +12,21 @@ if str(ROOT_DIR) not in sys.path:
 
 from app import models
 from app.routers import rosters
+from app.services import ability_registry
+
+
+class DummySession:
+    def __init__(self, abilities: list[models.Ability]):
+        self._abilities = abilities
+
+    def execute(self, _statement):  # pragma: nocover - simple stub
+        return self
+
+    def scalars(self):  # pragma: nocover - simple stub
+        return self
+
+    def all(self) -> list[models.Ability]:  # pragma: nocover - simple stub
+        return list(self._abilities)
 
 
 

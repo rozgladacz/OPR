@@ -880,6 +880,8 @@ def _selected_ability_entries(
             if normalized:
                 fallback["custom_name"] = normalized
 
+        selected.append(fallback)
+
     return selected
 
 
@@ -1215,11 +1217,47 @@ def _sanitize_loadout(
 
     max_count = max(int(model_count), 0)
 
+    def _normalize_section(section: str) -> dict[str, Any]:
+        source = safe_payload.get(section, {})
+        if isinstance(source, dict):
+            return {str(key): value for key, value in source.items() if key is not None}
+        if isinstance(source, list):
+            normalized: dict[str, Any] = {}
+            for entry in source:
+                if not isinstance(entry, dict):
+                    continue
+                if section == "passive":
+                    entry_id = (
+                        entry.get("slug")
+                        or entry.get("id")
+                        or entry.get("ability_id")
+                        or entry.get("weapon_id")
+                    )
+                    raw_value = entry.get("enabled")
+                    if raw_value is None:
+                        raw_value = (
+                            entry.get("count")
+                            or entry.get("per_model")
+                            or entry.get("value")
+                        )
+                else:
+                    entry_id = entry.get("id") or entry.get("weapon_id") or entry.get("ability_id")
+                    raw_value = entry.get("per_model") or entry.get("count") or entry.get("value")
+                if entry_id is None:
+                    continue
+                normalized[str(entry_id)] = raw_value
+            return normalized
+        return {}
+
     def _merge(section: str, clamp: int | None = None) -> None:
         defaults_section = defaults.get(section, {})
-        incoming = safe_payload.get(section, {})
-        for key in defaults_section.keys():
-            raw_value = incoming.get(key, defaults_section[key])
+        if not isinstance(defaults_section, dict):
+            defaults_section = {}
+            defaults[section] = defaults_section
+        incoming_map = _normalize_section(section)
+        keys = set(defaults_section.keys()) | set(incoming_map.keys())
+        for key in keys:
+            raw_value = incoming_map.get(key, defaults_section.get(key, 0))
             try:
                 value = int(raw_value)
             except (TypeError, ValueError):
@@ -1244,8 +1282,8 @@ def _sanitize_loadout(
     _merge("aura")
     _merge("passive", clamp=1)
 
-    defaults["active_labels"] = {}
-    defaults["aura_labels"] = {}
+    defaults["active_labels"] = _extract_label_map(safe_payload.get("active_labels"))
+    defaults["aura_labels"] = _extract_label_map(safe_payload.get("aura_labels"))
 
     if mode_value:
         defaults["mode"] = mode_value
@@ -1451,6 +1489,7 @@ def _roster_unit_export_data(
     unit = roster_unit.unit
     if unit is None:  # pragma: no cover - defensive fallback
         total_value = float(roster_unit.cached_cost or 0.0)
+        rounded_total = utils.round_points(total_value)
         return {
             "instance": roster_unit,
             "unit": None,
@@ -1467,6 +1506,7 @@ def _roster_unit_export_data(
             "weapon_summary": "",
             "default_summary": "",
             "total_cost": total_value,
+            "rounded_total_cost": rounded_total,
         }
 
     weapon_options = _unit_weapon_options(unit)
@@ -1506,6 +1546,7 @@ def _roster_unit_export_data(
         if entry
     ]
     total_value = float(roster_unit.cached_cost or costs.roster_unit_cost(roster_unit))
+    rounded_total = utils.round_points(total_value)
 
     return {
         "instance": roster_unit,
@@ -1523,6 +1564,7 @@ def _roster_unit_export_data(
         "weapon_summary": weapon_summary,
         "default_summary": _default_loadout_summary(unit),
         "total_cost": total_value,
+        "rounded_total_cost": rounded_total,
         "classification": classification,
     }
 
