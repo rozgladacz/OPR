@@ -1889,15 +1889,18 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
         }
         input.value = String(nextValue);
         stateMap.set(abilityId, nextValue);
+        const hasCustomInput = typeof customInput !== 'undefined' && customInput;
         if (nextValue <= 0) {
-          applyCustomName('');
-          if (customInput) {
+          if (typeof applyCustomName === 'function') {
+            applyCustomName('');
+          }
+          if (hasCustomInput) {
             customInput.value = '';
             customInput.disabled = true;
           }
-        } else if (customInput) {
+        } else if (hasCustomInput) {
           customInput.disabled = false;
-          if (currentCustomName) {
+          if (typeof formatDisplayLabel === 'function' && currentCustomName) {
             formatDisplayLabel(currentCustomName);
           }
         }
