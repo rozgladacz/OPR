@@ -20,7 +20,7 @@ from .. import models
 from ..db import get_db
 from ..security import get_current_user
 from ..pdf_font_data import PDF_FONT_DATA
-from ..services import costs
+from ..services import costs, utils
 from .rosters import _ensure_roster_view_access, _roster_unit_export_data
 
 router = APIRouter(prefix="/rosters", tags=["export"])
@@ -91,6 +91,7 @@ def roster_print(
 
     costs.update_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
+    total_cost_rounded = utils.round_points(total_cost)
     roster_items = [_roster_unit_export_data(ru) for ru in roster.roster_units]
     return templates.TemplateResponse(
         "roster_print.html",
@@ -100,6 +101,7 @@ def roster_print(
             "roster": roster,
             "roster_items": roster_items,
             "total_cost": total_cost,
+            "total_cost_rounded": total_cost_rounded,
             "generated_at": datetime.utcnow(),
         },
     )
@@ -121,6 +123,7 @@ def roster_export_list(
 
     costs.update_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
+    total_cost_rounded = utils.round_points(total_cost)
 
     entries = [_roster_unit_export_data(ru) for ru in roster.roster_units]
 
@@ -132,6 +135,7 @@ def roster_export_list(
             "roster": roster,
             "entries": entries,
             "total_cost": total_cost,
+            "total_cost_rounded": total_cost_rounded,
             "generated_at": datetime.utcnow(),
         },
     )
@@ -153,6 +157,7 @@ def roster_pdf(
     generated_at = datetime.utcnow()
     costs.update_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
+    total_cost_rounded = utils.round_points(total_cost)
     roster_items = [_roster_unit_export_data(ru) for ru in roster.roster_units]
 
     _ensure_pdf_fonts()
@@ -182,7 +187,7 @@ def roster_pdf(
         y -= 14
         pdf.drawString(40, y, f"Limit punktów: {roster.points_limit or 'brak'}")
         y -= 14
-        pdf.drawString(40, y, f"Suma punktów: {total_cost:.1f} pkt")
+        pdf.drawString(40, y, f"Suma punktów: {total_cost_rounded} pkt")
         y -= 14
         pdf.drawString(40, y, f"Wygenerowano: {generated_at.strftime('%Y-%m-%d %H:%M')} UTC")
         y -= 18
@@ -192,7 +197,10 @@ def roster_pdf(
 
     for item in roster_items:
         name = item.get("custom_name") or item.get("unit_name") or "Jednostka"
-        header_line = f"{name} × {item.get('count', 0)} (Koszt: {item.get('total_cost', 0.0):.1f} pkt)"
+        rounded_cost = item.get("rounded_total_cost")
+        if rounded_cost is None:
+            rounded_cost = utils.round_points(item.get("total_cost"))
+        header_line = f"{name} × {item.get('count', 0)} (Koszt: {rounded_cost} pkt)"
         line_specs: list[tuple[str, float, int, str]] = [
             (PDF_BOLD_FONT, 11, 40, header_line)
         ]
@@ -205,6 +213,21 @@ def roster_pdf(
             f"Wytrzymałość: {item.get('toughness', '-')}"
         )
         line_specs.append((PDF_BASE_FONT, 10, 40, stats_line))
+        ability_sections: list[tuple[str, list[str]]] = []
+        if item.get("passive_labels"):
+            ability_sections.append(("Pasywne", item["passive_labels"]))
+        if item.get("active_labels"):
+            ability_sections.append(("Aktywne", item["active_labels"]))
+        if item.get("aura_labels"):
+            ability_sections.append(("Aury", item["aura_labels"]))
+
+        if ability_sections:
+            line_specs.append((PDF_BASE_FONT, 10, 40, "Zdolności:"))
+            for label, values in ability_sections:
+                base = f"{label}: {', '.join(values)}"
+                for segment in wrap_line(base):
+                    line_specs.append((PDF_BASE_FONT, 10, 50, segment))
+
         line_specs.append((PDF_BASE_FONT, 10, 40, "Uzbrojenie:"))
 
         for weapon in item.get("weapon_details", []):
@@ -221,21 +244,6 @@ def roster_pdf(
             for segment in wrap_line(weapon_line):
                 line_specs.append((PDF_BASE_FONT, 10, 50, segment))
 
-        ability_sections: list[tuple[str, list[str]]] = []
-        if item.get("passive_labels"):
-            ability_sections.append(("Pasywne", item["passive_labels"]))
-        if item.get("active_labels"):
-            ability_sections.append(("Aktywne", item["active_labels"]))
-        if item.get("aura_labels"):
-            ability_sections.append(("Aury", item["aura_labels"]))
-
-        if ability_sections:
-            line_specs.append((PDF_BASE_FONT, 10, 40, "Zdolności:"))
-            for label, values in ability_sections:
-                base = f"{label}: {', '.join(values)}"
-                for segment in wrap_line(base):
-                    line_specs.append((PDF_BASE_FONT, 10, 50, segment))
-
         required_space = line_height * (len(line_specs) + 1)
         if y - required_space < margin:
             pdf.showPage()
@@ -247,13 +255,6 @@ def roster_pdf(
             pdf.drawString(x_offset, y, text)
             y -= line_height
         y -= 6
-
-    if y - line_height < margin:
-        pdf.showPage()
-        y = height - 50
-        draw_page_header()
-    pdf.setFont(PDF_BOLD_FONT, 11)
-    pdf.drawString(40, y, f"Suma punktów: {total_cost:.1f} pkt")
 
     pdf.showPage()
     pdf.save()

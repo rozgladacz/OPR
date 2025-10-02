@@ -1,13 +1,34 @@
 from __future__ import annotations
 
 import math
-from typing import Sequence
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from typing import Any, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import models
 from ..data import abilities as ability_catalog
+
+
+HIDDEN_TRAIT_SLUGS = frozenset({"wojownik", "strzelec"})
+
+
+def round_points(value: Any) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, Decimal):
+        dec_value = value
+    else:
+        try:
+            dec_value = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                return 0
+            dec_value = Decimal(str(numeric))
+    return int(dec_value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def split_owned(items: Sequence, user: models.User | None):
