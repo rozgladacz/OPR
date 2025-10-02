@@ -24,6 +24,23 @@ templates = Jinja2Templates(directory="app/templates")
 ABILITY_NAME_MAX_LENGTH = 60
 
 
+def _normalized_trait_identifier(slug: str | None) -> str | None:
+    if slug is None:
+        return None
+    identifier = costs.ability_identifier(slug)
+    if identifier:
+        return identifier
+    text = str(slug).strip()
+    if not text:
+        return None
+    return text.casefold()
+
+
+def _is_hidden_trait(slug: str | None) -> bool:
+    normalized = _normalized_trait_identifier(slug)
+    return bool(normalized and normalized in utils.HIDDEN_TRAIT_SLUGS)
+
+
 def _json_safe(value: Any) -> Any:
     if isinstance(value, (str, bool)) or value is None:
         return value
@@ -579,12 +596,11 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
     entries: list[dict] = []
     flags = utils.parse_flags(unit.flags)
     unit_traits = costs.flags_to_ability_list(flags)
-    hidden_slugs = {"wojownik", "strzelec"}
     for item in payload:
         if not item:
             continue
         slug = str(item.get("slug") or "").strip()
-        if slug in hidden_slugs:
+        if _is_hidden_trait(slug):
             continue
         label = item.get("label") or slug
         value = item.get("value")
@@ -697,6 +713,11 @@ def _selected_passive_entries(
         if not slug:
             continue
         identifier = costs.ability_identifier(slug)
+        if _is_hidden_trait(slug):
+            seen_slugs.add(slug)
+            if identifier:
+                seen_identifiers.add(identifier)
+            continue
         default_flag = 1 if entry.get("is_default") or entry.get("default_count") else 0
         selected_flag = flags.get(slug, default_flag)
         if selected_flag <= 0:
@@ -721,6 +742,11 @@ def _selected_passive_entries(
                     seen_identifiers.add(identifier)
             continue
         identifier = costs.ability_identifier(slug_value)
+        if _is_hidden_trait(slug_value):
+            seen_slugs.add(slug_value)
+            if identifier:
+                seen_identifiers.add(identifier)
+            continue
         if slug_value in seen_slugs or (identifier and identifier in seen_identifiers):
             continue
         selected.append(
@@ -739,6 +765,11 @@ def _selected_passive_entries(
         class_slug = str(classification.get("slug") or "").strip()
         if class_slug:
             identifier = costs.ability_identifier(class_slug)
+            if _is_hidden_trait(class_slug):
+                seen_slugs.add(class_slug)
+                if identifier:
+                    seen_identifiers.add(identifier)
+                return selected
             if class_slug not in seen_slugs and (
                 not identifier or identifier not in seen_identifiers
             ):
