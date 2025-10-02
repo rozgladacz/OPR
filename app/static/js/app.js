@@ -1701,6 +1701,8 @@ function serializeLoadoutState(state) {
     active: [],
     aura: [],
     passive: [],
+    active_labels: [],
+    aura_labels: [],
     mode: 'total',
   };
   if (!state) {
