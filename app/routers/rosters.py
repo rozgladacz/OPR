@@ -855,6 +855,7 @@ def _selected_ability_entries(
             continue
         item = dict(entry)
         item["count"] = stored
+
         custom_name = item.get("custom_name") or name_map.get(key)
         if isinstance(custom_name, str):
             normalized = custom_name.strip()
@@ -862,6 +863,7 @@ def _selected_ability_entries(
                 item["custom_name"] = normalized
             elif "custom_name" in item:
                 item.pop("custom_name", None)
+
         selected.append(item)
         seen.add(key)
     for key, value in counts.items():
@@ -878,7 +880,7 @@ def _selected_ability_entries(
             normalized = custom_name.strip()
             if normalized:
                 fallback["custom_name"] = normalized
-        selected.append(fallback)
+
     return selected
 
 
@@ -1208,6 +1210,8 @@ def _sanitize_loadout(
         "active": payload.get("active") or {},
         "aura": payload.get("aura") or {},
         "passive": payload.get("passive") or {},
+        "active_labels": payload.get("active_labels") or {},
+        "aura_labels": payload.get("aura_labels") or {},
     }
 
     max_count = max(int(model_count), 0)
@@ -1240,8 +1244,10 @@ def _sanitize_loadout(
     _merge("active")
     _merge("aura")
     _merge("passive", clamp=1)
+
     defaults["active_labels"] = {}
     defaults["aura_labels"] = {}
+
     if mode_value:
         defaults["mode"] = mode_value
     return defaults

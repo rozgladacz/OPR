@@ -1,4 +1,6 @@
+
 import json
+
 import sys
 from pathlib import Path
 
@@ -8,26 +10,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from app import models
 from app.routers import rosters
-from app.services import ability_registry
 
-
-class DummyResult:
-    def __init__(self, items):
-        self._items = items
-
-    def scalars(self):
-        return self
-
-    def all(self):
-        return list(self._items)
-
-
-class DummySession:
-    def __init__(self, items):
-        self._items = items
-
-    def execute(self, _query):
-        return DummyResult(self._items)
 
 
 def _make_unit() -> models.Unit:
@@ -41,6 +24,7 @@ def _make_unit() -> models.Unit:
     unit.abilities = []
     unit.weapon_links = []
     return unit
+
 
 
 def test_unit_ability_payload_includes_custom_name():
@@ -101,10 +85,12 @@ def test_selected_ability_entries_use_unit_custom_names():
         }
     ]
 
+
     selected = rosters._selected_ability_entries(loadout, ability_items, "active")
 
     assert selected and selected[0]["custom_name"] == "Medyk"
     assert selected[0]["label"] == "Aura: Regeneracja"
+
 
 
 def test_ability_label_with_count_uses_custom_name():

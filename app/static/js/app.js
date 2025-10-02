@@ -1543,6 +1543,8 @@ function createLoadoutState(rawLoadout) {
     active: new Map(),
     aura: new Map(),
     passive: new Map(),
+    activeLabels: new Map(),
+    auraLabels: new Map(),
     mode: 'per_model',
   };
   if (!rawLoadout || typeof rawLoadout !== 'object') {
@@ -1618,6 +1620,49 @@ function createLoadoutState(rawLoadout) {
       state.passive.set(String(slug), flag);
     });
   }
+  const labelSections = [
+    ['activeLabels', rawLoadout.active_labels],
+    ['auraLabels', rawLoadout.aura_labels],
+  ];
+  labelSections.forEach(([targetKey, source]) => {
+    const target = state[targetKey];
+    if (!(target instanceof Map) || !source) {
+      return;
+    }
+    let entries;
+    if (Array.isArray(source)) {
+      entries = source;
+    } else if (typeof source === 'object') {
+      entries = Object.entries(source).map(([id, name]) => ({
+        id,
+        name,
+      }));
+    } else {
+      entries = [];
+    }
+    entries.forEach((entry) => {
+      if (!entry) {
+        return;
+      }
+      const rawId = entry.id ?? entry.ability_id;
+      if (rawId === undefined || rawId === null) {
+        return;
+      }
+      const parsedId = Number(rawId);
+      if (!Number.isFinite(parsedId)) {
+        return;
+      }
+      const rawName = entry.name ?? entry.value ?? entry.label;
+      if (rawName === undefined || rawName === null) {
+        return;
+      }
+      const trimmed = String(rawName).trim().slice(0, ABILITY_NAME_MAX_LENGTH);
+      if (!trimmed) {
+        return;
+      }
+      target.set(parsedId, trimmed);
+    });
+  });
   return state;
 }
 
@@ -1634,6 +1679,8 @@ function cloneLoadoutState(state) {
       active: new Map(),
       aura: new Map(),
       passive: new Map(),
+      activeLabels: new Map(),
+      auraLabels: new Map(),
       mode: 'per_model',
     };
   }
@@ -1642,6 +1689,8 @@ function cloneLoadoutState(state) {
     active: cloneSection(state.active),
     aura: cloneSection(state.aura),
     passive: cloneSection(state.passive),
+    activeLabels: cloneSection(state.activeLabels),
+    auraLabels: cloneSection(state.auraLabels),
     mode: state.mode === 'total' ? 'total' : 'per_model',
   };
 }
@@ -1670,6 +1719,24 @@ function serializeLoadoutState(state) {
   state.passive.forEach((value, slug) => {
     result.passive.push({ slug, enabled: Boolean(value) });
   });
+  if (state.activeLabels instanceof Map) {
+    state.activeLabels.forEach((value, id) => {
+      const text = typeof value === 'string' ? value.trim() : String(value || '').trim();
+      if (!text) {
+        return;
+      }
+      result.active_labels.push({ id, name: text.slice(0, ABILITY_NAME_MAX_LENGTH) });
+    });
+  }
+  if (state.auraLabels instanceof Map) {
+    state.auraLabels.forEach((value, id) => {
+      const text = typeof value === 'string' ? value.trim() : String(value || '').trim();
+      if (!text) {
+        return;
+      }
+      result.aura_labels.push({ id, name: text.slice(0, ABILITY_NAME_MAX_LENGTH) });
+    });
+  }
   return JSON.stringify(result);
 }
 
@@ -1733,6 +1800,7 @@ function formatAbilityDisplayLabel(baseLabel, customName) {
 }
 
 function renderAbilityEditor(container, items, stateMap, modelCount, editable, onChange) {
+
   if (!container) {
     return false;
   }
@@ -1772,11 +1840,13 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
     const name = document.createElement('span');
     name.className = 'roster-ability-label';
     const baseLabel = item.label || 'Zdolność';
+
     const customName = typeof item.custom_name === 'string' ? item.custom_name : '';
     if (item.description) {
       name.title = item.description;
     }
     name.textContent = formatAbilityDisplayLabel(baseLabel, customName);
+
     info.appendChild(name);
     const cost = document.createElement('span');
     cost.className = 'roster-ability-cost';
@@ -1786,10 +1856,12 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
       cost.textContent = 'wliczone';
     }
     info.appendChild(cost);
+
     if (!editable && customName) {
       const customInfo = document.createElement('div');
       customInfo.className = 'text-muted small mt-1';
       customInfo.textContent = `Nazwa własna: ${customName}`;
+
       info.appendChild(customInfo);
     }
     row.appendChild(info);
@@ -1815,6 +1887,18 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
         }
         input.value = String(nextValue);
         stateMap.set(abilityId, nextValue);
+        if (nextValue <= 0) {
+          applyCustomName('');
+          if (customInput) {
+            customInput.value = '';
+            customInput.disabled = true;
+          }
+        } else if (customInput) {
+          customInput.disabled = false;
+          if (currentCustomName) {
+            formatDisplayLabel(currentCustomName);
+          }
+        }
         if (typeof onChange === 'function') {
           onChange();
         }
@@ -2980,6 +3064,7 @@ function renderEditors(precomputedWeaponMap = null) {
       activeContainer,
       currentActives,
       loadoutState.active,
+      loadoutState.activeLabels,
       currentCount,
       isEditable,
       handleStateChange,
@@ -2989,6 +3074,7 @@ function renderEditors(precomputedWeaponMap = null) {
       auraContainer,
       currentAuras,
       loadoutState.aura,
+      loadoutState.auraLabels,
       currentCount,
       isEditable,
       handleStateChange,
