@@ -12,6 +12,7 @@ function initAbilityPicker(root) {
   const listEl = root.querySelector('.ability-picker-list');
   const allowDefaultToggle = root.dataset.defaultToggle === 'true';
   const defaultInitial = root.dataset.defaultInitial === 'true';
+  const allowCustomName = root.dataset.allowCustomName === 'true';
   let items = [];
 
   function getDefinition(slug) {
@@ -68,11 +69,18 @@ function initAbilityPicker(root) {
     const label = entry.label || formatLabel(definition, rawValue, rawLabel);
     const abilityId = entry.ability_id ?? (definition && Object.prototype.hasOwnProperty.call(definition, 'ability_id') ? definition.ability_id : null);
     const isDefault = allowDefaultToggle ? Boolean(entry.is_default ?? defaultInitial) : false;
+    const baseLabel = entry.base_label || label || rawLabel || rawValue;
+    let customName = '';
+    if (typeof entry.custom_name === 'string') {
+      customName = entry.custom_name.trim().slice(0, ABILITY_NAME_MAX_LENGTH);
+    }
     return {
       slug,
       value: rawValue,
-      raw: rawLabel || rawValue || label,
-      label: label || rawLabel || rawValue,
+      raw: rawLabel || rawValue || baseLabel,
+      label: baseLabel || rawLabel || rawValue,
+      base_label: baseLabel || '',
+      custom_name: customName,
       ability_id: abilityId,
       is_default: isDefault,
       description: entry.description || descriptionFor({ slug }),
@@ -126,14 +134,26 @@ function initAbilityPicker(root) {
     if (!hiddenInput) {
       return;
     }
-    const safeItems = items.map((entry) => ({
-      slug: entry.slug,
-      value: entry.value,
-      label: entry.label,
-      raw: entry.raw,
-      ability_id: entry.ability_id ?? null,
-      is_default: entry.is_default ?? false,
-    }));
+    const safeItems = items.map((entry) => {
+      const payload = {
+        slug: entry.slug,
+        value: entry.value,
+        label: entry.label,
+        raw: entry.raw,
+        ability_id: entry.ability_id ?? null,
+        is_default: entry.is_default ?? false,
+      };
+      if (allowCustomName) {
+        const customName = typeof entry.custom_name === 'string' ? entry.custom_name.trim() : '';
+        if (customName) {
+          payload.custom_name = customName.slice(0, ABILITY_NAME_MAX_LENGTH);
+        }
+      }
+      if (entry.base_label) {
+        payload.base_label = entry.base_label;
+      }
+      return payload;
+    });
     hiddenInput.value = JSON.stringify(safeItems);
   }
 
@@ -155,15 +175,60 @@ function initAbilityPicker(root) {
       const row = document.createElement('div');
       row.className = 'border rounded p-2 d-flex flex-wrap align-items-center gap-2';
 
-      const labelSpan = document.createElement('div');
-      labelSpan.className = 'flex-grow-1';
-      labelSpan.textContent = item.label || item.raw || item.slug;
+      const labelWrapper = document.createElement('div');
+      labelWrapper.className = 'flex-grow-1 d-flex flex-column gap-2';
+      const baseLabel = item.base_label || item.label || item.raw || item.slug;
       const desc = descriptionFor(item);
+      const labelText = document.createElement('div');
+      labelText.textContent = formatAbilityDisplayLabel(baseLabel, item.custom_name) || baseLabel;
       if (desc) {
-        labelSpan.title = desc;
+        labelText.title = desc;
+      }
+      labelWrapper.appendChild(labelText);
+
+      if (allowCustomName) {
+        const inputWrapper = document.createElement('div');
+        inputWrapper.className = 'd-flex flex-column';
+        const inputLabel = document.createElement('label');
+        inputLabel.className = 'form-label mb-1 small text-muted';
+        const inputId = `ability-picker-name-${index}-${Math.random().toString(16).slice(2)}`;
+        inputLabel.setAttribute('for', inputId);
+        inputLabel.textContent = 'Nazwa własna (opcjonalnie)';
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'form-control form-control-sm';
+        nameInput.id = inputId;
+        nameInput.placeholder = 'Np. Medyk';
+        nameInput.maxLength = ABILITY_NAME_MAX_LENGTH;
+        nameInput.value = item.custom_name || '';
+        const applyValue = (value) => {
+          const limited = typeof value === 'string' ? value.slice(0, ABILITY_NAME_MAX_LENGTH) : '';
+          if (limited !== nameInput.value) {
+            nameInput.value = limited;
+          }
+          const normalized = limited.trim();
+          item.custom_name = normalized;
+          labelText.textContent = formatAbilityDisplayLabel(baseLabel, normalized) || baseLabel;
+          updateHidden();
+        };
+        nameInput.addEventListener('input', () => {
+          applyValue(nameInput.value);
+        });
+        nameInput.addEventListener('change', () => {
+          applyValue(nameInput.value);
+        });
+        nameInput.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            nameInput.blur();
+          }
+        });
+        inputWrapper.appendChild(inputLabel);
+        inputWrapper.appendChild(nameInput);
+        labelWrapper.appendChild(inputWrapper);
       }
 
-      row.appendChild(labelSpan);
+      row.appendChild(labelWrapper);
 
       if (allowDefaultToggle) {
         const defaultWrapper = document.createElement('div');
@@ -384,6 +449,7 @@ const AP_CORROSIVE = { '-1': 0.05, 0: 0.05, 1: 0.1, 2: 0.25, 3: 0.4, 4: 0.5, 5: 
 const BLAST_MULTIPLIER = { 2: 1.95, 3: 2.8, 6: 4.3 };
 const DEADLY_MULTIPLIER = { 2: 1.9, 3: 2.6, 6: 3.8 };
 const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
+const ABILITY_NAME_MAX_LENGTH = 60;
 
 function splitTraits(text) {
   if (!text) {
@@ -1581,7 +1647,13 @@ function cloneLoadoutState(state) {
 }
 
 function serializeLoadoutState(state) {
-  const result = { weapons: [], active: [], aura: [], passive: [], mode: 'total' };
+  const result = {
+    weapons: [],
+    active: [],
+    aura: [],
+    passive: [],
+    mode: 'total',
+  };
   if (!state) {
     return JSON.stringify(result);
   }
@@ -1648,6 +1720,18 @@ function ensurePassiveStateEntries(map, entries) {
   });
 }
 
+function formatAbilityDisplayLabel(baseLabel, customName) {
+  const base = typeof baseLabel === 'string' ? baseLabel.trim() : '';
+  const custom = typeof customName === 'string' ? customName.trim() : '';
+  if (custom && base) {
+    return `${custom} [${base}]`;
+  }
+  if (custom) {
+    return custom;
+  }
+  return base;
+}
+
 function renderAbilityEditor(container, items, stateMap, modelCount, editable, onChange) {
   if (!container) {
     return false;
@@ -1687,10 +1771,12 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
     info.className = 'roster-ability-details flex-grow-1';
     const name = document.createElement('span');
     name.className = 'roster-ability-label';
-    name.textContent = item.label || 'Zdolność';
+    const baseLabel = item.label || 'Zdolność';
+    const customName = typeof item.custom_name === 'string' ? item.custom_name : '';
     if (item.description) {
       name.title = item.description;
     }
+    name.textContent = formatAbilityDisplayLabel(baseLabel, customName);
     info.appendChild(name);
     const cost = document.createElement('span');
     cost.className = 'roster-ability-cost';
@@ -1700,6 +1786,12 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
       cost.textContent = 'wliczone';
     }
     info.appendChild(cost);
+    if (!editable && customName) {
+      const customInfo = document.createElement('div');
+      customInfo.className = 'text-muted small mt-1';
+      customInfo.textContent = `Nazwa własna: ${customName}`;
+      info.appendChild(customInfo);
+    }
     row.appendChild(info);
 
     const controls = document.createElement('div');
@@ -2408,6 +2500,19 @@ function initRosterEditor() {
     }
   }
 
+  function abilityBadgeLabel(entry) {
+    if (!entry) {
+      return '';
+    }
+    const base = entry.label ?? entry.raw ?? entry.slug ?? '';
+    const custom = entry.custom_name ?? entry.customName ?? '';
+    const trimmedCustom = typeof custom === 'string' ? custom.trim() : '';
+    if (trimmedCustom) {
+      return base ? `${trimmedCustom} [${base}]` : trimmedCustom;
+    }
+    return base;
+  }
+
   function updateItemAbilityBadges(item, selections) {
     if (!item) {
       return;
@@ -2429,7 +2534,7 @@ function initRosterEditor() {
         if (!entry) {
           return;
         }
-        const label = entry.label ?? entry.raw ?? entry.slug;
+        const label = abilityBadgeLabel(entry);
         if (!label) {
           return;
         }

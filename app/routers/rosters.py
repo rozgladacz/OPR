@@ -21,6 +21,8 @@ from ..services.rules import collect_roster_warnings
 router = APIRouter(prefix="/rosters", tags=["rosters"])
 templates = Jinja2Templates(directory="app/templates")
 
+ABILITY_NAME_MAX_LENGTH = 60
+
 
 def _json_safe(value: Any) -> Any:
     if isinstance(value, (str, bool)) or value is None:
@@ -836,6 +838,9 @@ def _selected_ability_entries(
 ) -> list[dict]:
     entries = ability_items if ability_items is not None else []
     counts = _loadout_counts(loadout, section)
+    name_map: dict[str, str] = {}
+    if isinstance(loadout, dict):
+        name_map = _extract_label_map(loadout.get(f"{section}_labels"))
     selected: list[dict] = []
     seen: set[str] = set()
     for entry in entries:
@@ -850,22 +855,40 @@ def _selected_ability_entries(
             continue
         item = dict(entry)
         item["count"] = stored
+        custom_name = item.get("custom_name") or name_map.get(key)
+        if isinstance(custom_name, str):
+            normalized = custom_name.strip()
+            if normalized:
+                item["custom_name"] = normalized
+            elif "custom_name" in item:
+                item.pop("custom_name", None)
         selected.append(item)
         seen.add(key)
     for key, value in counts.items():
         if key in seen or value <= 0:
             continue
-        selected.append({
+        fallback = {
             "ability_id": key,
             "label": str(key),
             "description": "",
             "count": value,
-        })
+        }
+        custom_name = name_map.get(str(key))
+        if isinstance(custom_name, str):
+            normalized = custom_name.strip()
+            if normalized:
+                fallback["custom_name"] = normalized
+        selected.append(fallback)
     return selected
 
 
 def _ability_label_with_count(entry: dict) -> str:
-    label = entry.get("label") or entry.get("raw") or entry.get("slug") or ""
+    base_label = entry.get("label") or entry.get("raw") or entry.get("slug") or ""
+    custom = str(entry.get("custom_name") or "").strip()
+    if custom:
+        label = f"{custom} [{base_label}]" if base_label else custom
+    else:
+        label = base_label
     count = _coerce_int(entry.get("count"), 0)
     if count > 1:
         return f"{label} ×{count}"
@@ -910,6 +933,10 @@ def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
             payload_entry = payload_candidates[0]
         payload_entry = payload_entry or {}
         label = payload_entry.get("label") or ability.name or ""
+        custom_name = payload_entry.get("custom_name")
+        if isinstance(custom_name, str):
+            custom_name = custom_name.strip() or None
+        base_label = payload_entry.get("base_label") or label
         description = payload_entry.get("description") or ability.description or ""
         is_default = payload_entry.get("is_default")
         if is_default is None:
@@ -926,11 +953,12 @@ def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
         entries.append(
             {
                 "ability_id": ability.id,
-                "label": label,
+                "label": base_label,
                 "description": description,
                 "cost": cost_value,
                 "is_default": bool(is_default),
                 "default_count": 1 if bool(is_default) else 0,
+                "custom_name": custom_name,
             }
         )
     entries.sort(key=lambda entry: (not entry.get("is_default", False), entry.get("label", "").casefold()))
@@ -991,12 +1019,14 @@ def _default_loadout_payload(
     active_items: list[dict] | None = None,
     aura_items: list[dict] | None = None,
     passive_items: list[dict] | None = None,
-) -> dict[str, dict[str, int]]:
-    payload: dict[str, dict[str, int]] = {
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "weapons": {},
         "active": {},
         "aura": {},
         "passive": {},
+        "active_labels": {},
+        "aura_labels": {},
     }
     options = weapon_options if weapon_options is not None else _unit_weapon_options(unit)
     for option in options:
@@ -1033,12 +1063,40 @@ def _default_loadout_payload(
     return payload
 
 
-def _parse_loadout_json(text: str | None) -> dict[str, dict[str, int]]:
-    base: dict[str, dict[str, int] | str] = {
+def _extract_label_map(source: Any) -> dict[str, str]:
+    result: dict[str, str] = {}
+    if isinstance(source, dict):
+        items = source.items()
+    elif isinstance(source, list):
+        items = []
+        for entry in source:
+            if not isinstance(entry, dict):
+                continue
+            entry_id = entry.get("id") or entry.get("ability_id")
+            if entry_id is None:
+                continue
+            name_value = entry.get("name") or entry.get("label") or entry.get("value")
+            items.append((entry_id, name_value))
+    else:
+        return result
+    for raw_id, raw_value in items:
+        if raw_id is None or raw_value is None:
+            continue
+        text_value = str(raw_value).strip()
+        if not text_value:
+            continue
+        result[str(raw_id)] = text_value[:ABILITY_NAME_MAX_LENGTH]
+    return result
+
+
+def _parse_loadout_json(text: str | None) -> dict[str, Any]:
+    base: dict[str, Any] = {
         "weapons": {},
         "active": {},
         "aura": {},
         "passive": {},
+        "active_labels": {},
+        "aura_labels": {},
     }
     mode: str | None = None
     if not text:
@@ -1057,7 +1115,10 @@ def _parse_loadout_json(text: str | None) -> dict[str, dict[str, int]]:
     for section, values in items:
         if section == "mode":
             continue
-        if section not in base:
+        if section in {"active_labels", "aura_labels"}:
+            base[section] = _extract_label_map(values)
+            continue
+        if section not in {"weapons", "active", "aura", "passive"}:
             continue
         if isinstance(values, dict):
             iterable = values.items()
@@ -1121,13 +1182,13 @@ def _parse_loadout_json(text: str | None) -> dict[str, dict[str, int]]:
 def _sanitize_loadout(
     unit: models.Unit,
     model_count: int,
-    payload: dict[str, dict[str, int]] | None,
+    payload: dict[str, Any] | None,
     *,
     weapon_options: list[dict] | None = None,
     active_items: list[dict] | None = None,
     aura_items: list[dict] | None = None,
     passive_items: list[dict] | None = None,
-) -> dict[str, dict[str, int]]:
+) -> dict[str, Any]:
     defaults = _default_loadout_payload(
         unit,
         weapon_options=weapon_options,
@@ -1179,6 +1240,8 @@ def _sanitize_loadout(
     _merge("active")
     _merge("aura")
     _merge("passive", clamp=1)
+    defaults["active_labels"] = {}
+    defaults["aura_labels"] = {}
     if mode_value:
         defaults["mode"] = mode_value
     return defaults
@@ -1191,7 +1254,7 @@ def _roster_unit_loadout(
     active_items: list[dict] | None = None,
     aura_items: list[dict] | None = None,
     passive_items: list[dict] | None = None,
-) -> dict[str, dict[str, int]]:
+) -> dict[str, Any]:
     raw_payload = _parse_loadout_json(roster_unit.extra_weapons_json)
     loadout = _sanitize_loadout(
         roster_unit.unit,

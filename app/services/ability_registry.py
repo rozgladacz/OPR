@@ -10,6 +10,7 @@ from .. import models
 from ..data import abilities as ability_catalog
 
 AURA_RANGE_OPTIONS = (6, 12)
+ABILITY_NAME_MAX_LENGTH = 60
 
 
 def ability_slug(ability: models.Ability) -> str | None:
@@ -140,18 +141,25 @@ def unit_ability_payload(unit: models.Unit, ability_type: str) -> list[dict]:
         definition = ability_catalog.find_definition(slug)
         value: str | None = None
         is_default = None
+        custom_name: str | None = None
         if link.params_json:
             try:
                 data = json.loads(link.params_json)
             except json.JSONDecodeError:
                 data = {}
-            raw = data.get("value")
-            if raw is not None:
-                value = str(raw)
-            if "default" in data:
-                is_default = bool(data["default"])
-            elif "is_default" in data:
-                is_default = bool(data["is_default"])
+            else:
+                raw = data.get("value")
+                if raw is not None:
+                    value = str(raw)
+                if "default" in data:
+                    is_default = bool(data["default"])
+                elif "is_default" in data:
+                    is_default = bool(data["is_default"])
+                raw_custom = data.get("custom_name")
+                if isinstance(raw_custom, str):
+                    custom_name = raw_custom.strip()[:ABILITY_NAME_MAX_LENGTH]
+                    if not custom_name:
+                        custom_name = None
         label = (
             ability_catalog.display_with_value(definition, value)
             if definition
@@ -163,6 +171,8 @@ def unit_ability_payload(unit: models.Unit, ability_type: str) -> list[dict]:
                 "slug": slug,
                 "value": value or "",
                 "label": label,
+                "base_label": label,
+                "custom_name": custom_name,
                 "description": definition.description if definition else "",
                 "is_default": bool(is_default) if is_default is not None else False,
             }
@@ -200,13 +210,16 @@ def build_unit_abilities(
             continue
         value = item.get("value")
         default_flag = item.get("is_default")
-        params = None
+        params: dict[str, object] = {}
         if value not in (None, ""):
-            payload = {"value": value}
-            if default_flag is not None:
-                payload["default"] = bool(default_flag)
-            params = json.dumps(payload, ensure_ascii=False)
-        elif default_flag is not None:
-            params = json.dumps({"default": bool(default_flag)}, ensure_ascii=False)
-        result.append(models.UnitAbility(ability=ability, params_json=params))
+            params["value"] = value
+        if default_flag is not None:
+            params["default"] = bool(default_flag)
+        raw_custom = item.get("custom_name")
+        if isinstance(raw_custom, str):
+            custom_name = raw_custom.strip()[:ABILITY_NAME_MAX_LENGTH]
+            if custom_name:
+                params["custom_name"] = custom_name
+        params_json = json.dumps(params, ensure_ascii=False) if params else None
+        result.append(models.UnitAbility(ability=ability, params_json=params_json))
     return result
