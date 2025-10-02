@@ -384,6 +384,7 @@ const AP_CORROSIVE = { '-1': 0.05, 0: 0.05, 1: 0.1, 2: 0.25, 3: 0.4, 4: 0.5, 5: 
 const BLAST_MULTIPLIER = { 2: 1.95, 3: 2.8, 6: 4.3 };
 const DEADLY_MULTIPLIER = { 2: 1.9, 3: 2.6, 6: 3.8 };
 const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
+const ABILITY_NAME_MAX_LENGTH = 60;
 
 function splitTraits(text) {
   if (!text) {
@@ -1477,6 +1478,8 @@ function createLoadoutState(rawLoadout) {
     active: new Map(),
     aura: new Map(),
     passive: new Map(),
+    activeLabels: new Map(),
+    auraLabels: new Map(),
     mode: 'per_model',
   };
   if (!rawLoadout || typeof rawLoadout !== 'object') {
@@ -1552,6 +1555,49 @@ function createLoadoutState(rawLoadout) {
       state.passive.set(String(slug), flag);
     });
   }
+  const labelSections = [
+    ['activeLabels', rawLoadout.active_labels],
+    ['auraLabels', rawLoadout.aura_labels],
+  ];
+  labelSections.forEach(([targetKey, source]) => {
+    const target = state[targetKey];
+    if (!(target instanceof Map) || !source) {
+      return;
+    }
+    let entries;
+    if (Array.isArray(source)) {
+      entries = source;
+    } else if (typeof source === 'object') {
+      entries = Object.entries(source).map(([id, name]) => ({
+        id,
+        name,
+      }));
+    } else {
+      entries = [];
+    }
+    entries.forEach((entry) => {
+      if (!entry) {
+        return;
+      }
+      const rawId = entry.id ?? entry.ability_id;
+      if (rawId === undefined || rawId === null) {
+        return;
+      }
+      const parsedId = Number(rawId);
+      if (!Number.isFinite(parsedId)) {
+        return;
+      }
+      const rawName = entry.name ?? entry.value ?? entry.label;
+      if (rawName === undefined || rawName === null) {
+        return;
+      }
+      const trimmed = String(rawName).trim().slice(0, ABILITY_NAME_MAX_LENGTH);
+      if (!trimmed) {
+        return;
+      }
+      target.set(parsedId, trimmed);
+    });
+  });
   return state;
 }
 
@@ -1568,6 +1614,8 @@ function cloneLoadoutState(state) {
       active: new Map(),
       aura: new Map(),
       passive: new Map(),
+      activeLabels: new Map(),
+      auraLabels: new Map(),
       mode: 'per_model',
     };
   }
@@ -1576,12 +1624,22 @@ function cloneLoadoutState(state) {
     active: cloneSection(state.active),
     aura: cloneSection(state.aura),
     passive: cloneSection(state.passive),
+    activeLabels: cloneSection(state.activeLabels),
+    auraLabels: cloneSection(state.auraLabels),
     mode: state.mode === 'total' ? 'total' : 'per_model',
   };
 }
 
 function serializeLoadoutState(state) {
-  const result = { weapons: [], active: [], aura: [], passive: [], mode: 'total' };
+  const result = {
+    weapons: [],
+    active: [],
+    aura: [],
+    passive: [],
+    active_labels: [],
+    aura_labels: [],
+    mode: 'total',
+  };
   if (!state) {
     return JSON.stringify(result);
   }
@@ -1598,6 +1656,24 @@ function serializeLoadoutState(state) {
   state.passive.forEach((value, slug) => {
     result.passive.push({ slug, enabled: Boolean(value) });
   });
+  if (state.activeLabels instanceof Map) {
+    state.activeLabels.forEach((value, id) => {
+      const text = typeof value === 'string' ? value.trim() : String(value || '').trim();
+      if (!text) {
+        return;
+      }
+      result.active_labels.push({ id, name: text.slice(0, ABILITY_NAME_MAX_LENGTH) });
+    });
+  }
+  if (state.auraLabels instanceof Map) {
+    state.auraLabels.forEach((value, id) => {
+      const text = typeof value === 'string' ? value.trim() : String(value || '').trim();
+      if (!text) {
+        return;
+      }
+      result.aura_labels.push({ id, name: text.slice(0, ABILITY_NAME_MAX_LENGTH) });
+    });
+  }
   return JSON.stringify(result);
 }
 
@@ -1648,7 +1724,7 @@ function ensurePassiveStateEntries(map, entries) {
   });
 }
 
-function renderAbilityEditor(container, items, stateMap, modelCount, editable, onChange) {
+function renderAbilityEditor(container, items, stateMap, labelMap, modelCount, editable, onChange) {
   if (!container) {
     return false;
   }
@@ -1687,10 +1763,62 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
     info.className = 'roster-ability-details flex-grow-1';
     const name = document.createElement('span');
     name.className = 'roster-ability-label';
-    name.textContent = item.label || 'Zdolność';
+    const baseLabel = item.label || 'Zdolność';
     if (item.description) {
       name.title = item.description;
     }
+    const labelStore = labelMap instanceof Map ? labelMap : null;
+    let currentCustomName = '';
+    if (labelStore && labelStore.has(abilityId)) {
+      const storedValue = labelStore.get(abilityId);
+      if (typeof storedValue === 'string') {
+        currentCustomName = storedValue;
+      }
+    }
+    if (totalCount <= 0 && currentCustomName) {
+      if (labelStore) {
+        labelStore.delete(abilityId);
+      }
+      currentCustomName = '';
+    }
+    const formatDisplayLabel = (value) => {
+      const trimmed = typeof value === 'string' ? value.trim() : '';
+      if (trimmed) {
+        name.textContent = baseLabel ? `${trimmed} [${baseLabel}]` : trimmed;
+      } else {
+        name.textContent = baseLabel;
+      }
+    };
+    if (currentCustomName) {
+      const normalized = String(currentCustomName).trim().slice(0, ABILITY_NAME_MAX_LENGTH);
+      if (normalized !== currentCustomName) {
+        currentCustomName = normalized;
+        if (labelStore) {
+          if (normalized) {
+            labelStore.set(abilityId, normalized);
+          } else {
+            labelStore.delete(abilityId);
+          }
+        }
+      }
+    }
+    formatDisplayLabel(currentCustomName);
+    let customInput = null;
+    const applyCustomName = (value) => {
+      const rawValue = typeof value === 'string' ? value : '';
+      const limited = rawValue.slice(0, ABILITY_NAME_MAX_LENGTH);
+      const normalized = limited.trim();
+      currentCustomName = normalized;
+      if (labelStore) {
+        if (normalized) {
+          labelStore.set(abilityId, normalized);
+        } else {
+          labelStore.delete(abilityId);
+        }
+      }
+      formatDisplayLabel(normalized);
+      return { limited, normalized };
+    };
     info.appendChild(name);
     const cost = document.createElement('span');
     cost.className = 'roster-ability-cost';
@@ -1700,6 +1828,48 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
       cost.textContent = 'wliczone';
     }
     info.appendChild(cost);
+    if (editable) {
+      const customWrapper = document.createElement('div');
+      customWrapper.className = 'mt-2';
+      const labelEl = document.createElement('label');
+      labelEl.className = 'form-label mb-1 small text-muted';
+      const inputId = `ability-name-${abilityId}-${Math.random().toString(16).slice(2)}`;
+      labelEl.setAttribute('for', inputId);
+      labelEl.textContent = 'Nazwa własna (opcjonalnie)';
+      customInput = document.createElement('input');
+      customInput.type = 'text';
+      customInput.className = 'form-control form-control-sm';
+      customInput.id = inputId;
+      customInput.placeholder = 'Np. Medyk';
+      customInput.maxLength = ABILITY_NAME_MAX_LENGTH;
+      customInput.value = currentCustomName;
+      customInput.disabled = totalCount <= 0;
+      customInput.addEventListener('input', () => {
+        applyCustomName(customInput.value);
+      });
+      customInput.addEventListener('change', () => {
+        const { normalized } = applyCustomName(customInput.value);
+        if (customInput.value !== normalized) {
+          customInput.value = normalized;
+        }
+        if (typeof onChange === 'function') {
+          onChange();
+        }
+      });
+      customInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          customInput.blur();
+        }
+      });
+      customWrapper.appendChild(labelEl);
+      customWrapper.appendChild(customInput);
+      info.appendChild(customWrapper);
+    } else if (currentCustomName) {
+      const customInfo = document.createElement('div');
+      customInfo.className = 'text-muted small mt-1';
+      customInfo.textContent = `Nazwa własna: ${currentCustomName}`;
+      info.appendChild(customInfo);
+    }
     row.appendChild(info);
 
     const controls = document.createElement('div');
@@ -1723,6 +1893,18 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
         }
         input.value = String(nextValue);
         stateMap.set(abilityId, nextValue);
+        if (nextValue <= 0) {
+          applyCustomName('');
+          if (customInput) {
+            customInput.value = '';
+            customInput.disabled = true;
+          }
+        } else if (customInput) {
+          customInput.disabled = false;
+          if (currentCustomName) {
+            formatDisplayLabel(currentCustomName);
+          }
+        }
         if (typeof onChange === 'function') {
           onChange();
         }
@@ -2408,6 +2590,19 @@ function initRosterEditor() {
     }
   }
 
+  function abilityBadgeLabel(entry) {
+    if (!entry) {
+      return '';
+    }
+    const base = entry.label ?? entry.raw ?? entry.slug ?? '';
+    const custom = entry.custom_name ?? entry.customName ?? '';
+    const trimmedCustom = typeof custom === 'string' ? custom.trim() : '';
+    if (trimmedCustom) {
+      return base ? `${trimmedCustom} [${base}]` : trimmedCustom;
+    }
+    return base;
+  }
+
   function updateItemAbilityBadges(item, selections) {
     if (!item) {
       return;
@@ -2429,7 +2624,7 @@ function initRosterEditor() {
         if (!entry) {
           return;
         }
-        const label = entry.label ?? entry.raw ?? entry.slug;
+        const label = abilityBadgeLabel(entry);
         if (!label) {
           return;
         }
@@ -2875,6 +3070,7 @@ function renderEditors(precomputedWeaponMap = null) {
       activeContainer,
       currentActives,
       loadoutState.active,
+      loadoutState.activeLabels,
       currentCount,
       isEditable,
       handleStateChange,
@@ -2884,6 +3080,7 @@ function renderEditors(precomputedWeaponMap = null) {
       auraContainer,
       currentAuras,
       loadoutState.aura,
+      loadoutState.auraLabels,
       currentCount,
       isEditable,
       handleStateChange,
