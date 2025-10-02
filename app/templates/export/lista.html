@@ -22,7 +22,7 @@
   <p class="meta">
     Armia: {{ roster.army.name if roster.army else '---' }} ·
     Limit: {{ roster.points_limit or 'brak' }} ·
-    Suma: {{ '%.1f' | format(total_cost) }} pkt{% if generated_at %} ·
+    Suma: {{ total_cost_rounded }} pkt{% if generated_at %} ·
     Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC{% endif %}
   </p>
 
@@ -77,14 +77,14 @@
             {{ entry.weapon_summary or entry.default_summary }}
           {% endif %}
         </td>
-        <td>{{ '%.1f' | format(entry.total_cost) }}</td>
+        <td>{{ entry.rounded_total_cost }}</td>
       </tr>
       {% endfor %}
     </tbody>
     <tfoot>
       <tr>
         <th colspan="9" style="text-align: right;">Razem</th>
-        <th>{{ '%.1f' | format(total_cost) }}</th>
+        <th>{{ total_cost_rounded }}</th>
       </tr>
     </tfoot>
   </table>

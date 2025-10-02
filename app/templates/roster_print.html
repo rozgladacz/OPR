@@ -77,7 +77,7 @@
   <div class="print-header">
     <h1 class="h3 mb-2">{{ roster.name }}</h1>
     <div>Armia: {{ roster.army.name if roster.army else '---' }}</div>
-    <div>Limit: {{ roster.points_limit or 'brak' }} | Suma: {{ '%.1f' | format(total_cost) }} pkt</div>
+    <div>Limit: {{ roster.points_limit or 'brak' }} | Suma: {{ total_cost_rounded }} pkt</div>
     <div>Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC</div>
   </div>
 
@@ -93,7 +93,7 @@
               <div class="text-muted small">Jednostka bazowa: {{ item.unit_name }}</div>
               {% endif %}
             </div>
-            <div class="unit-cost">{{ '%.1f' | format(item.total_cost) }} pkt</div>
+            <div class="unit-cost">{{ item.rounded_total_cost }} pkt</div>
           </div>
 
           <div class="stat-grid mt-3">

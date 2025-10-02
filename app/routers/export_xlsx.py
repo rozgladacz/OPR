@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..db import get_db
 from ..security import get_current_user
-from ..services import costs
+from ..services import costs, utils
 from .rosters import _ensure_roster_view_access, _roster_unit_export_data
 
 
@@ -70,6 +70,9 @@ def _append_roster_sheet(
     for entry in entries:
         total_value = float(entry.get("total_cost", 0.0))
         total_cost += total_value
+        rounded_value = entry.get("rounded_total_cost")
+        if rounded_value is None:
+            rounded_value = utils.round_points(total_value)
         sheet.append(
             [
                 entry.get("unit_name"),
@@ -84,11 +87,21 @@ def _append_roster_sheet(
                     entry.get("aura_labels", []),
                 ),
                 _weapon_details_text(entry.get("weapon_details", [])),
-                round(total_value, 2),
+                rounded_value,
             ]
         )
 
-    sheet.append(["", "", "", "", "", "", "Razem", "", round(total_cost, 2)])
+    sheet.append([
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Razem",
+        "",
+        utils.round_points(total_cost),
+    ])
     for column_cells in sheet.columns:
         max_length = max(len(str(cell.value or "")) for cell in column_cells)
         adjusted = max_length + 2
@@ -143,7 +156,7 @@ def export_xlsx(
     buffer = BytesIO()
     workbook.save(buffer)
     buffer.seek(0)
-    filename = f"roster_{roster_id}_{int(round(total_cost))}.xlsx"
+    filename = f"roster_{roster_id}_{utils.round_points(total_cost)}.xlsx"
     headers = {"Content-Disposition": f"attachment; filename={filename}"}
     return StreamingResponse(
         buffer,
