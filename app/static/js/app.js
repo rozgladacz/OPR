@@ -604,23 +604,6 @@ function normalizeRangeValue(value) {
   return Math.round(numeric);
 }
 
-function buildTraitVariants(unitTraits) {
-  const base = Array.isArray(unitTraits) ? unitTraits.slice() : [];
-  const identifiers = new Set(base.map((trait) => abilityIdentifier(trait)));
-  if (![...identifiers].some((slug) => CLASSIFICATION_SLUGS.has(slug))) {
-    return [base];
-  }
-  const withoutClassification = base.filter((trait) => !CLASSIFICATION_SLUGS.has(abilityIdentifier(trait)));
-  const variants = [withoutClassification];
-  if (identifiers.has('wojownik')) {
-    variants.push([...withoutClassification, 'wojownik']);
-  }
-  if (identifiers.has('strzelec')) {
-    variants.push([...withoutClassification, 'strzelec']);
-  }
-  return variants;
-}
-
 function buildWeaponFlags(baseFlags, passiveItems, passiveState) {
   const result = { ...(baseFlags || {}) };
   const identifierKeys = new Map();
@@ -813,8 +796,7 @@ function buildWeaponCostMap(
       }
     }
   }
-  const unitTraits = flagsToAbilityList(weaponFlags);
-  const variants = buildTraitVariants(unitTraits);
+  const unitTraits = [...new Set(flagsToAbilityList(weaponFlags))];
   const quality = Number.isFinite(Number(unitQuality)) ? Number(unitQuality) : 4;
   (Array.isArray(options) ? options : []).forEach((option) => {
     if (!option || option.id === undefined || option.id === null) {
@@ -827,15 +809,9 @@ function buildWeaponCostMap(
     const attacks = option.attacks ?? option.display_attacks ?? 0;
     const ap = option.ap ?? 0;
     const traits = splitTraits(option.traits);
-    let bestCost = 0;
-    variants.forEach((variant) => {
-      const value = weaponCostInternal(quality, option.range, attacks, ap, traits, variant, true);
-      if (Number.isFinite(value) && value > bestCost) {
-        bestCost = value;
-      }
-    });
-    if (Number.isFinite(bestCost)) {
-      const rounded = Math.max(0, Math.round(bestCost * 100) / 100);
+    const cost = weaponCostInternal(quality, option.range, attacks, ap, traits, unitTraits, true);
+    if (Number.isFinite(cost)) {
+      const rounded = Math.max(0, Math.round(cost * 100) / 100);
       result.set(weaponId, rounded);
     }
   });
