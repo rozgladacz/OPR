@@ -212,13 +212,31 @@
             {% set selected_auras = item.selected_aura_items or [] %}
             <div class="d-flex flex-wrap gap-1 mt-2" data-roster-unit-abilities>
               {% for ability in selected_passives %}
-              <span class="badge text-bg-secondary" title="{{ ability.description }}">{{ ability.label or ability.raw or ability.slug }}</span>
+              {% set base_label = ability.label or ability.raw or ability.slug %}
+              {% if ability.custom_name %}
+              {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+              {% else %}
+              {% set display_label = base_label %}
+              {% endif %}
+              <span class="badge text-bg-secondary" title="{{ ability.description }}">{{ display_label }}</span>
               {% endfor %}
               {% for ability in selected_actives %}
-              <span class="badge text-bg-info text-dark" title="{{ ability.description }}">{{ ability.label or ability.raw or ability.slug }}{% if ability.count and ability.count|int > 1 %} ×{{ ability.count }}{% endif %}</span>
+              {% set base_label = ability.label or ability.raw or ability.slug %}
+              {% if ability.custom_name %}
+              {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+              {% else %}
+              {% set display_label = base_label %}
+              {% endif %}
+              <span class="badge text-bg-info text-dark" title="{{ ability.description }}">{{ display_label }}{% if ability.count and ability.count|int > 1 %} ×{{ ability.count }}{% endif %}</span>
               {% endfor %}
               {% for ability in selected_auras %}
-              <span class="badge text-bg-warning text-dark" title="{{ ability.description }}">{{ ability.label or ability.raw or ability.slug }}{% if ability.count and ability.count|int > 1 %} ×{{ ability.count }}{% endif %}</span>
+              {% set base_label = ability.label or ability.raw or ability.slug %}
+              {% if ability.custom_name %}
+              {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+              {% else %}
+              {% set display_label = base_label %}
+              {% endif %}
+              <span class="badge text-bg-warning text-dark" title="{{ ability.description }}">{{ display_label }}{% if ability.count and ability.count|int > 1 %} ×{{ ability.count }}{% endif %}</span>
               {% endfor %}
               {% if not selected_passives and not selected_actives and not selected_auras %}
               <span class="text-muted small">Brak dodatkowych zdolności</span>
