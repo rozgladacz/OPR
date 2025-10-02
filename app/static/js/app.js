@@ -2624,7 +2624,7 @@ function initRosterEditor() {
       }
       applyClassificationToState(loadoutState, currentClassification);
     }
-    renderClassificationDisplay();
+
     renderEditors(precomputedWeaponMap);
     if (loadoutInput && loadoutState) {
       loadoutInput.value = serializeLoadoutState(loadoutState);
