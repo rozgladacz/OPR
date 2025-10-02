@@ -1801,7 +1801,15 @@ function formatAbilityDisplayLabel(baseLabel, customName) {
   return base;
 }
 
-function renderAbilityEditor(container, items, stateMap, modelCount, editable, onChange) {
+function renderAbilityEditor(
+  container,
+  items,
+  stateMap,
+  labelMap = null,
+  modelCount,
+  editable,
+  onChange,
+) {
 
   if (!container) {
     return false;
@@ -1813,6 +1821,7 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
   }
   const wrapper = document.createElement('div');
   wrapper.className = 'd-flex flex-column gap-2';
+  const safeLabelMap = labelMap instanceof Map ? labelMap : null;
   const maxCount = Math.max(Number(modelCount) || 0, 0);
   safeItems.forEach((item) => {
     if (!item || item.ability_id === undefined || item.ability_id === null) {
@@ -1843,7 +1852,18 @@ function renderAbilityEditor(container, items, stateMap, modelCount, editable, o
     name.className = 'roster-ability-label';
     const baseLabel = item.label || 'Zdolność';
 
-    const customName = typeof item.custom_name === 'string' ? item.custom_name : '';
+    let customName = '';
+    if (safeLabelMap && safeLabelMap.has(abilityId)) {
+      const override = safeLabelMap.get(abilityId);
+      if (typeof override === 'string') {
+        customName = override.trim();
+      } else if (override !== undefined && override !== null) {
+        customName = String(override).trim();
+      }
+    }
+    if (!customName && typeof item.custom_name === 'string') {
+      customName = item.custom_name;
+    }
     if (item.description) {
       name.title = item.description;
     }
