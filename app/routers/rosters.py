@@ -397,8 +397,7 @@ def update_roster_unit(
     accept_header = (request.headers.get("accept") or "").lower()
     if "application/json" in accept_header:
         total_cost = costs.roster_total(roster)
-        classification = _roster_unit_classification(roster_unit, loadout)
-        selected_passives = _selected_passive_entries(
+        selected_passives = (
             roster_unit, loadout, passive_items, classification
         )
         selected_actives = _selected_ability_entries(loadout, active_items, "active")
@@ -1240,9 +1239,7 @@ def _classification_from_totals(
     elif shooter > warrior:
         preferred = "strzelec"
     else:
-        preferred = "wojownik" if "wojownik" in pool or not pool else "strzelec"
-
-    fallback_slug = "wojownik"
+        return None
 
     slug: str | None = None
     if pool:
@@ -1260,20 +1257,20 @@ def _classification_from_totals(
                 else ("strzelec" if "strzelec" in pool else next(iter(pool), None))
             )
     else:
-        slug = preferred or fallback_slug
+        slug = preferred
 
     if not slug:
         return None
 
     selected_label = "Wojownik" if slug == "wojownik" else "Strzelec"
-    warrior_points = int(round(warrior))
-    shooter_points = int(round(shooter))
+    warrior_points = round(warrior, 2)
+    shooter_points = round(shooter, 2)
     display = f"Wojownik {warrior_points} pkt / Strzelec {shooter_points} pkt"
     return {
         "slug": slug,
         "label": selected_label,
-        "warrior_cost": round(warrior, 2),
-        "shooter_cost": round(shooter, 2),
+        "warrior_cost": warrior_points,
+        "shooter_cost": shooter_points,
         "display": display,
     }
 
