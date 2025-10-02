@@ -1327,20 +1327,6 @@ function formatPoints(value) {
   return number.toLocaleString('pl-PL', baseOptions);
 }
 
-function formatClassificationDisplay(classification) {
-  if (!classification || typeof classification !== 'object') {
-    return '';
-  }
-  if (classification.display) {
-    return classification.display;
-  }
-  const warrior = Math.round(Number(classification.warrior_cost ?? 0));
-  const shooter = Math.round(Number(classification.shooter_cost ?? 0));
-  const warriorText = formatPoints(Number.isFinite(warrior) ? warrior : 0);
-  const shooterText = formatPoints(Number.isFinite(shooter) ? shooter : 0);
-  return `Wojownik ${warriorText} pkt / Strzelec ${shooterText} pkt`;
-}
-
 function renderPassiveEditor(
   container,
   items,
@@ -2258,18 +2244,12 @@ function initRosterEditor() {
     });
   }
 
-  function renderClassificationDisplay(classification) {
+  function renderClassificationDisplay() {
     if (!roleEl) {
       return;
     }
-    const text = formatClassificationDisplay(classification);
-    if (text) {
-      roleEl.textContent = `Klasyfikacja: ${text}`;
-      roleEl.classList.remove('d-none');
-    } else {
-      roleEl.textContent = '';
-      roleEl.classList.add('d-none');
-    }
+    roleEl.textContent = '';
+    roleEl.classList.add('d-none');
   }
 
   function updateItemClassification(item, classification) {
@@ -2280,18 +2260,6 @@ function initRosterEditor() {
       item.setAttribute('data-unit-classification', JSON.stringify(classification ?? null));
     } catch (err) {
       item.setAttribute('data-unit-classification', 'null');
-    }
-    const roleNode = item.querySelector('[data-roster-unit-role]');
-    if (!roleNode) {
-      return;
-    }
-    const text = formatClassificationDisplay(classification);
-    if (text) {
-      roleNode.textContent = `Klasyfikacja: ${text}`;
-      roleNode.classList.remove('d-none');
-    } else {
-      roleNode.textContent = '';
-      roleNode.classList.add('d-none');
     }
   }
 
@@ -2656,7 +2624,7 @@ function initRosterEditor() {
       }
       applyClassificationToState(loadoutState, currentClassification);
     }
-    renderClassificationDisplay(currentClassification);
+
     renderEditors(precomputedWeaponMap);
     if (loadoutInput && loadoutState) {
       loadoutInput.value = serializeLoadoutState(loadoutState);
@@ -2961,7 +2929,7 @@ function renderEditors(precomputedWeaponMap = null) {
       }
       updateCustomLabelDisplay('');
       currentClassification = null;
-      renderClassificationDisplay(null);
+      renderClassificationDisplay();
       autoSaveEnabled = false;
       setSaveStatus('idle');
       return;
@@ -3011,7 +2979,7 @@ function renderEditors(precomputedWeaponMap = null) {
       updateActiveItem: false,
       updateList: false,
     });
-    renderClassificationDisplay(currentClassification);
+    renderClassificationDisplay();
 
     currentCount = Number.isFinite(countValue) && countValue >= 1 ? countValue : 1;
     if (countInput) {
