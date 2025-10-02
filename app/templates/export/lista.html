@@ -35,7 +35,6 @@
         <th>Jakość</th>
         <th>Obrona</th>
         <th>Wytrz.</th>
-        <th>Klasyf.</th>
         <th>Zdolności</th>
         <th>Uzbrojenie</th>
         <th>Suma</th>
@@ -50,21 +49,6 @@
         <td>{{ entry.quality }}</td>
         <td>{{ entry.defense }}</td>
         <td>{{ entry.toughness }}</td>
-        <td class="small">
-          {% if entry.classification %}
-            <strong>{{ entry.classification.label }}</strong>
-            {% set classification_display = entry.classification.display %}
-            {% if not classification_display %}
-              {% set warrior_points = entry.classification.warrior_cost | default(0) | round | int %}
-              {% set shooter_points = entry.classification.shooter_cost | default(0) | round | int %}
-              {% set classification_display = 'Wojownik ' ~ warrior_points ~ ' pkt / Strzelec ' ~ shooter_points ~ ' pkt' %}
-            {% endif %}
-            <br />
-            <span class="text-muted">{{ classification_display }}</span>
-          {% else %}
-            -
-          {% endif %}
-        </td>
         <td class="small">
           {% set has_content = False %}
           {% if entry.passive_labels %}
