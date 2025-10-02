@@ -852,30 +852,49 @@ def _ability_label_with_count(entry: dict) -> str:
 def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
     entries: list[dict] = []
     payload = ability_registry.unit_ability_payload(unit, ability_type)
-    payload_by_id = {
-        item.get("ability_id"): item for item in payload if item.get("ability_id")
-    }
+    payload_by_id: dict[int, list[dict]] = {}
+    for item in payload:
+        ability_id = item.get("ability_id")
+        if ability_id is None:
+            continue
+        try:
+            key = int(ability_id)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            continue
+        payload_by_id.setdefault(key, []).append(item)
     flags = utils.parse_flags(unit.flags)
     unit_traits = costs.flags_to_ability_list(flags)
     for link in getattr(unit, "abilities", []):
         ability = link.ability
         if not ability or ability.type != ability_type:
             continue
-        payload_entry = payload_by_id.get(ability.id) or {}
+        params: dict[str, Any] = {}
+        if link.params_json:
+            try:
+                params = json.loads(link.params_json)
+            except json.JSONDecodeError:  # pragma: no cover - defensive
+                params = {}
+        value = params.get("value")
+        value_str = str(value) if value is not None else None
+        payload_entry: dict[str, Any] | None = None
+        payload_candidates = payload_by_id.get(ability.id or -1) or []
+        if value_str is not None:
+            for candidate in payload_candidates:
+                if str(candidate.get("value") or "") == value_str:
+                    payload_entry = candidate
+                    break
+        if payload_entry is None and payload_candidates:
+            payload_entry = payload_candidates[0]
+        payload_entry = payload_entry or {}
         label = payload_entry.get("label") or ability.name or ""
         description = payload_entry.get("description") or ability.description or ""
         is_default = payload_entry.get("is_default")
         if is_default is None:
             is_default = False
-            if link.params_json:
-                try:
-                    params = json.loads(link.params_json)
-                except json.JSONDecodeError:
-                    params = {}
-                if "default" in params:
-                    is_default = bool(params.get("default"))
-                elif "is_default" in params:
-                    is_default = bool(params.get("is_default"))
+            if "default" in params:
+                is_default = bool(params.get("default"))
+            elif "is_default" in params:
+                is_default = bool(params.get("is_default"))
         cost_value = costs.ability_cost(
             link,
             unit_traits,
