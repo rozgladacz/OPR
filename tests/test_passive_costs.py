@@ -7,9 +7,15 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+import pytest
+
 from app import models
+from app.services import costs, utils as service_utils
+
+if not hasattr(service_utils, "HIDDEN_TRAIT_SLUGS"):
+    service_utils.HIDDEN_TRAIT_SLUGS = set()
+
 from app.routers import rosters
-from app.services import costs
 
 
 def _make_unit_with_default_passive() -> models.Unit:
@@ -80,3 +86,45 @@ def test_base_cost_per_model_respects_classification() -> None:
     )
     shooter_base = rosters._base_cost_per_model(unit, {"slug": "strzelec"})
     assert shooter_base == round(expected_shooter, 2)
+
+
+def test_delikatny_cost_matches_defense_row_difference() -> None:
+    unit = models.Unit(
+        name="Fragile Troops",
+        quality=4,
+        defense=3,
+        toughness=6,
+        flags="Delikatny",
+        army_id=1,
+    )
+    unit.abilities = []
+    unit.weapon_links = []
+    unit.default_weapon = None
+    unit.default_weapon_id = None
+
+    entries = rosters._passive_entries(unit)
+    delikatny_entry = next(
+        entry for entry in entries if costs.ability_identifier(entry.get("slug")) == "delikatny"
+    )
+
+    traits_with = costs.flags_to_ability_list({"Delikatny": True})
+    traits_without = [
+        trait
+        for trait in traits_with
+        if costs.ability_identifier(trait) != "delikatny"
+    ]
+    cost_with = costs.base_model_cost(
+        unit.quality,
+        unit.defense,
+        unit.toughness,
+        traits_with,
+    )
+    cost_without = costs.base_model_cost(
+        unit.quality,
+        unit.defense,
+        unit.toughness,
+        traits_without,
+    )
+
+    expected = cost_with - cost_without
+    assert delikatny_entry["cost"] == pytest.approx(expected, rel=1e-6)
