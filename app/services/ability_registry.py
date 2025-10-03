@@ -11,6 +11,18 @@ from ..data import abilities as ability_catalog
 
 AURA_RANGE_OPTIONS = (6, 12)
 ABILITY_NAME_MAX_LENGTH = 60
+EXCLUDED_AURA_AND_ORDER_SLUGS: set[str] = {
+    "zasadzka",
+    "zwiadowca",
+    "nieruchomy",
+    "samolot",
+    "dobrze_strzela",
+    "zle_strzela",
+    "bohater",
+    "transport",
+    "masywny",
+    "strach",
+}
 
 
 def ability_slug(ability: models.Ability) -> str | None:
@@ -85,7 +97,11 @@ def sync_definitions(session: Session) -> None:
 def definition_payload(session: Session, ability_type: str) -> list[dict]:
     sync_definitions(session)
     definitions = ability_catalog.definitions_by_type(ability_type)
-    passive_definitions = ability_catalog.definitions_by_type("passive")
+    passive_definitions = [
+        definition
+        for definition in ability_catalog.definitions_by_type("passive")
+        if definition.slug not in EXCLUDED_AURA_AND_ORDER_SLUGS
+    ]
     records = (
         session.execute(
             select(models.Ability)
