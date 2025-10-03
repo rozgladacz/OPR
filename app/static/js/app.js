@@ -3376,6 +3376,39 @@ function initSpellAbilityForms() {
       }
     }
 
+    const htmlDecoder = document.createElement('textarea');
+
+    function parseChoiceDataset(option) {
+      if (!option) {
+        return [];
+      }
+      const rawAttribute = option.getAttribute('data-value-choices') || '';
+      const rawDataset = option.dataset.valueChoices || '';
+      const raw = rawAttribute || rawDataset;
+      if (!raw) {
+        return [];
+      }
+      let decoded = raw;
+      if (raw.includes('&')) {
+        htmlDecoder.innerHTML = raw;
+        decoded = htmlDecoder.value || raw;
+      }
+      try {
+        const parsed = JSON.parse(decoded);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (err) {
+        if (rawAttribute && rawAttribute !== decoded) {
+          try {
+            const parsed = JSON.parse(rawAttribute);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (innerErr) {
+            return [];
+          }
+        }
+        return [];
+      }
+    }
+
     function handleAbilityChange() {
       if (!abilitySelect) {
         return;
