@@ -1399,7 +1399,9 @@ def _classification_from_totals(
         preferred = "wojownik"
     elif shooter > warrior:
         preferred = "strzelec"
-    else:
+    elif not pool:
+        # Without any explicit role traits on the unit we can't resolve a tie
+        # between the two role totals in a deterministic way.
         return None
 
     slug: str | None = None

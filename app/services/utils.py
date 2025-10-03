@@ -11,6 +11,12 @@ from .. import models
 from ..data import abilities as ability_catalog
 
 
+# Traits with these normalized slugs are part of the internal role handling and
+# should never be presented in the UI when editing armies/rosters.  They are
+# filtered out anywhere `_is_hidden_trait` is used.
+HIDDEN_TRAIT_SLUGS: set[str] = {"wojownik", "strzelec"}
+
+
 def round_points(value: Any) -> int:
     if value is None:
         return 0
