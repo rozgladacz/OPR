@@ -596,6 +596,7 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
     entries: list[dict] = []
     flags = utils.parse_flags(unit.flags)
     unit_traits = costs.flags_to_ability_list(flags)
+    default_weapons = costs.unit_default_weapons(unit)
     for item in payload:
         if not item:
             continue
@@ -613,6 +614,9 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
                     value,
                     unit_traits,
                     toughness=unit.toughness,
+                    quality=unit.quality,
+                    defense=unit.defense,
+                    weapons=default_weapons,
                 )
             )
         except Exception:  # pragma: no cover - fallback for unexpected input
@@ -622,6 +626,9 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
                     value,
                     unit_traits,
                     toughness=unit.toughness,
+                    quality=unit.quality,
+                    defense=unit.defense,
+                    weapons=default_weapons,
                 )
             )
         entries.append(
@@ -1024,6 +1031,7 @@ def _base_cost_per_model(
         base_traits,
     )
     passive_cost = 0.0
+    default_weapons = costs.unit_default_weapons(unit)
     for entry in passive_state.payload:
         slug_value = str(entry.get("slug") or "").strip()
         if not slug_value:
@@ -1043,6 +1051,9 @@ def _base_cost_per_model(
             value,
             base_traits,
             toughness=unit.toughness,
+            quality=unit.quality,
+            defense=unit.defense,
+            weapons=default_weapons,
         )
     return round(base_value + passive_cost, 2)
 

@@ -39,6 +39,9 @@ DEFENSE_ROW_ABILITIES = {
     3: {"niewrazliwy"},
     4: {"regeneracja"},
 }
+DEFENSE_ROW_SLUGS = {
+    slug for entries in DEFENSE_ROW_ABILITIES.values() for slug in entries
+}
 
 RANGE_TABLE = {0: 0.6, 12: 0.65, 18: 1.0, 24: 1.25, 30: 1.45, 36: 1.55}
 
@@ -487,16 +490,85 @@ def ability_cost_from_name(
     unit_abilities: Sequence[str] | None = None,
     *,
     toughness: int | float | None = None,
+    quality: int | None = None,
+    defense: int | None = None,
+    weapons: Sequence[models.Weapon] | None = None,
 ) -> float:
     desc = normalize_name(name)
     if not desc:
         return 0.0
 
+    abilities: list[str] = list(unit_abilities or [])
+    slug = ability_identifier(name)
+
+    def _contains_slug(items: Sequence[str], needle: str | None) -> bool:
+        if not needle:
+            return False
+        for element in items:
+            if ability_identifier(element) == needle:
+                return True
+        return False
+
+    if slug and not _contains_slug(abilities, slug):
+        if value is not None and str(value).strip():
+            abilities.append(f"{slug}({value})")
+        else:
+            abilities.append(slug)
+
+    abilities_without: list[str]
+    if slug:
+        abilities_without = []
+        removed = False
+        for item in abilities:
+            if not removed and ability_identifier(item) == slug:
+                removed = True
+                continue
+            abilities_without.append(item)
+    else:
+        abilities_without = list(abilities)
+
     ability_set: set[str] = set()
-    for item in unit_abilities or []:
+    for item in abilities:
         identifier = ability_identifier(item)
         if identifier:
             ability_set.add(identifier)
+
+    row_delta: float | None = None
+    if (
+        slug
+        and quality is not None
+        and defense is not None
+        and toughness is not None
+        and abilities_without != abilities
+        and (slug in QUALITY_ROW_ABILITIES or slug in DEFENSE_ROW_SLUGS)
+    ):
+        row_delta = base_model_cost(
+            int(quality),
+            int(defense),
+            int(float(toughness)),
+            abilities,
+        ) - base_model_cost(
+            int(quality),
+            int(defense),
+            int(float(toughness)),
+            abilities_without,
+        )
+
+    weapon_delta = 0.0
+    if (
+        weapons
+        and slug
+        and quality is not None
+        and abilities_without != abilities
+    ):
+        traits_with = abilities
+        traits_without = abilities_without
+        total_with = 0.0
+        total_without = 0.0
+        for weapon in weapons:
+            total_with += weapon_cost(weapon, int(quality), traits_with)
+            total_without += weapon_cost(weapon, int(quality), traits_without)
+        weapon_delta = total_with - total_without
 
     if desc.startswith("transport"):
         capacity = extract_number(value or name)
@@ -504,41 +576,39 @@ def ability_cost_from_name(
         for options, value in TRANSPORT_MULTIPLIERS:
             if ability_set & options:
                 multiplier = value
-        return capacity * multiplier
-
-    if desc.startswith("aura"):
+        base_result = capacity * multiplier
+    elif desc.startswith("aura"):
         ability_slug, aura_range = _parse_aura_value(name, value)
         cost = passive_cost(ability_slug, 8.0, True)
         if abs(aura_range - 12.0) < 1e-6:
             cost *= 2.0
-        return cost
-
-    if desc.startswith("mag"):
-        return 8.0 * extract_number(value or name)
-
-    if desc == "przekaznik":
-        return 4.0
-
-    if desc == "latanie":
-        return 20.0
-
-    if desc.startswith("rozkaz"):
+        base_result = cost
+    elif desc.startswith("mag"):
+        base_result = 8.0 * extract_number(value or name)
+    elif desc == "przekaznik":
+        base_result = 4.0
+    elif desc == "latanie":
+        base_result = 20.0
+    elif desc.startswith("rozkaz"):
         ability_ref = value or (desc.split(":", 1)[1].strip() if ":" in desc else "")
         ability_slug = ability_catalog.slug_for_name(ability_ref) or ability_identifier(ability_ref)
-        return passive_cost(ability_slug, 10.0, True)
+        base_result = passive_cost(ability_slug, 10.0, True)
+    elif desc == "radio":
+        base_result = 3.0
+    else:
+        tou_value = float(toughness) if toughness is not None else 1.0
+        definition = ability_catalog.find_definition(slug) if slug else None
+        if definition and definition.type == "passive":
+            base_result = passive_cost(name, tou_value)
+        elif slug and not definition:
+            base_result = passive_cost(name, tou_value)
+        else:
+            base_result = 0.0
 
-    if desc == "radio":
-        return 3.0
+    if row_delta is not None:
+        base_result = row_delta
 
-    tou_value = float(toughness) if toughness is not None else 1.0
-    slug = ability_identifier(name)
-    definition = ability_catalog.find_definition(slug) if slug else None
-    if definition and definition.type == "passive":
-        return passive_cost(name, tou_value)
-    if slug and not definition:
-        return passive_cost(name, tou_value)
-
-    return 0.0
+    return base_result + weapon_delta
 
 
 def base_model_cost(
@@ -765,6 +835,7 @@ def ability_cost(
         return 0.0
     if ability.cost_hint is not None:
         return float(ability.cost_hint)
+    unit = getattr(ability_link, "unit", None)
     value = None
     if ability_link.params_json:
         try:
@@ -772,11 +843,17 @@ def ability_cost(
         except json.JSONDecodeError:
             data = {}
         value = data.get("value")
+    base_toughness = toughness
+    if base_toughness is None and unit is not None:
+        base_toughness = getattr(unit, "toughness", None)
     return ability_cost_from_name(
         ability.name or "",
         value,
         unit_traits,
-        toughness=toughness,
+        toughness=base_toughness,
+        quality=getattr(unit, "quality", None) if unit is not None else None,
+        defense=getattr(unit, "defense", None) if unit is not None else None,
+        weapons=unit_default_weapons(unit) if unit is not None else None,
     )
 
 
@@ -815,6 +892,7 @@ def roster_unit_role_totals(
 
     passive_state = compute_passive_state(unit, extra_data if has_structured_loadout else None)
     base_traits = _strip_role_traits(passive_state.traits)
+    default_weapons = unit_default_weapons(unit)
 
     def _parse_counts(section: str) -> dict[int, int]:
         raw_section = raw_data.get(section)
@@ -916,6 +994,9 @@ def roster_unit_role_totals(
                 value,
                 current_traits,
                 toughness=unit.toughness,
+                quality=unit.quality,
+                defense=unit.defense,
+                weapons=default_weapons,
             )
             entries.append(
                 {
@@ -1000,7 +1081,6 @@ def roster_unit_role_totals(
             return round(total, 2)
 
         legacy_unit_cost = base_per_model + active_total
-        default_weapons = unit_default_weapons(unit)
         if roster_unit.selected_weapon:
             legacy_unit_cost += weapon_cost(
                 roster_unit.selected_weapon,
