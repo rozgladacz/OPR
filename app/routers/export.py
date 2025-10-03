@@ -33,6 +33,43 @@ _PDF_FONTS_REGISTERED = False
 _PDF_FONT_BYTES: dict[str, bytes] = {}
 
 
+def _army_spell_entries(
+    roster: models.Roster, unit_entries: list[dict[str, object]]
+) -> list[dict[str, object]]:
+    army = getattr(roster, "army", None)
+    if not army:
+        return []
+    has_mag = False
+    for entry in unit_entries:
+        slugs = entry.get("active_slugs") if isinstance(entry, dict) else None
+        if not slugs:
+            continue
+        for slug in slugs:
+            if str(slug).strip().casefold() == "mag":
+                has_mag = True
+                break
+        if has_mag:
+            break
+    if not has_mag:
+        return []
+    spells = getattr(army, "spells", []) or []
+    result: list[dict[str, object]] = []
+    for spell in spells:
+        payload = getattr(spell, "export_payload", None)
+        if not payload:
+            continue
+        label = (payload.get("label") or "").strip()
+        if not label:
+            continue
+        entry = {
+            "cost": int(payload.get("cost") or 0),
+            "label": label,
+            "description": (payload.get("description") or "").strip(),
+        }
+        result.append(entry)
+    return result
+
+
 def _ensure_pdf_fonts() -> None:
     global _PDF_FONTS_REGISTERED
     if _PDF_FONTS_REGISTERED:
@@ -93,6 +130,7 @@ def roster_print(
     total_cost = costs.roster_total(roster)
     total_cost_rounded = utils.round_points(total_cost)
     roster_items = [_roster_unit_export_data(ru) for ru in roster.roster_units]
+    spell_entries = _army_spell_entries(roster, roster_items)
     return templates.TemplateResponse(
         "roster_print.html",
         {
@@ -103,6 +141,7 @@ def roster_print(
             "total_cost": total_cost,
             "total_cost_rounded": total_cost_rounded,
             "generated_at": datetime.utcnow(),
+            "spell_entries": spell_entries,
         },
     )
 
@@ -126,6 +165,7 @@ def roster_export_list(
     total_cost_rounded = utils.round_points(total_cost)
 
     entries = [_roster_unit_export_data(ru) for ru in roster.roster_units]
+    spell_entries = _army_spell_entries(roster, entries)
 
     return templates.TemplateResponse(
         "export/lista.html",
@@ -137,6 +177,7 @@ def roster_export_list(
             "total_cost": total_cost,
             "total_cost_rounded": total_cost_rounded,
             "generated_at": datetime.utcnow(),
+            "spell_entries": spell_entries,
         },
     )
 
@@ -254,6 +295,32 @@ def roster_pdf(
             pdf.setFont(font_name, font_size)
             pdf.drawString(x_offset, y, text)
             y -= line_height
+        y -= 6
+
+    if spell_entries:
+        required_space = line_height * (len(spell_entries) + 2)
+        if y - required_space < margin:
+            pdf.showPage()
+            y = height - 50
+            draw_page_header()
+        pdf.setFont(PDF_BOLD_FONT, 12)
+        pdf.drawString(margin, y, "Lista zaklęć")
+        y -= 16
+        pdf.setFont(PDF_BASE_FONT, 10)
+        for spell in spell_entries:
+            label = spell.get("label") or ""
+            cost_text = spell.get("cost")
+            prefix = f"{cost_text}: " if cost_text not in (None, "") else ""
+            line = f"{prefix}{label}".strip()
+            segments = wrap_line(line)
+            for segment in segments:
+                if y - line_height < margin:
+                    pdf.showPage()
+                    y = height - 50
+                    draw_page_header()
+                    pdf.setFont(PDF_BASE_FONT, 10)
+                pdf.drawString(margin, y, segment)
+                y -= line_height
         y -= 6
 
     pdf.showPage()

@@ -12,6 +12,7 @@ from .. import models
 from ..db import get_db
 from ..security import get_current_user
 from ..services import costs, utils
+from .export import _army_spell_entries
 from .rosters import _ensure_roster_view_access, _roster_unit_export_data
 
 
@@ -49,6 +50,7 @@ def _weapon_details_text(details: list[dict[str, Any]]) -> str:
 def _append_roster_sheet(
     workbook: Workbook,
     entries: list[dict[str, Any]],
+    spells: list[dict[str, Any]] | None = None,
 ) -> float:
     sheet = workbook.active
     sheet.title = "Lista"
@@ -102,6 +104,14 @@ def _append_roster_sheet(
         "",
         utils.round_points(total_cost),
     ])
+    if spells:
+        sheet.append([])
+        sheet.append(["Koszt mocy", "Zaklęcie"])
+        for spell in spells:
+            sheet.append([
+                spell.get("cost"),
+                spell.get("label"),
+            ])
     for column_cells in sheet.columns:
         max_length = max(len(str(cell.value or "")) for cell in column_cells)
         adjusted = max_length + 2
@@ -150,7 +160,8 @@ def export_xlsx(
     costs.update_cached_costs(roster.roster_units)
     workbook = Workbook()
     entries = [_roster_unit_export_data(ru) for ru in roster.roster_units]
-    total_cost = _append_roster_sheet(workbook, entries)
+    spell_entries = _army_spell_entries(roster, entries)
+    total_cost = _append_roster_sheet(workbook, entries, spell_entries)
     _append_weapons_sheet(workbook, entries)
 
     buffer = BytesIO()
