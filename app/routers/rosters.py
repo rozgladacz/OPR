@@ -596,6 +596,7 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
     entries: list[dict] = []
     flags = utils.parse_flags(unit.flags)
     unit_traits = costs.flags_to_ability_list(flags)
+    default_weapons = costs.unit_default_weapons(unit)
     for item in payload:
         if not item:
             continue
@@ -613,6 +614,9 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
                     value,
                     unit_traits,
                     toughness=unit.toughness,
+                    quality=unit.quality,
+                    defense=unit.defense,
+                    weapons=default_weapons,
                 )
             )
         except Exception:  # pragma: no cover - fallback for unexpected input
@@ -622,6 +626,9 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
                     value,
                     unit_traits,
                     toughness=unit.toughness,
+                    quality=unit.quality,
+                    defense=unit.defense,
+                    weapons=default_weapons,
                 )
             )
         entries.append(
@@ -657,6 +664,36 @@ def _coerce_int(value: Any, default: int = 0) -> int:
     return number
 
 
+def _ability_loadout_key(ability_id: Any, value: Any | None) -> str:
+    if ability_id is None:
+        return ""
+    base = str(ability_id)
+    if value is None:
+        return base
+    if isinstance(value, bool):
+        variant = "1" if value else "0"
+    elif isinstance(value, (int, float)):
+        if isinstance(value, float) and value.is_integer():
+            variant = str(int(value))
+        else:
+            variant = str(value)
+    else:
+        variant = str(value).strip()
+    if not variant:
+        return base
+    return f"{base}:{variant}"
+
+
+def _split_ability_loadout_key(key: Any) -> tuple[str, str | None]:
+    text = str(key).strip()
+    if not text:
+        return "", None
+    if ":" in text:
+        ability_id, variant = text.split(":", 1)
+        return ability_id, variant
+    return text, None
+
+
 def _loadout_counts(
     loadout: dict[str, Any] | None, section: str
 ) -> dict[str, int]:
@@ -674,7 +711,17 @@ def _loadout_counts(
             if section == "passive":
                 key = entry.get("slug") or entry.get("id")
             else:
-                key = entry.get("id") or entry.get("ability_id")
+                key = (
+                    entry.get("loadout_key")
+                    or entry.get("key")
+                    or entry.get("id")
+                    or entry.get("ability_id")
+                )
+                if key is None:
+                    ability_id = entry.get("ability_id")
+                    value = entry.get("value")
+                    if ability_id is not None:
+                        key = _ability_loadout_key(ability_id, value)
             if key is None:
                 continue
             items.append((key, entry.get("count")))
@@ -683,10 +730,11 @@ def _loadout_counts(
     for key, raw_value in items:
         if key is None:
             continue
+        key_str = str(key)
         count = _coerce_int(raw_value, 0)
         if count < 0:
             count = 0
-        result[str(key)] = count
+        result[key_str] = count
     return result
 
 
@@ -877,7 +925,12 @@ def _selected_ability_entries(
         if not entry or entry.get("ability_id") is None:
             continue
         ability_id = entry.get("ability_id")
-        key = str(ability_id)
+        loadout_key = entry.get("loadout_key")
+        if not loadout_key:
+            loadout_key = _ability_loadout_key(ability_id, entry.get("value"))
+        if not loadout_key:
+            continue
+        key = str(loadout_key)
         default_count = _coerce_int(entry.get("default_count") or 0, 0)
         stored = counts.get(key, default_count)
         if stored <= 0:
@@ -885,6 +938,7 @@ def _selected_ability_entries(
             continue
         item = dict(entry)
         item["count"] = stored
+        item["loadout_key"] = key
 
         custom_name = item.get("custom_name") or name_map.get(key)
         if isinstance(custom_name, str):
@@ -899,11 +953,22 @@ def _selected_ability_entries(
     for key, value in counts.items():
         if key in seen or value <= 0:
             continue
+        ability_id_str, variant = _split_ability_loadout_key(key)
+        ability_id_value: Any = ability_id_str
+        try:
+            ability_id_value = int(ability_id_str)
+        except (TypeError, ValueError):
+            try:
+                ability_id_value = int(float(ability_id_str))
+            except (TypeError, ValueError):
+                ability_id_value = ability_id_str
         fallback = {
-            "ability_id": key,
+            "ability_id": ability_id_value,
             "label": str(key),
             "description": "",
             "count": value,
+            "value": variant,
+            "loadout_key": key,
         }
         custom_name = name_map.get(str(key))
         if isinstance(custom_name, str):
@@ -997,6 +1062,8 @@ def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
                 "is_default": bool(is_default),
                 "default_count": 1 if bool(is_default) else 0,
                 "custom_name": custom_name,
+                "value": value,
+                "loadout_key": _ability_loadout_key(ability.id, value),
             }
         )
     entries.sort(key=lambda entry: (not entry.get("is_default", False), entry.get("label", "").casefold()))
@@ -1028,6 +1095,7 @@ def _base_cost_per_model(
         base_traits,
     )
     passive_cost = 0.0
+    default_weapons = costs.unit_default_weapons(unit)
     for entry in passive_state.payload:
         slug_value = str(entry.get("slug") or "").strip()
         if not slug_value:
@@ -1047,6 +1115,9 @@ def _base_cost_per_model(
             value,
             base_traits,
             toughness=unit.toughness,
+            quality=unit.quality,
+            defense=unit.defense,
+            weapons=default_weapons,
         )
     return round(base_value + passive_cost, 2)
 
@@ -1089,7 +1160,12 @@ def _default_loadout_payload(
                 default_count = int(item.get("default_count") or 0)
             except (TypeError, ValueError):
                 default_count = 0
-            payload[key][str(ability_id)] = max(default_count, 0)
+            entry_key = item.get("loadout_key")
+            if not entry_key:
+                entry_key = _ability_loadout_key(ability_id, item.get("value")) or str(
+                    ability_id
+                )
+            payload[key][str(entry_key)] = max(default_count, 0)
 
     passive_entries = passive_items if passive_items is not None else _passive_entries(unit)
     for entry in passive_entries:
@@ -1110,7 +1186,14 @@ def _extract_label_map(source: Any) -> dict[str, str]:
         for entry in source:
             if not isinstance(entry, dict):
                 continue
-            entry_id = entry.get("id") or entry.get("ability_id")
+            entry_id = (
+                entry.get("loadout_key")
+                or entry.get("key")
+                or entry.get("id")
+                or entry.get("ability_id")
+            )
+            if entry_id is None and entry.get("ability_id") is not None:
+                entry_id = _ability_loadout_key(entry.get("ability_id"), entry.get("value"))
             if entry_id is None:
                 continue
             name_value = entry.get("name") or entry.get("label") or entry.get("value")
@@ -1252,6 +1335,66 @@ def _sanitize_loadout(
 
     max_count = max(int(model_count), 0)
 
+    ability_sections: dict[str, list[dict]] = {
+        "active": active_items if active_items is not None else _ability_entries(unit, "active"),
+        "aura": aura_items if aura_items is not None else _ability_entries(unit, "aura"),
+    }
+    ability_id_lookup: dict[str, dict[str, list[str]]] = {}
+    ability_label_lookup: dict[str, dict[str, str]] = {}
+    for section_name, entries in ability_sections.items():
+        id_map: dict[str, list[str]] = {}
+        label_map: dict[str, str] = {}
+        for entry in entries:
+            ability_id = entry.get("ability_id")
+            if ability_id is None:
+                continue
+            loadout_key = entry.get("loadout_key")
+            if not loadout_key:
+                loadout_key = _ability_loadout_key(ability_id, entry.get("value"))
+            if not loadout_key:
+                continue
+            ability_id_str = str(ability_id)
+            id_map.setdefault(ability_id_str, []).append(loadout_key)
+            label = entry.get("label")
+            if isinstance(label, str):
+                normalized_label = label.strip()
+                if normalized_label:
+                    label_map[loadout_key] = normalized_label
+        ability_id_lookup[section_name] = id_map
+        ability_label_lookup[section_name] = label_map
+
+    label_sources: dict[str, dict[str, str]] = {
+        section: _extract_label_map(safe_payload.get(f"{section}_labels"))
+        for section in ("active", "aura")
+    }
+    normalized_label_maps: dict[str, dict[str, str]] = {section: {} for section in label_sources}
+
+    def _canonical_ability_key(
+        section: str, key: str, label_hint: str | None = None
+    ) -> str:
+        key_str = str(key)
+        if section not in ability_sections:
+            return key_str
+        defaults_section = defaults.get(section, {})
+        if key_str in defaults_section:
+            return key_str
+        normalized_hint = label_hint.strip().casefold() if isinstance(label_hint, str) else None
+        if normalized_hint:
+            for candidate_key, candidate_label in ability_label_lookup.get(section, {}).items():
+                candidate_normalized = candidate_label.strip().casefold()
+                if candidate_normalized == normalized_hint:
+                    return candidate_key
+        base_id, _ = _split_ability_loadout_key(key_str)
+        candidates = ability_id_lookup.get(section, {}).get(base_id, [])
+        if len(candidates) == 1:
+            return candidates[0]
+        for candidate in candidates:
+            if candidate in defaults_section:
+                return candidate
+        if candidates:
+            return candidates[0]
+        return key_str
+
     def _normalize_section(section: str) -> dict[str, Any]:
         source = safe_payload.get(section, {})
         if isinstance(source, dict):
@@ -1290,35 +1433,54 @@ def _sanitize_loadout(
             defaults_section = {}
             defaults[section] = defaults_section
         incoming_map = _normalize_section(section)
+        if section in ability_sections:
+            labels = label_sources.get(section, {})
+            normalized_incoming: dict[str, Any] = {}
+            for raw_key, raw_value in incoming_map.items():
+                label_hint = labels.pop(raw_key, None)
+                canonical_key = _canonical_ability_key(section, raw_key, label_hint)
+                normalized_incoming[canonical_key] = raw_value
+                if label_hint:
+                    normalized_label_maps.setdefault(section, {})[canonical_key] = label_hint
+            for raw_key, label_hint in list(labels.items()):
+                canonical_key = _canonical_ability_key(section, raw_key, label_hint)
+                normalized_label_maps.setdefault(section, {})[canonical_key] = label_hint
+                labels.pop(raw_key, None)
+            incoming_map = normalized_incoming
+        else:
+            existing_labels = label_sources.get(section, {})
+            for key_str, value in existing_labels.items():
+                normalized_label_maps.setdefault(section, {})[key_str] = value
         keys = set(defaults_section.keys()) | set(incoming_map.keys())
         for key in keys:
-            raw_value = incoming_map.get(key, defaults_section.get(key, 0))
+            key_str = str(key)
+            raw_value = incoming_map.get(key_str, defaults_section.get(key_str, 0))
             try:
                 value = int(raw_value)
             except (TypeError, ValueError):
                 try:
                     value = int(float(raw_value))
                 except (TypeError, ValueError):
-                    value = defaults_section[key]
+                    value = defaults_section.get(key_str, 0)
             if value < 0:
                 value = 0
             if section == "weapons":
-                defaults_section[key] = value
+                defaults_section[key_str] = value
             else:
                 if clamp is None:
-                    defaults_section[key] = min(value, max_count)
+                    defaults_section[key_str] = min(value, max_count)
                 elif clamp == 1:
-                    defaults_section[key] = 1 if value > 0 else 0
+                    defaults_section[key_str] = 1 if value > 0 else 0
                 else:
-                    defaults_section[key] = min(value, clamp)
+                    defaults_section[key_str] = min(value, clamp)
 
     _merge("weapons")
     _merge("active")
     _merge("aura")
     _merge("passive", clamp=1)
 
-    defaults["active_labels"] = _extract_label_map(safe_payload.get("active_labels"))
-    defaults["aura_labels"] = _extract_label_map(safe_payload.get("aura_labels"))
+    for section in ("active", "aura"):
+        defaults[f"{section}_labels"] = normalized_label_maps.get(section, {})
 
     if mode_value:
         defaults["mode"] = mode_value
@@ -1403,8 +1565,10 @@ def _classification_from_totals(
         preferred = "wojownik"
     elif shooter > warrior:
         preferred = "strzelec"
-    else:
-        preferred = None
+    elif not pool:
+        # Without any explicit role traits on the unit we can't resolve a tie
+        # between the two role totals in a deterministic way.
+        return None
 
     slug: str | None = None
     if pool:

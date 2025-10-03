@@ -61,7 +61,12 @@ def _parse_ability_counts(roster_unit: models.RosterUnit, section: str) -> dict[
         for entry in raw_section:
             if not isinstance(entry, dict):
                 continue
-            key = entry.get("id") or entry.get("ability_id")
+            key = (
+                entry.get("loadout_key")
+                or entry.get("key")
+                or entry.get("id")
+                or entry.get("ability_id")
+            )
             if key is None:
                 continue
             iterable.append((key, entry.get("count") or entry.get("per_model")))
@@ -69,11 +74,13 @@ def _parse_ability_counts(roster_unit: models.RosterUnit, section: str) -> dict[
         return {}
     counts: dict[int, int] = {}
     for raw_id, raw_value in iterable:
+        raw_id_str = str(raw_id)
+        base_id = raw_id_str.split(":", 1)[0]
         try:
-            ability_id = int(raw_id)
+            ability_id = int(base_id)
         except (TypeError, ValueError):
             try:
-                ability_id = int(float(raw_id))
+                ability_id = int(float(base_id))
             except (TypeError, ValueError):
                 continue
         try:
