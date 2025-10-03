@@ -84,9 +84,26 @@ def _build_unit(
 
     ability_names: list[str] = []
     ability_names.extend(template.get("abilities", []))
+    existing_slugs: set[str] = set()
+    for source in (template.get("flags"),):
+        if not source:
+            continue
+        for token in str(source).split(","):
+            slug = ability_catalog.slug_for_name(token.strip())
+            if slug:
+                existing_slugs.add(slug)
+    for name in ability_names:
+        slug = ability_catalog.slug_for_name(name)
+        if slug:
+            existing_slugs.add(slug)
     for name in overrides.get("abilities", []) or []:
+        slug = ability_catalog.slug_for_name(name)
+        if slug and slug in existing_slugs:
+            continue
         if name not in ability_names:
             ability_names.append(name)
+            if slug:
+                existing_slugs.add(slug)
     unit.abilities = []
     for name in ability_names:
         ability = models.Ability(name=name, type=_ability_type(name), description="")
