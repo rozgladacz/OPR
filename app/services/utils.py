@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..data import abilities as ability_catalog
 
+HIDDEN_TRAIT_SLUGS: set[str] = set()
+
 
 def round_points(value: Any) -> int:
     if value is None:
