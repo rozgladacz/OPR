@@ -905,7 +905,9 @@ def roster_unit_role_totals(
                 if not isinstance(entry, dict):
                     continue
                 entry_id = (
-                    entry.get("id")
+                    entry.get("loadout_key")
+                    or entry.get("key")
+                    or entry.get("id")
                     or entry.get("weapon_id")
                     or entry.get("ability_id")
                 )
@@ -916,11 +918,13 @@ def roster_unit_role_totals(
         else:
             items = []
         for raw_id, raw_value in items:
+            raw_id_str = str(raw_id)
+            base_id = raw_id_str.split(":", 1)[0]
             try:
-                parsed_id = int(raw_id)
+                parsed_id = int(base_id)
             except (TypeError, ValueError):
                 try:
-                    parsed_id = int(float(raw_id))
+                    parsed_id = int(float(base_id))
                 except (TypeError, ValueError):
                     continue
             try:
