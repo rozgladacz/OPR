@@ -975,6 +975,8 @@ def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
         payload_entry = payload_entry or {}
         label = payload_entry.get("label") or ability.name or ""
         custom_name = payload_entry.get("custom_name")
+        slug = payload_entry.get("slug") or ability_registry.ability_slug(ability) or ""
+        raw_label = payload_entry.get("raw") or payload_entry.get("base_label") or label
         if isinstance(custom_name, str):
             custom_name = custom_name.strip() or None
         base_label = payload_entry.get("base_label") or label
@@ -995,6 +997,8 @@ def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
             {
                 "ability_id": ability.id,
                 "label": base_label,
+                "raw": raw_label,
+                "slug": slug,
                 "description": description,
                 "cost": cost_value,
                 "is_default": bool(is_default),
@@ -1433,6 +1437,14 @@ def _classification_from_totals(
     else:
         slug = preferred
 
+    if slug is None and pool:
+        if "strzelec" in pool:
+            slug = "strzelec"
+        elif "wojownik" in pool:
+            slug = "wojownik"
+        else:
+            slug = next(iter(pool), None)
+
     if not slug:
         return None
 
@@ -1592,6 +1604,13 @@ def _roster_unit_export_data(
     total_value = float(roster_unit.cached_cost or costs.roster_unit_cost(roster_unit))
     rounded_total = utils.round_points(total_value)
 
+    active_slugs: list[str] = []
+    for entry in selected_actives:
+        slug_value = entry.get("slug") if isinstance(entry, dict) else None
+        identifier = costs.ability_identifier(slug_value) if slug_value else None
+        if identifier:
+            active_slugs.append(identifier)
+
     return {
         "instance": roster_unit,
         "unit": unit,
@@ -1610,6 +1629,7 @@ def _roster_unit_export_data(
         "total_cost": total_value,
         "rounded_total_cost": rounded_total,
         "classification": classification,
+        "active_slugs": active_slugs,
     }
 
 

@@ -3304,6 +3304,117 @@ function renderEditors(precomputedWeaponMap = null) {
   }
 }
 
+function initSpellAbilityForms() {
+  document.querySelectorAll('[data-spell-ability-form]').forEach((form) => {
+    const abilitySelect = form.querySelector('[data-ability-select]');
+    const valueContainer = form.querySelector('[data-ability-value-container]');
+    const valueLabelEl = form.querySelector('[data-ability-value-label]');
+    const valueSelect = form.querySelector('[data-ability-value-select]');
+    const valueInput = form.querySelector('[data-ability-value-input]');
+
+    function hideValueInputs() {
+      if (valueContainer) {
+        valueContainer.classList.add('d-none');
+      }
+      if (valueSelect) {
+        valueSelect.classList.add('d-none');
+        valueSelect.innerHTML = '';
+        valueSelect.disabled = true;
+      }
+      if (valueInput) {
+        valueInput.classList.add('d-none');
+        valueInput.value = '';
+        valueInput.disabled = true;
+        valueInput.type = 'text';
+      }
+    }
+
+    function showValueSelect(labelText, choices) {
+      if (!valueContainer || !valueSelect) {
+        return;
+      }
+      valueContainer.classList.remove('d-none');
+      valueSelect.classList.remove('d-none');
+      valueSelect.disabled = false;
+      valueSelect.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = labelText ? `Wybierz (${labelText})` : 'Wybierz wartość';
+      valueSelect.appendChild(placeholder);
+      (choices || []).forEach((choice) => {
+        if (choice && typeof choice === 'object') {
+          const option = document.createElement('option');
+          option.value = choice.value ?? '';
+          option.textContent = choice.label ?? choice.value ?? '';
+          valueSelect.appendChild(option);
+        } else {
+          const option = document.createElement('option');
+          option.value = choice ?? '';
+          option.textContent = choice ?? '';
+          valueSelect.appendChild(option);
+        }
+      });
+      if (valueInput) {
+        valueInput.classList.add('d-none');
+        valueInput.disabled = true;
+      }
+    }
+
+    function showValueInput(labelText, valueType) {
+      if (!valueContainer || !valueInput) {
+        return;
+      }
+      valueContainer.classList.remove('d-none');
+      valueInput.classList.remove('d-none');
+      valueInput.disabled = false;
+      valueInput.placeholder = labelText ? `Wartość (${labelText})` : 'Wartość';
+      valueInput.type = valueType === 'number' ? 'number' : 'text';
+      if (valueSelect) {
+        valueSelect.classList.add('d-none');
+        valueSelect.innerHTML = '';
+        valueSelect.disabled = true;
+      }
+    }
+
+    function handleAbilityChange() {
+      if (!abilitySelect) {
+        return;
+      }
+      const option = abilitySelect.selectedOptions[0];
+      if (!option) {
+        hideValueInputs();
+        return;
+      }
+      const requiresValue = option.dataset.requiresValue === 'true';
+      if (!requiresValue) {
+        hideValueInputs();
+        return;
+      }
+      const labelText = option.dataset.valueLabel || '';
+      if (valueLabelEl) {
+        valueLabelEl.textContent = labelText ? `Wartość (${labelText})` : 'Wartość';
+      }
+      let choices = [];
+      try {
+        choices = option.dataset.valueChoices ? JSON.parse(option.dataset.valueChoices) : [];
+      } catch (err) {
+        choices = [];
+      }
+      if (Array.isArray(choices) && choices.length > 0) {
+        showValueSelect(labelText, choices);
+      } else {
+        const valueType = option.dataset.valueType || 'text';
+        showValueInput(labelText, valueType);
+      }
+    }
+
+    if (abilitySelect) {
+      abilitySelect.addEventListener('change', handleAbilityChange);
+      handleAbilityChange();
+    }
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initAbilityPickers();
   initNumberPickers();
@@ -3311,4 +3422,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initWeaponPickers();
   initRosterEditor();
   initWeaponDefaults();
+  initSpellAbilityForms();
 });

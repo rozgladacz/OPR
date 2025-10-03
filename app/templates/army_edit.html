@@ -15,7 +15,12 @@
       Edytuj
     </button>
   </div>
-  <a class="btn btn-secondary" href="/armies">Wróć</a>
+  <div class="btn-group">
+    {% if can_edit %}
+    <a class="btn btn-outline-primary" href="/armies/{{ army.id }}/spells">Lista zaklęć</a>
+    {% endif %}
+    <a class="btn btn-secondary" href="/armies">Wróć</a>
+  </div>
 </div>
 
 

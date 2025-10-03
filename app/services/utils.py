@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..data import abilities as ability_catalog
 
+HIDDEN_TRAIT_SLUGS: set[str] = set()
+
 
 # Traits with these normalized slugs are part of the internal role handling and
 # should never be presented in the UI when editing armies/rosters.  They are

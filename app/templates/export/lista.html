@@ -88,5 +88,14 @@
       </tr>
     </tfoot>
   </table>
+
+  {% if spell_entries %}
+  <h2 style="margin-top: 24px;">Lista zaklęć</h2>
+  <ul>
+    {% for spell in spell_entries %}
+    <li><strong>{{ spell.cost }}</strong>: {{ spell.label }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
 </body>
 </html>
