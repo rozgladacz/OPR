@@ -270,11 +270,43 @@ def _with_role_trait(traits: Sequence[str], slug: str | None) -> list[str]:
     return base
 
 
+def _ascii_letters(value: str) -> str:
+    result: list[str] = []
+    for char in value:
+        if unicodedata.combining(char):
+            continue
+        if ord(char) < 128:
+            result.append(char)
+            continue
+        name = unicodedata.name(char, "")
+        if "LETTER" in name:
+            base = name.split("LETTER", 1)[1].strip()
+            if " WITH " in base:
+                base = base.split(" WITH ", 1)[0].strip()
+            if " SIGN" in base:
+                base = base.split(" SIGN", 1)[0].strip()
+            if " DIGRAPH" in base:
+                base = base.split(" DIGRAPH", 1)[0].strip()
+            tokens = base.split()
+            if len(tokens) > 1 and len(tokens[-1]) == 1:
+                base = tokens[-1]
+            else:
+                base = base.replace(" ", "")
+            if not base:
+                continue
+            if "SMALL" in name:
+                result.append(base.lower())
+            else:
+                result.append(base.upper())
+        # Ignore characters without a useful letter mapping.
+    return "".join(result)
+
+
 def normalize_name(text: str | None) -> str:
     if not text:
         return ""
     value = unicodedata.normalize("NFKD", str(text))
-    value = "".join(ch for ch in value if not unicodedata.combining(ch))
+    value = _ascii_letters(value)
     value = value.replace("-", " ").replace("_", " ")
     value = re.sub(r"\s+", " ", value.strip())
     return value.casefold()
@@ -587,7 +619,7 @@ def ability_cost_from_name(
         base_result = 8.0 * extract_number(value or name)
     elif desc == "przekaznik":
         base_result = 4.0
-    elif desc == "latanie":
+    elif slug == "latanie":
         base_result = 20.0
     elif desc.startswith("rozkaz"):
         ability_ref = value or (desc.split(":", 1)[1].strip() if ":" in desc else "")
