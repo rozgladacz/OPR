@@ -128,3 +128,38 @@ def test_delikatny_cost_matches_defense_row_difference() -> None:
 
     expected = cost_with - cost_without
     assert delikatny_entry["cost"] == pytest.approx(expected, rel=1e-6)
+
+
+def test_defense_abilities_stack_additively() -> None:
+    base_kwargs = dict(quality=4, defense=4, toughness=6)
+    traits_with_both = ["niewrazliwy", "regeneracja"]
+    cost_with_both = costs.base_model_cost(
+        base_kwargs["quality"],
+        base_kwargs["defense"],
+        base_kwargs["toughness"],
+        traits_with_both,
+    )
+    cost_without_niewrazliwy = costs.base_model_cost(
+        base_kwargs["quality"],
+        base_kwargs["defense"],
+        base_kwargs["toughness"],
+        ["regeneracja"],
+    )
+    cost_without_regeneracja = costs.base_model_cost(
+        base_kwargs["quality"],
+        base_kwargs["defense"],
+        base_kwargs["toughness"],
+        ["niewrazliwy"],
+    )
+    cost_without_both = costs.base_model_cost(
+        base_kwargs["quality"],
+        base_kwargs["defense"],
+        base_kwargs["toughness"],
+        [],
+    )
+
+    diff_both = cost_with_both - cost_without_both
+    diff_niewrazliwy = cost_with_both - cost_without_niewrazliwy
+    diff_regeneracja = cost_with_both - cost_without_regeneracja
+
+    assert diff_both == pytest.approx(diff_niewrazliwy + diff_regeneracja, rel=1e-6)
