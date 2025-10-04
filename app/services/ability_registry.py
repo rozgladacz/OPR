@@ -115,6 +115,7 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
     payload: list[dict] = []
     for definition in definitions:
         entry = ability_catalog.to_dict(definition)
+        entry["value_kind"] = None
         if definition.slug == "rozkaz":
             entry["value_choices"] = [
                 {
@@ -124,6 +125,7 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
                 }
                 for passive in passive_definitions
             ]
+            entry["value_kind"] = "passive"
         elif definition.slug == "aura":
             aura_choices: list[dict] = []
             for passive in passive_definitions:
@@ -141,6 +143,7 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
                         }
                     )
             entry["value_choices"] = aura_choices
+            entry["value_kind"] = "passive"
         ability = ability_by_slug.get(definition.slug)
         entry["ability_id"] = ability.id if ability else None
         payload.append(entry)

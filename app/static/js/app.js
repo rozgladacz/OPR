@@ -3311,6 +3311,40 @@ function initSpellAbilityForms() {
     const valueLabelEl = form.querySelector('[data-ability-value-label]');
     const valueSelect = form.querySelector('[data-ability-value-select]');
     const valueInput = form.querySelector('[data-ability-value-input]');
+    const valueDescription = form.querySelector('[data-ability-value-description]');
+    const passiveListId = form.dataset.passiveAbilityListId || '';
+
+    function resetValueDescription() {
+      if (valueDescription) {
+        valueDescription.textContent = '';
+        valueDescription.classList.add('d-none');
+      }
+    }
+
+    function setValueInputList(kind) {
+      if (!valueInput) {
+        return;
+      }
+      if (kind === 'passive' && passiveListId) {
+        valueInput.setAttribute('list', passiveListId);
+      } else {
+        valueInput.removeAttribute('list');
+      }
+    }
+
+    function updateValueDescriptionFromSelect() {
+      if (!valueDescription || !valueSelect) {
+        return;
+      }
+      const option = valueSelect.selectedOptions && valueSelect.selectedOptions.length > 0 ? valueSelect.selectedOptions[0] : null;
+      const description = option && option.dataset ? option.dataset.description || '' : '';
+      if (description) {
+        valueDescription.textContent = description;
+        valueDescription.classList.remove('d-none');
+      } else {
+        resetValueDescription();
+      }
+    }
 
     function hideValueInputs() {
       if (valueContainer) {
@@ -3326,7 +3360,9 @@ function initSpellAbilityForms() {
         valueInput.value = '';
         valueInput.disabled = true;
         valueInput.type = 'text';
+        valueInput.removeAttribute('list');
       }
+      resetValueDescription();
     }
 
     function showValueSelect(labelText, choices) {
@@ -3346,6 +3382,10 @@ function initSpellAbilityForms() {
           const option = document.createElement('option');
           option.value = choice.value ?? '';
           option.textContent = choice.label ?? choice.value ?? '';
+          if (choice.description) {
+            option.dataset.description = choice.description;
+            option.title = choice.description;
+          }
           valueSelect.appendChild(option);
         } else {
           const option = document.createElement('option');
@@ -3357,10 +3397,14 @@ function initSpellAbilityForms() {
       if (valueInput) {
         valueInput.classList.add('d-none');
         valueInput.disabled = true;
+        setValueInputList('');
       }
+      resetValueDescription();
+      valueSelect.value = '';
+      updateValueDescriptionFromSelect();
     }
 
-    function showValueInput(labelText, valueType) {
+    function showValueInput(labelText, valueType, valueKind) {
       if (!valueContainer || !valueInput) {
         return;
       }
@@ -3369,11 +3413,13 @@ function initSpellAbilityForms() {
       valueInput.disabled = false;
       valueInput.placeholder = labelText ? `Wartość (${labelText})` : 'Wartość';
       valueInput.type = valueType === 'number' ? 'number' : 'text';
+      setValueInputList(valueKind || '');
       if (valueSelect) {
         valueSelect.classList.add('d-none');
         valueSelect.innerHTML = '';
         valueSelect.disabled = true;
       }
+      resetValueDescription();
     }
 
     const htmlDecoder = document.createElement('textarea');
@@ -3413,6 +3459,7 @@ function initSpellAbilityForms() {
       if (!abilitySelect) {
         return;
       }
+      resetValueDescription();
       const option = abilitySelect.selectedOptions[0];
       if (!option) {
         hideValueInputs();
@@ -3427,23 +3474,22 @@ function initSpellAbilityForms() {
       if (valueLabelEl) {
         valueLabelEl.textContent = labelText ? `Wartość (${labelText})` : 'Wartość';
       }
-      let choices = [];
-      try {
-        choices = option.dataset.valueChoices ? JSON.parse(option.dataset.valueChoices) : [];
-      } catch (err) {
-        choices = [];
-      }
+      const valueKind = option.dataset.valueKind || '';
+      const choices = parseChoiceDataset(option);
       if (Array.isArray(choices) && choices.length > 0) {
         showValueSelect(labelText, choices);
       } else {
         const valueType = option.dataset.valueType || 'text';
-        showValueInput(labelText, valueType);
+        showValueInput(labelText, valueType, valueKind);
       }
     }
 
     if (abilitySelect) {
       abilitySelect.addEventListener('change', handleAbilityChange);
       handleAbilityChange();
+    }
+    if (valueSelect) {
+      valueSelect.addEventListener('change', updateValueDescriptionFromSelect);
     }
   });
 }
