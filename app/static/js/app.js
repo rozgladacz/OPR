@@ -1537,6 +1537,72 @@ function renderPassiveEditor(
   return true;
 }
 
+function normalizeLoadoutKey(rawKey) {
+  if (rawKey === undefined || rawKey === null) {
+    return '';
+  }
+  if (typeof rawKey === 'string') {
+    const trimmed = rawKey.trim();
+    return trimmed ? trimmed : '';
+  }
+  if (typeof rawKey === 'number') {
+    return Number.isFinite(rawKey) ? String(rawKey) : '';
+  }
+  if (typeof rawKey === 'bigint') {
+    return rawKey.toString();
+  }
+  const numeric = Number(rawKey);
+  if (Number.isFinite(numeric)) {
+    return String(numeric);
+  }
+  const text = String(rawKey).trim();
+  return text ? text : '';
+}
+
+function resolveLoadoutEntryKey(entry, ...idKeys) {
+  if (!entry || typeof entry !== 'object') {
+    return '';
+  }
+  const candidates = [];
+  const loadoutKey = entry.loadout_key ?? entry.loadoutKey;
+  if (loadoutKey !== undefined && loadoutKey !== null) {
+    candidates.push(loadoutKey);
+  }
+  const flatIdKeys = [];
+  idKeys.forEach((key) => {
+    if (!key) {
+      return;
+    }
+    if (Array.isArray(key)) {
+      key.forEach((inner) => {
+        if (inner) {
+          flatIdKeys.push(inner);
+        }
+      });
+      return;
+    }
+    flatIdKeys.push(key);
+  });
+  flatIdKeys.push('id');
+  const seen = new Set();
+  flatIdKeys.forEach((key) => {
+    if (!key || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    if (Object.prototype.hasOwnProperty.call(entry, key)) {
+      candidates.push(entry[key]);
+    }
+  });
+  for (let index = 0; index < candidates.length; index += 1) {
+    const normalized = normalizeLoadoutKey(candidates[index]);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return '';
+}
+
 function createLoadoutState(rawLoadout) {
   const state = {
     weapons: new Map(),
@@ -1558,7 +1624,7 @@ function createLoadoutState(rawLoadout) {
     ['active', 'ability_id'],
     ['aura', 'ability_id'],
   ];
-  sections.forEach(([section]) => {
+  sections.forEach(([section, idKey]) => {
     const values = rawLoadout[section];
     if (!values) {
       return;
@@ -1575,12 +1641,8 @@ function createLoadoutState(rawLoadout) {
       if (!entry) {
         return;
       }
-      const rawId = entry.id ?? entry.weapon_id ?? entry.ability_id;
-      if (rawId === undefined || rawId === null) {
-        return;
-      }
-      const parsedId = Number(rawId);
-      if (!Number.isFinite(parsedId)) {
+      const key = resolveLoadoutEntryKey(entry, idKey, ['weapon_id', 'ability_id']);
+      if (!key) {
         return;
       }
       const rawCount = entry.per_model ?? entry.count ?? 0;
@@ -1588,7 +1650,7 @@ function createLoadoutState(rawLoadout) {
       if (!Number.isFinite(parsedCount) || parsedCount < 0) {
         parsedCount = 0;
       }
-      state[section].set(parsedId, parsedCount);
+      state[section].set(key, parsedCount);
     });
   });
   const passiveSource = rawLoadout.passive;
@@ -1644,12 +1706,8 @@ function createLoadoutState(rawLoadout) {
       if (!entry) {
         return;
       }
-      const rawId = entry.id ?? entry.ability_id;
-      if (rawId === undefined || rawId === null) {
-        return;
-      }
-      const parsedId = Number(rawId);
-      if (!Number.isFinite(parsedId)) {
+      const key = resolveLoadoutEntryKey(entry, 'ability_id');
+      if (!key) {
         return;
       }
       const rawName = entry.name ?? entry.value ?? entry.label;
@@ -1660,7 +1718,7 @@ function createLoadoutState(rawLoadout) {
       if (!trimmed) {
         return;
       }
-      target.set(parsedId, trimmed);
+      target.set(key, trimmed);
     });
   });
   return state;
@@ -1742,26 +1800,23 @@ function serializeLoadoutState(state) {
   return JSON.stringify(result);
 }
 
-function ensureStateEntries(map, entries, idKey, defaultKey) {
+function ensureStateEntries(map, entries, idKey, defaultKey, options = {}) {
   const safeEntries = Array.isArray(entries) ? entries : [];
+  const fallbackIdKeys = Array.isArray(options.fallbackIdKeys) ? options.fallbackIdKeys : [];
   safeEntries.forEach((entry) => {
     if (!entry) {
       return;
     }
-    const rawId = entry[idKey];
-    if (rawId === undefined || rawId === null) {
-      return;
-    }
-    const parsedId = Number(rawId);
-    if (!Number.isFinite(parsedId)) {
+    const key = resolveLoadoutEntryKey(entry, idKey, fallbackIdKeys);
+    if (!key) {
       return;
     }
     let defaultCount = Number(entry[defaultKey] ?? 0);
     if (!Number.isFinite(defaultCount) || defaultCount < 0) {
       defaultCount = 0;
     }
-    if (!map.has(parsedId)) {
-      map.set(parsedId, defaultCount);
+    if (!map.has(key)) {
+      map.set(key, defaultCount);
     }
   });
 }
@@ -1824,14 +1879,14 @@ function renderAbilityEditor(
   const safeLabelMap = labelMap instanceof Map ? labelMap : null;
   const maxCount = Math.max(Number(modelCount) || 0, 0);
   safeItems.forEach((item) => {
-    if (!item || item.ability_id === undefined || item.ability_id === null) {
+    if (!item) {
       return;
     }
-    const abilityId = Number(item.ability_id);
-    if (!Number.isFinite(abilityId)) {
+    const abilityKey = resolveLoadoutEntryKey(item, 'ability_id');
+    if (!abilityKey) {
       return;
     }
-    let totalCount = Number(stateMap.get(abilityId));
+    let totalCount = Number(stateMap.get(abilityKey));
     if (!Number.isFinite(totalCount) || totalCount < 0) {
       totalCount = Number(item.default_count ?? 0);
       if (!Number.isFinite(totalCount) || totalCount < 0) {
@@ -1841,7 +1896,7 @@ function renderAbilityEditor(
     if (maxCount > 0 && totalCount > maxCount) {
       totalCount = maxCount;
     }
-    stateMap.set(abilityId, totalCount);
+    stateMap.set(abilityKey, totalCount);
 
     const row = document.createElement('div');
     row.className = 'roster-ability-item';
@@ -1853,8 +1908,8 @@ function renderAbilityEditor(
     const baseLabel = item.label || 'Zdolność';
 
     let customName = '';
-    if (safeLabelMap && safeLabelMap.has(abilityId)) {
-      const override = safeLabelMap.get(abilityId);
+    if (safeLabelMap && safeLabelMap.has(abilityKey)) {
+      const override = safeLabelMap.get(abilityKey);
       if (typeof override === 'string') {
         customName = override.trim();
       } else if (override !== undefined && override !== null) {
@@ -1908,7 +1963,7 @@ function renderAbilityEditor(
           nextValue = maxCount;
         }
         input.value = String(nextValue);
-        stateMap.set(abilityId, nextValue);
+        stateMap.set(abilityKey, nextValue);
         const hasCustomInput = typeof customInput !== 'undefined' && customInput;
         if (nextValue <= 0) {
           if (typeof applyCustomName === 'function') {
@@ -1975,14 +2030,18 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
     if (!Number.isFinite(weaponId)) {
       return;
     }
-    let totalCount = Number(stateMap.get(weaponId));
+    const weaponKey = resolveLoadoutEntryKey(option, 'id', ['weapon_id']);
+    if (!weaponKey) {
+      return;
+    }
+    let totalCount = Number(stateMap.get(weaponKey));
     if (!Number.isFinite(totalCount) || totalCount < 0) {
       totalCount = Number(option.default_count ?? 0);
       if (!Number.isFinite(totalCount) || totalCount < 0) {
         totalCount = 0;
       }
     }
-    stateMap.set(weaponId, totalCount);
+    stateMap.set(weaponKey, totalCount);
 
     const row = document.createElement('div');
     row.className = 'roster-ability-item';
@@ -2027,7 +2086,7 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
           nextValue = 0;
         }
         input.value = String(nextValue);
-        stateMap.set(weaponId, nextValue);
+        stateMap.set(weaponKey, nextValue);
         if (typeof onChange === 'function') {
           onChange();
         }
@@ -2125,7 +2184,20 @@ function computeTotalCost(
       if (totalCount <= 0) {
         return;
       }
-      const costValue = activeCostMap.get(Number(abilityId));
+      const canonicalKey = normalizeLoadoutKey(abilityId) || String(abilityId);
+      let costValue = activeCostMap.get(canonicalKey);
+      if (!Number.isFinite(costValue) && canonicalKey !== abilityId) {
+        costValue = activeCostMap.get(abilityId);
+      }
+      if (!Number.isFinite(costValue)) {
+        const numericKey = Number(canonicalKey);
+        if (Number.isFinite(numericKey)) {
+          costValue = activeCostMap.get(String(numericKey));
+          if (!Number.isFinite(costValue)) {
+            costValue = activeCostMap.get(numericKey);
+          }
+        }
+      }
       if (Number.isFinite(costValue)) {
         total += costValue * totalCount;
       }
@@ -2473,7 +2545,7 @@ function initRosterEditor() {
     if (prev === next) {
       return;
     }
-    const adjust = (map, items, idKey) => {
+    const adjust = (map, items, idKey, fallbackIdKeys = []) => {
       if (!(map instanceof Map)) {
         return;
       }
@@ -2482,12 +2554,8 @@ function initRosterEditor() {
         if (!item) {
           return;
         }
-        const rawId = item[idKey];
-        if (rawId === undefined || rawId === null) {
-          return;
-        }
-        const numericId = Number(rawId);
-        if (!Number.isFinite(numericId)) {
+        const key = resolveLoadoutEntryKey(item, idKey, fallbackIdKeys);
+        if (!key) {
           return;
         }
         const defaultValue = Number(item.default_count ?? 0);
@@ -2495,28 +2563,28 @@ function initRosterEditor() {
           return;
         }
         const prevTotal = prev * defaultValue;
-        const stored = Number(map.get(numericId));
+        const stored = Number(map.get(key));
         const diff = Number.isFinite(stored) ? stored - prevTotal : 0;
         const nextTotal = Math.max(next * defaultValue + diff, 0);
-        map.set(numericId, nextTotal);
+        map.set(key, nextTotal);
       });
     };
-    adjust(loadoutState.weapons, currentWeapons, 'id');
-    adjust(loadoutState.active, currentActives, 'ability_id');
-    adjust(loadoutState.aura, currentAuras, 'ability_id');
+    adjust(loadoutState.weapons, currentWeapons, 'id', ['weapon_id']);
+    adjust(loadoutState.active, currentActives, 'ability_id', ['id']);
+    adjust(loadoutState.aura, currentAuras, 'ability_id', ['id']);
   }
 
   function buildAbilityCostMap(activeItems, auraItems, passiveItems) {
     const activeMap = new Map();
     const passiveMap = new Map();
     [...(Array.isArray(activeItems) ? activeItems : []), ...(Array.isArray(auraItems) ? auraItems : [])].forEach((item) => {
-      if (!item || item.ability_id === undefined || item.ability_id === null) {
+      if (!item) {
         return;
       }
-      const abilityId = Number(item.ability_id);
+      const abilityKey = resolveLoadoutEntryKey(item, 'ability_id');
       const costValue = Number(item.cost);
-      if (Number.isFinite(abilityId) && Number.isFinite(costValue)) {
-        activeMap.set(abilityId, costValue);
+      if (abilityKey && Number.isFinite(costValue)) {
+        activeMap.set(abilityKey, costValue);
       }
     });
     (Array.isArray(passiveItems) ? passiveItems : []).forEach((item) => {
@@ -3203,9 +3271,15 @@ function renderEditors(precomputedWeaponMap = null) {
     }
 
     loadoutState = createLoadoutState(loadoutData);
-    ensureStateEntries(loadoutState.weapons, currentWeapons, 'id', 'default_count');
-    ensureStateEntries(loadoutState.active, currentActives, 'ability_id', 'default_count');
-    ensureStateEntries(loadoutState.aura, currentAuras, 'ability_id', 'default_count');
+    ensureStateEntries(loadoutState.weapons, currentWeapons, 'id', 'default_count', {
+      fallbackIdKeys: ['weapon_id'],
+    });
+    ensureStateEntries(loadoutState.active, currentActives, 'ability_id', 'default_count', {
+      fallbackIdKeys: ['id'],
+    });
+    ensureStateEntries(loadoutState.aura, currentAuras, 'ability_id', 'default_count', {
+      fallbackIdKeys: ['id'],
+    });
     ensurePassiveStateEntries(loadoutState.passive, currentPassives);
     if (loadoutState.mode !== 'total') {
       const convertToTotal = (map) => {
