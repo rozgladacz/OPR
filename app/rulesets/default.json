@@ -1,0 +1,33 @@
+{
+  "name": "default",
+  "base_cost_factor": 5,
+  "range_modifiers": {
+    "melee": 0.6,
+    "12": 0.65,
+    "18": 1.0,
+    "24": 1.25,
+    "30": 1.45,
+    "36": 1.55
+  },
+  "hit_modifiers": {
+    "rending": 1.0,
+    "furia": 0.65,
+    "nieustep": 0.65,
+    "impet": 0.65,
+    "namierzanie": 1.1,
+    "ciezki": -0.35
+  },
+  "auras": {
+    "tough_equivalent": 8,
+    "double_for_12": true
+  },
+  "order": {
+    "tough_equivalent": 10
+  },
+  "warnings": {
+    "max_models": 21,
+    "min_unit_cost": 50,
+    "max_share": 0.35,
+    "heroes_per_points": 500
+  }
+}

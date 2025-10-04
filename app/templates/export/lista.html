@@ -1,0 +1,101 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Lista armii – eksport (lista)</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; font-size: 12px; margin: 16px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    p.meta { margin: 0 0 12px; color: #555; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #999; padding: 4px 6px; vertical-align: top; }
+    th { background: #eee; }
+    .small { font-size: 11px; color: #333; }
+    .weapon-block { margin-bottom: 4px; }
+    .weapon-meta { color: #222; }
+    .text-muted { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>{{ roster.name }}</h1>
+  <p class="meta">
+    Armia: {{ roster.army.name if roster.army else '---' }} ·
+    Limit: {{ roster.points_limit or 'brak' }} ·
+    Suma: {{ total_cost_rounded }} pkt{% if generated_at %} ·
+    Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC{% endif %}
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Jednostka</th>
+        <th>Oddział</th>
+        <th>#</th>
+        <th>Jakość</th>
+        <th>Obrona</th>
+        <th>Wytrz.</th>
+        <th>Zdolności</th>
+        <th>Uzbrojenie</th>
+        <th>Suma</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in entries %}
+      <tr>
+        <td>{{ entry.unit_name }}</td>
+        <td>{{ entry.custom_name or '—' }}</td>
+        <td>{{ entry.count }}</td>
+        <td>{{ entry.quality }}</td>
+        <td>{{ entry.defense }}</td>
+        <td>{{ entry.toughness }}</td>
+        <td class="small">
+          {% set has_content = False %}
+          {% if entry.passive_labels %}
+            {% set has_content = True %}
+            <strong>Pasywne:</strong> {{ entry.passive_labels | join(', ') }}<br />
+          {% endif %}
+          {% if entry.active_labels %}
+            {% set has_content = True %}
+            <strong>Aktywne:</strong> {{ entry.active_labels | join(', ') }}<br />
+          {% endif %}
+          {% if entry.aura_labels %}
+            {% set has_content = True %}
+            <strong>Aury:</strong> {{ entry.aura_labels | join(', ') }}
+          {% endif %}
+          {% if not has_content %}-{% endif %}
+        </td>
+        <td class="small">
+          {% if entry.weapon_details %}
+            {% for weapon in entry.weapon_details %}
+              <div class="weapon-block">
+                <strong>{{ weapon.name }}</strong> × {{ weapon.count }}<br />
+                <span class="weapon-meta">Z: {{ weapon.range or '-' }} | Ataki: {{ weapon.attacks or '-' }} | AP: {{ weapon.ap if weapon.ap is not none else '-' }} | Cechy: {{ weapon.traits or '-' }}</span>
+              </div>
+            {% endfor %}
+          {% else %}
+            {{ entry.weapon_summary or entry.default_summary }}
+          {% endif %}
+        </td>
+        <td>{{ entry.rounded_total_cost }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="9" style="text-align: right;">Razem</th>
+        <th>{{ total_cost_rounded }}</th>
+      </tr>
+    </tfoot>
+  </table>
+
+  {% if spell_entries %}
+  <h2 style="margin-top: 24px;">Lista zaklęć</h2>
+  <ul>
+    {% for spell in spell_entries %}
+    <li><strong>{{ spell.cost }}</strong>: {{ spell.label }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</body>
+</html>

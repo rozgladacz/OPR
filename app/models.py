@@ -10,6 +10,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
 
+ARMY_SPELL_NAME_MAX_LENGTH = 60
+
+
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
@@ -199,6 +202,72 @@ class Army(TimestampMixin, Base):
     units: Mapped[List["Unit"]] = relationship(back_populates="army", cascade="all, delete-orphan")
     weapons: Mapped[List[Weapon]] = relationship(back_populates="army")
     rosters: Mapped[List["Roster"]] = relationship(back_populates="army")
+    spells: Mapped[List["ArmySpell"]] = relationship(
+        back_populates="army",
+        cascade="all, delete-orphan",
+        order_by="ArmySpell.position",
+    )
+
+
+class ArmySpell(TimestampMixin, Base):
+    __tablename__ = "army_spells"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    army_id: Mapped[int] = mapped_column(ForeignKey("armies.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    ability_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("abilities.id"), nullable=True
+    )
+    ability_value: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    weapon_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("weapons.id"), nullable=True
+    )
+    base_label: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cost: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    custom_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+
+    army: Mapped[Army] = relationship(back_populates="spells")
+    ability: Mapped[Optional[Ability]] = relationship()
+    weapon: Mapped[Optional[Weapon]] = relationship()
+
+    @property
+    def normalized_custom_name(self) -> str:
+        value = (self.custom_name or "").strip()
+        return value[:ARMY_SPELL_NAME_MAX_LENGTH]
+
+    @property
+    def base_display_label(self) -> str:
+        return (self.base_label or "").strip()
+
+    @property
+    def display_label(self) -> str:
+        base = self.base_display_label
+        custom = self.normalized_custom_name
+        if custom and base:
+            return f"{custom} [{base}]"
+        if custom:
+            return custom
+        return base
+
+    @property
+    def export_label(self) -> str:
+        base = self.base_display_label
+        custom = self.normalized_custom_name
+        if custom and base:
+            return f'"{custom}" {base}'
+        if custom:
+            return f'"{custom}"'
+        return base
+
+    @property
+    def export_payload(self) -> dict[str, object]:
+        return {
+            "cost": int(self.cost or 0),
+            "label": self.export_label,
+            "description": (self.description or "").strip(),
+        }
 
 
 class Unit(TimestampMixin, Base):
@@ -347,6 +416,7 @@ class RosterUnit(TimestampMixin, Base):
     selected_weapon_id: Mapped[Optional[int]] = mapped_column(ForeignKey("weapons.id"), nullable=True)
     extra_weapons_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cached_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    custom_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
 
     roster: Mapped[Roster] = relationship(back_populates="roster_units")
     unit: Mapped[Unit] = relationship(back_populates="roster_units")
@@ -365,6 +435,7 @@ for cls in [
     UnitAbility,
     Roster,
     RosterUnit,
+    ArmySpell,
 ]:
     event.listen(cls, "before_insert", touch_timestamps)
     event.listen(cls, "before_update", touch_timestamps)

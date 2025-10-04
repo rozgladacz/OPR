@@ -1,0 +1,23 @@
+
+name: 'Mieszana 2000'
+ruleset: default
+rosters:
+  - name: 'Armia 2000 – mix'
+    limit: 2000
+    expected_total: 1996
+    expected_warnings_contains:
+      - "[HERO]"
+      - "[SIZE]"
+    units:
+      - template_unit: 'Weterani'
+        models: 7
+        overrides:
+          abilities: ['Regeneracja']
+          weapons:
+            - name: 'Plazma'
+              range: 24
+              ap: 2
+              attacks: 1
+              traits: ['Namierzanie','Ciężki']
+        expected_cost:
+          total: 365

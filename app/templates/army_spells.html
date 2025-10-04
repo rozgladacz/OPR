@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Lista zaklęć – {{ army.name }} - OPR{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-1">Lista zaklęć armii: {{ army.name }}</h2>
+    <p class="text-muted mb-0">Możesz zdefiniować maksymalnie 6 mocy dla magów tej armii.</p>
+  </div>
+  <div class="btn-group">
+    <a class="btn btn-outline-secondary" href="/armies/{{ army.id }}">Wróć do armii</a>
+  </div>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+{% if info %}
+<div class="alert alert-info">{{ info }}</div>
+{% endif %}
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h5 class="card-title">Zdefiniowane moce</h5>
+    {% if spells %}
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th style="width: 4rem;">#</th>
+            <th>Nazwa i opis</th>
+            <th style="width: 8rem;">Rodzaj</th>
+            <th style="width: 6rem;">Koszt</th>
+            <th style="width: 16rem;">Nazwa własna</th>
+            <th style="width: 6rem;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for spell in spells %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>
+              <div class="fw-semibold">{{ spell.display_label or spell.base_display_label or '—' }}</div>
+              {% if spell.normalized_custom_name and spell.base_display_label %}
+              <div class="text-muted small">Bazowo: {{ spell.base_display_label }}</div>
+              {% endif %}
+              {% if spell.description %}
+              <div class="text-muted small">{{ spell.description }}</div>
+              {% endif %}
+            </td>
+            <td>
+              {% if spell.kind == 'ability' %}
+              Zdolność
+              {% elif spell.kind == 'weapon' %}
+              Trafienie z broni
+              {% else %}
+              {{ spell.kind }}
+              {% endif %}
+            </td>
+            <td>{{ spell.cost }}</td>
+            <td>
+              <form class="d-flex gap-2" method="post" action="/armies/{{ army.id }}/spells/{{ spell.id }}/update">
+                <input
+                  class="form-control form-control-sm"
+                  type="text"
+                  name="custom_name"
+                  value="{{ spell.normalized_custom_name }}"
+                  maxlength="{{ name_max_length }}"
+                  placeholder="Nazwa własna"
+                />
+                <button class="btn btn-outline-primary btn-sm" type="submit">Zapisz</button>
+              </form>
+            </td>
+            <td>
+              <form
+                method="post"
+                action="/armies/{{ army.id }}/spells/{{ spell.id }}/delete"
+                onsubmit="return confirm('Usunąć wybraną moc?');"
+              >
+                <button class="btn btn-outline-danger btn-sm" type="submit">Usuń</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">Brak zdefiniowanych mocy.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if remaining_slots > 0 %}
+<div class="card">
+  <div class="card-body">
+    <h5 class="card-title">Dodaj nową moc</h5>
+    <p class="text-muted">Pozostało miejsc: {{ remaining_slots }}.</p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h6>Zdolność aktywna</h6>
+        <form
+          method="post"
+          action="/armies/{{ army.id }}/spells/add-ability"
+          class="vstack gap-3"
+          data-spell-ability-form
+          {% if passive_definitions %}data-passive-ability-list-id="army-spell-passive-abilities"{% endif %}
+        >
+          <div>
+            <label class="form-label" for="ability-select">Zdolność</label>
+            <select class="form-select" id="ability-select" name="ability_id" required data-ability-select>
+              <option value="">Wybierz zdolność</option>
+              {% for ability in ability_options %}
+              <option
+                value="{{ ability.ability_id }}"
+                data-slug="{{ ability.slug }}"
+                data-value-label="{{ ability.value_label or '' }}"
+                data-value-type="{{ ability.value_type or '' }}"
+                data-requires-value="{{ 'true' if ability.requires_value else 'false' }}"
+                data-value-choices='{{ ability.value_choices | tojson }}'
+                data-value-kind="{{ ability.value_kind or '' }}"
+              >
+                {{ ability.display_name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="d-none" data-ability-value-container>
+            <label class="form-label" data-ability-value-label for="ability-value-input">Wartość</label>
+            <select
+              class="form-select d-none"
+              name="ability_value"
+              data-ability-value-select
+              disabled
+            ></select>
+            <input
+              class="form-control d-none"
+              id="ability-value-input"
+              name="ability_value"
+              data-ability-value-input
+              disabled
+              type="text"
+              placeholder="Wartość"
+            />
+            <div class="form-text text-muted d-none" data-ability-value-description></div>
+          </div>
+          <div>
+            <label class="form-label" for="ability-custom-name">Nazwa własna (opcjonalnie)</label>
+            <input
+              class="form-control"
+              id="ability-custom-name"
+              name="custom_name"
+              type="text"
+              maxlength="{{ name_max_length }}"
+              placeholder="Np. Przyśpieszenie"
+            />
+          </div>
+          <div>
+            <button class="btn btn-primary" type="submit">Dodaj zdolność</button>
+          </div>
+        </form>
+        {% if passive_definitions %}
+        <datalist id="army-spell-passive-abilities">
+          {% for ability in passive_definitions %}
+          <option value="{{ ability.display_name }}">{{ ability.description }}</option>
+          {% endfor %}
+        </datalist>
+        {% endif %}
+      </div>
+      <div class="col-md-6">
+        <h6>Trafienie z broni</h6>
+        <form method="post" action="/armies/{{ army.id }}/spells/add-weapon" class="vstack gap-3">
+          <div>
+            <label class="form-label" for="weapon-select">Broń</label>
+            <select class="form-select" id="weapon-select" name="weapon_id" required>
+              <option value="">Wybierz broń</option>
+              {% for weapon in weapon_options %}
+              <option value="{{ weapon.id }}">{{ weapon.label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="weapon-custom-name">Nazwa własna (opcjonalnie)</label>
+            <input
+              class="form-control"
+              id="weapon-custom-name"
+              name="custom_name"
+              type="text"
+              maxlength="{{ name_max_length }}"
+              placeholder="Np. Cios"
+            />
+          </div>
+          <div>
+            <button class="btn btn-primary" type="submit">Dodaj trafienie</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-info">Wykorzystano maksymalną liczbę mocy. Usuń istniejącą moc, aby dodać kolejną.</div>
+{% endif %}
+{% endblock %}
