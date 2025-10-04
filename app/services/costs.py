@@ -17,23 +17,16 @@ from .utils import passive_flags_to_payload
 
 MORALE_ABILITY_MULTIPLIERS = {"nieustraszony": 0.5, "stracency": 0.5}
 
-DEFENSE_TABLE = {
-    1: {2: 2.0, 3: 1.67, 4: 1.33, 5: 1.0, 6: 0.8},
-    2: {2: 1.95, 3: 1.6, 4: 1.2, 5: 0.9, 6: 0.67},
-    3: {2: 2.05, 3: 1.8, 4: 1.5, 5: 1.3, 6: 1.2},
-    4: {2: 3.0, 3: 2.3, 4: 1.8, 5: 1.4, 6: 1.2},
+DEFENSE_BASE_VALUES = {2: 2.0, 3: 1.67, 4: 1.33, 5: 1.0, 6: 0.8}
+DEFENSE_ABILITY_MODIFIERS = {
+    "delikatny": {2: -0.05, 3: -0.07, 4: -0.08, 5: -0.1, 6: -0.13},
+    "niewrazliwy": {2: 0.05, 3: 0.1, 4: 0.2, 5: 0.3, 6: 0.35},
+    "regeneracja": {2: 1.0, 3: 0.65, 4: 0.5, 5: 0.45, 6: 0.4},
 }
 
 TOUGHNESS_SPECIAL = {1: 1.0, 2: 2.15, 3: 3.5}
 
-DEFENSE_ROW_ABILITIES = {
-    2: {"delikatny"},
-    3: {"niewrazliwy"},
-    4: {"regeneracja"},
-}
-DEFENSE_ROW_SLUGS = {
-    slug for entries in DEFENSE_ROW_ABILITIES.values() for slug in entries
-}
+DEFENSE_ABILITY_SLUGS = set(DEFENSE_ABILITY_MODIFIERS)
 
 RANGE_TABLE = {0: 0.6, 12: 0.65, 18: 1.0, 24: 1.25, 30: 1.45, 36: 1.55}
 
@@ -406,10 +399,15 @@ def morale_modifier(quality: int, penalty_multiplier: float = 1.0) -> float:
     return 1.3 - (quality - 1) / 10.0 * penalty
 
 
-def defense_modifier(defense: int, row: int) -> float:
+def defense_modifier(defense: int, ability_slugs: Iterable[str] | None = None) -> float:
     defense = clamp_defense(defense)
-    row_dict = DEFENSE_TABLE.get(row, DEFENSE_TABLE[1])
-    return row_dict[defense]
+    value = DEFENSE_BASE_VALUES[defense]
+    if ability_slugs:
+        for slug in ability_slugs:
+            modifier_map = DEFENSE_ABILITY_MODIFIERS.get(slug)
+            if modifier_map:
+                value += modifier_map.get(defense, 0.0)
+    return value
 
 
 def toughness_modifier(toughness: int) -> float:
@@ -611,7 +609,8 @@ def ability_cost_from_name(
         and defense is not None
         and toughness is not None
         and abilities_without != abilities
-        and (slug in MORALE_ABILITY_MULTIPLIERS or slug in DEFENSE_ROW_SLUGS)
+        and (slug in MORALE_ABILITY_MULTIPLIERS or slug in DEFENSE_ABILITY_SLUGS)
+
     ):
         row_delta = base_model_cost(
             int(quality),
@@ -689,9 +688,10 @@ def base_model_cost(
     abilities: Sequence[str] | None,
 ) -> float:
     ability_list = list(abilities or [])
+
     morale_multiplier = 1.0
     applied_morale_modifiers: set[str] = set()
-    def_row = 1
+    defense_abilities: list[str] = []
     passive_total = 0.0
 
     for ability in ability_list:
@@ -703,17 +703,13 @@ def base_model_cost(
             morale_multiplier *= MORALE_ABILITY_MULTIPLIERS[slug]
             applied_morale_modifiers.add(slug)
             continue
-        matched_def_row = next(
-            (row for row, names in DEFENSE_ROW_ABILITIES.items() if slug in names),
-            None,
-        )
-        if matched_def_row:
-            def_row = matched_def_row
+        if slug in DEFENSE_ABILITY_SLUGS:
+            defense_abilities.append(slug)
             continue
         passive_total += passive_cost(ability, float(toughness))
 
     morale_value = morale_modifier(int(quality), morale_multiplier)
-    defense_value = defense_modifier(int(defense), def_row)
+    defense_value = defense_modifier(int(defense), defense_abilities)
     toughness_value = toughness_modifier(int(toughness))
 
     cost = BASE_COST_FACTOR * morale_value * defense_value * toughness_value
