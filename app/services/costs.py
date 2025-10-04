@@ -15,13 +15,7 @@ from ..data import abilities as ability_catalog
 from .utils import passive_flags_to_payload
 
 
-QUALITY_TABLE = {
-    2: {1: 1.2, 2: 1.25},
-    3: {1: 1.1, 2: 1.2},
-    4: {1: 1.0, 2: 1.15},
-    5: {1: 0.9, 2: 1.1},
-    6: {1: 0.8, 2: 1.05},
-}
+MORALE_ABILITY_MULTIPLIERS = {"nieustraszony": 0.5, "stracency": 0.5}
 
 DEFENSE_BASE_VALUES = {2: 2.0, 3: 1.67, 4: 1.33, 5: 1.0, 6: 0.8}
 DEFENSE_ABILITY_MODIFIERS = {
@@ -31,8 +25,6 @@ DEFENSE_ABILITY_MODIFIERS = {
 }
 
 TOUGHNESS_SPECIAL = {1: 1.0, 2: 2.15, 3: 3.5}
-
-QUALITY_ROW_ABILITIES = {"nieustraszony", "stracency"}
 
 DEFENSE_ABILITY_SLUGS = set(DEFENSE_ABILITY_MODIFIERS)
 
@@ -401,10 +393,10 @@ def clamp_defense(value: int) -> int:
     return max(2, min(6, int(value)))
 
 
-def quality_modifier(quality: int, row: int) -> float:
+def morale_modifier(quality: int, penalty_multiplier: float = 1.0) -> float:
     quality = clamp_quality(quality)
-    row = 2 if row == 2 else 1
-    return QUALITY_TABLE[quality][row]
+    penalty = max(float(penalty_multiplier), 0.0)
+    return 1.3 - (quality - 1) / 10.0 * penalty
 
 
 def defense_modifier(defense: int, ability_slugs: Iterable[str] | None = None) -> float:
@@ -617,7 +609,8 @@ def ability_cost_from_name(
         and defense is not None
         and toughness is not None
         and abilities_without != abilities
-        and (slug in QUALITY_ROW_ABILITIES or slug in DEFENSE_ABILITY_SLUGS)
+        and (slug in MORALE_ABILITY_MULTIPLIERS or slug in DEFENSE_ABILITY_SLUGS)
+
     ):
         row_delta = base_model_cost(
             int(quality),
@@ -695,7 +688,9 @@ def base_model_cost(
     abilities: Sequence[str] | None,
 ) -> float:
     ability_list = list(abilities or [])
-    qua_row = 1
+
+    morale_multiplier = 1.0
+    applied_morale_modifiers: set[str] = set()
     defense_abilities: list[str] = []
     passive_total = 0.0
 
@@ -704,19 +699,20 @@ def base_model_cost(
         norm = slug or normalize_name(ability)
         if not norm:
             continue
-        if slug in QUALITY_ROW_ABILITIES:
-            qua_row = 2
+        if slug in MORALE_ABILITY_MULTIPLIERS and slug not in applied_morale_modifiers:
+            morale_multiplier *= MORALE_ABILITY_MULTIPLIERS[slug]
+            applied_morale_modifiers.add(slug)
             continue
         if slug in DEFENSE_ABILITY_SLUGS:
             defense_abilities.append(slug)
             continue
         passive_total += passive_cost(ability, float(toughness))
 
-    quality_value = quality_modifier(int(quality), qua_row)
+    morale_value = morale_modifier(int(quality), morale_multiplier)
     defense_value = defense_modifier(int(defense), defense_abilities)
     toughness_value = toughness_modifier(int(toughness))
 
-    cost = BASE_COST_FACTOR * quality_value * defense_value * toughness_value
+    cost = BASE_COST_FACTOR * morale_value * defense_value * toughness_value
     cost += passive_total
     return cost
 
