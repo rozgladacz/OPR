@@ -268,6 +268,7 @@ def _spell_page_context(
         "weapon_options": weapon_options,
         "remaining_slots": remaining_slots,
         "name_max_length": models.ARMY_SPELL_NAME_MAX_LENGTH,
+        "passive_definitions": PASSIVE_DEFINITIONS,
         "error": error,
         "info": info,
     }

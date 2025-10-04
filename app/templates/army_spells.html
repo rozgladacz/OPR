@@ -103,6 +103,7 @@
           action="/armies/{{ army.id }}/spells/add-ability"
           class="vstack gap-3"
           data-spell-ability-form
+          {% if passive_definitions %}data-passive-ability-list-id="army-spell-passive-abilities"{% endif %}
         >
           <div>
             <label class="form-label" for="ability-select">Zdolność</label>
@@ -116,6 +117,7 @@
                 data-value-type="{{ ability.value_type or '' }}"
                 data-requires-value="{{ 'true' if ability.requires_value else 'false' }}"
                 data-value-choices='{{ ability.value_choices | tojson }}'
+                data-value-kind="{{ ability.value_kind or '' }}"
               >
                 {{ ability.display_name }}
               </option>
@@ -139,6 +141,7 @@
               type="text"
               placeholder="Wartość"
             />
+            <div class="form-text text-muted d-none" data-ability-value-description></div>
           </div>
           <div>
             <label class="form-label" for="ability-custom-name">Nazwa własna (opcjonalnie)</label>
@@ -155,6 +158,13 @@
             <button class="btn btn-primary" type="submit">Dodaj zdolność</button>
           </div>
         </form>
+        {% if passive_definitions %}
+        <datalist id="army-spell-passive-abilities">
+          {% for ability in passive_definitions %}
+          <option value="{{ ability.display_name }}">{{ ability.description }}</option>
+          {% endfor %}
+        </datalist>
+        {% endif %}
       </div>
       <div class="col-md-6">
         <h6>Trafienie z broni</h6>
