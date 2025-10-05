@@ -231,7 +231,7 @@ def _ability_spell_details(
         base_cost = float(ability.cost_hint)
     else:
         base_cost = costs.ability_cost_from_name(ability.name or "", value)
-    cost = int(math.ceil(max(base_cost, 0.0) / 14.0))
+    cost = int(math.ceil(max(base_cost, 0.0) / 15.0))
     return base_label.strip(), description, cost
 
 
