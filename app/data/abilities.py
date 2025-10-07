@@ -381,8 +381,8 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Ignoruje osłonę.",
     ),
     AbilityDefinition(
-        slug="bez_regeneracji",
-        name="Bez regeneracji",
+        slug="brutalny",
+        name="Brutalny",
         type="weapon",
         description="Ignoruje regenerację.",
     ),
