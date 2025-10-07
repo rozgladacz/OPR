@@ -805,9 +805,17 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
     } else if (['szturmowy', 'szturmowa', 'assault'].includes(norm)) {
       assault = true;
     } else if (
-      ['bez regeneracji', 'bez regegenracji', 'no regen', 'no regeneration'].includes(norm)
+      [
+        'brutalny',
+        'brutalna',
+        'brutal',
+        'bez regeneracji',
+        'bez regegenracji',
+        'no regen',
+        'no regeneration',
+      ].includes(norm)
     ) {
-      // no modifier
+      mult *= 1.5;
     } else if (['podkrecenie', 'overcharge', 'overclock'].includes(norm)) {
       overcharge = true;
     }

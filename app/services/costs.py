@@ -810,8 +810,16 @@ def _weapon_cost(
             q = 2
         elif norm in {"szturmowy", "szturmowa", "assault"}:
             assault = True
-        elif norm in {"bez regeneracji", "bez regegenracji", "no regen", "no regeneration"}:
-             mult *= 1.5
+        elif norm in {
+            "brutalny",
+            "brutalna",
+            "brutal",
+            "bez regeneracji",
+            "bez regegenracji",
+            "no regen",
+            "no regeneration",
+        }:
+            mult *= 1.5
         elif norm in {"podkrecenie", "overcharge", "overclock"}:
             overcharge = True
 
