@@ -754,6 +754,8 @@ def _weapon_cost(
         q = 5
     if not melee and "dobrze_strzela" in unit_set:
         q = 4
+    if "zemsta" in unit_set:
+        mult *= 1.1
 
     assault = False
     overcharge = False

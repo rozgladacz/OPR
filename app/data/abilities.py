@@ -213,6 +213,14 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Gdy wrogi odział zakończy ruch, możesz przerwać aby zaatakować. Następnie ten odział zostaje wyczerpany.",
     ),
     AbilityDefinition(
+        slug="zemsta",
+        name="Zemsta",
+        type="passive",
+        description=(
+            "Zamiast przydzielać rany do oddziału możesz położyć je obok niego i przydzielić je na końcu jego aktywacji."
+        ),
+    ),
+    AbilityDefinition(
         slug="dobrze_strzela",
         name="Dobrze strzela",
         type="passive",
