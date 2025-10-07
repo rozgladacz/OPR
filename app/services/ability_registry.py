@@ -184,6 +184,11 @@ def unit_ability_payload(unit: models.Unit, ability_type: str) -> list[dict]:
             if definition
             else ability.name or slug
         )
+        description = ability_catalog.combined_description(
+            definition,
+            value,
+            ability.description if ability else None,
+        )
         items.append(
             {
                 "ability_id": ability.id,
@@ -192,7 +197,7 @@ def unit_ability_payload(unit: models.Unit, ability_type: str) -> list[dict]:
                 "label": label,
                 "base_label": label,
                 "custom_name": custom_name,
-                "description": definition.description if definition else "",
+                "description": description,
                 "is_default": bool(is_default) if is_default is not None else False,
             }
         )

@@ -438,12 +438,11 @@ def description_with_value(definition: AbilityDefinition, value: str | None) -> 
         ability_slug = slug_for_name(value_text) or value_text
         ability_def = find_definition(ability_slug) if ability_slug else None
         ability_label = ability_def.name if ability_def else value_text
-        ability_description = ability_def.description if ability_def else ""
+        ability_description = (ability_def.description or "").strip() if ability_def else ""
         replaced = description.replace("X", ability_label)
-        parts = [replaced]
         if ability_description:
-            parts.append(ability_description)
-        return " ".join(part.strip() for part in parts if part).strip()
+            return f"{replaced.strip()} ({ability_description})".strip()
+        return replaced.strip()
 
     if definition.slug == "aura":
         ability_ref = ""
@@ -468,6 +467,24 @@ def description_with_value(definition: AbilityDefinition, value: str | None) -> 
         return " ".join(part.strip() for part in summary if part).strip()
 
     return description.replace("X", value_text)
+
+
+def combined_description(
+    definition: AbilityDefinition | None,
+    value: str | None,
+    ability_description: str | None = None,
+) -> str:
+    parts: list[str] = []
+    if definition:
+        desc = description_with_value(definition, value)
+        if desc:
+            parts.append(desc.strip())
+    extra = (ability_description or "").strip()
+    if extra and definition and extra == (definition.description or "").strip():
+        extra = ""
+    if extra:
+        parts.append(extra)
+    return " ".join(part for part in parts if part).strip()
 
 
 def to_dict(definition: AbilityDefinition) -> dict:
