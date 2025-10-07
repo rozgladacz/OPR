@@ -74,6 +74,14 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Po ataku możesz się ruszyć o 2”.",
     ),
     AbilityDefinition(
+        slug="instynkt",
+        name="Instynkt",
+        type="passive",
+        description=(
+            "Rusza się zawsze w stronę najbliższego wroga i zawsze atakuje najbliższego wroga."
+        ),
+    ),
+    AbilityDefinition(
         slug="nieruchomy",
         name="Nieruchomy",
         type="passive",
