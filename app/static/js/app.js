@@ -741,7 +741,7 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
   if (melee && traitSet.has('furia')) {
     chance += 0.65;
   }
-  if (!melee && traitSet.has('nieustepliwy')) {
+  if (!melee && traitSet.has('przygotowanie')) {
     chance += 0.65;
   }
   if (!melee && traitSet.has('wojownik')) {

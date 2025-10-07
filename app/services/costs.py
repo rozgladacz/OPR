@@ -516,7 +516,7 @@ def passive_cost(ability_name: str, tou: float = 1.0, aura: bool = False) -> flo
             return 3.5 * tou
         if slug == "furia":
             return 3.0 * tou
-        if slug == "nieustepliwy":
+        if slug == "przygotowanie":
             return 3.5 * tou
 
     if slug == "strach":
@@ -744,7 +744,7 @@ def _weapon_cost(
 
     if melee and "furia" in unit_set:
         chance += 0.65
-    if not melee and "nieustepliwy" in unit_set:
+    if not melee and "przygotowanie" in unit_set:
         chance += 0.65
     if not melee and "wojownik" in unit_set:
         mult *= 0.5

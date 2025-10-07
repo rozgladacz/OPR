@@ -134,7 +134,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Podczas szarży naturalne 6 dają dodatkowe zwykłe trafienie.",
     ),
     AbilityDefinition(
-        slug="nieustepliwy",
+        slug="przygotowanie",
         name="Przygotowanie",
         type="passive",
         description="Jeżeli model się nie poruszył naturalne 6 dają dodatkowe zwykłe trafienie.",
@@ -552,12 +552,20 @@ def _normalize(text: str | None) -> str:
     return value.casefold()
 
 
+ABILITY_ALIASES = {
+    _normalize("nieustepliwy"): "przygotowanie",
+}
+
+
 def slug_for_name(text: str | None) -> str | None:
     if not text:
         return None
     normalized = _normalize(text)
     if not normalized:
         return None
+    alias = ABILITY_ALIASES.get(normalized)
+    if alias:
+        return alias
     for definition in ABILITY_DEFINITIONS:
         if normalized in {
             _normalize(definition.slug),
