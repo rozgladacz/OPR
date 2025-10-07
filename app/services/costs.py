@@ -30,6 +30,8 @@ DEFENSE_ABILITY_SLUGS = set(DEFENSE_ABILITY_MODIFIERS)
 
 RANGE_TABLE = {0: 0.6, 12: 0.65, 18: 1.0, 24: 1.25, 30: 1.45, 36: 1.55}
 
+CAUTIOUS_HIT_BONUS = {0: 0.0, 12: 0.0, 18: 0.5, 24: 0.7, 30: 0.8, 36: 0.9}
+
 AP_BASE = {-1: 0.8, 0: 1.0, 1: 1.5, 2: 1.9, 3: 2.25, 4: 2.5, 5: 2.65}
 AP_LANCE = {-1: 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05}
 AP_NO_COVER = {-1: 0.1, 0: 0.25, 1: 0.2, 2: 0.15, 3: 0.1, 4: 0.1, 5: 0.05}
@@ -748,6 +750,8 @@ def _weapon_cost(
         chance += 0.65
     if not melee and "nieustepliwy" in unit_set:
         chance += 0.65
+    if "ostrozny" in unit_set:
+        chance += lookup_with_nearest(CAUTIOUS_HIT_BONUS, range_value)
     if not melee and "wojownik" in unit_set:
         mult *= 0.5
     if melee and "strzelec" in unit_set:

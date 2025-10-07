@@ -178,6 +178,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Atakujący ma -1 do rzutów na trafienie, gdy jest dalej niż 6\".",
     ),
     AbilityDefinition(
+        slug="ostrozny",
+        name="Ostrożny",
+        type="passive",
+        description="Jeżeli nie ma wrogów w zasięgu 12” od oddziału modelu, +1 do rzutów na trafienie.",
+    ),
+    AbilityDefinition(
         slug="tarcza",
         name="Tarcza",
         type="passive",
