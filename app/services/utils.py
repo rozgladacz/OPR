@@ -79,21 +79,26 @@ def passive_flags_to_payload(text: str | None) -> list[dict]:
             slug_text = raw_slug[:-1]
             is_default = False
         definition = ability_catalog.find_definition(slug_text)
+        if isinstance(value, bool) and value:
+            value_text = None
+        elif value is None:
+            value_text = None
+        else:
+            value_text = str(value)
         payload.append(
             {
                 "slug": slug_text,
-                "value": None
-                if isinstance(value, bool) and value
-                else ("" if value is None else str(value)),
+                "value": value_text if value_text is not None else None,
                 "label": ability_catalog.display_with_value(
                     definition,
-                    None
-                    if isinstance(value, bool) and value
-                    else (None if value is None else str(value)),
+                    value_text,
                 )
                 if definition
                 else slug_text,
-                "description": definition.description if definition else "",
+                "description": ability_catalog.combined_description(
+                    definition,
+                    value_text,
+                ),
                 "is_default": is_default,
             }
         )

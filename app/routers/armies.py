@@ -218,15 +218,11 @@ def _ability_spell_details(
         base_label = ability_catalog.display_with_value(definition, value)
     if not base_label:
         base_label = ability.name or slug or ""
-    description_parts: list[str] = []
-    if definition:
-        desc = ability_catalog.description_with_value(definition, value)
-        if desc:
-            description_parts.append(desc)
-    ability_description = (ability.description or "").strip()
-    if ability_description:
-        description_parts.append(ability_description)
-    description = " ".join(part for part in description_parts if part).strip()
+    description = ability_catalog.combined_description(
+        definition,
+        value,
+        ability.description if ability else None,
+    )
     if ability.cost_hint is not None:
         base_cost = float(ability.cost_hint)
     else:
