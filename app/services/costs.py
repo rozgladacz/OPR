@@ -22,6 +22,7 @@ DEFENSE_ABILITY_MODIFIERS = {
     "delikatny": {2: -0.05, 3: -0.07, 4: -0.08, 5: -0.1, 6: -0.13},
     "niewrazliwy": {2: 0.05, 3: 0.1, 4: 0.2, 5: 0.3, 6: 0.35},
     "regeneracja": {2: 1.0, 3: 0.65, 4: 0.5, 5: 0.45, 6: 0.4},
+    "szpica": {2: 0.1, 3: 0.17, 4: 0.17, 5: 0.17, 6: 0.1},
 }
 
 TOUGHNESS_SPECIAL = {1: 1.0, 2: 2.15, 3: 3.5}
@@ -750,6 +751,8 @@ def _weapon_cost(
         chance += 0.65
     if not melee and "nieustepliwy" in unit_set:
         chance += 0.65
+    if "szpica" in unit_set:
+        chance += 0.5
     if "ostrozny" in unit_set:
         chance += lookup_with_nearest(CAUTIOUS_HIT_BONUS, range_value)
     if not melee and "wojownik" in unit_set:
