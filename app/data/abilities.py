@@ -85,7 +85,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="nieruchomy",
         name="Nieruchomy",
         type="passive",
-        description="Po rozstawieniu nie może się przemieszczać.",
+        description="Po rozstawieniu nie może się przemieszczać i nie może zostać przyszpilony.",
     ),
     AbilityDefinition(
         slug="zwinny",
@@ -142,8 +142,8 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Podczas szarży naturalne 6 dają dodatkowe zwykłe trafienie.",
     ),
     AbilityDefinition(
-        slug="nieustepliwy",
-        name="Nieustępliwy",
+        slug="przygotowanie",
+        name="Przygotowanie",
         type="passive",
         description="Jeżeli model się nie poruszył naturalne 6 dają dodatkowe zwykłe trafienie.",
     ),
@@ -218,16 +218,6 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         ),
         value_label="X",
         value_type="number",
-    ),
-    AbilityDefinition(
-        slug="masywny",
-        name="Masywny",
-        type="passive",
-        description=(
-            "Są na nim wydzielone elementy o własnej wytrzymałości, które mogą zostać zniszczone wraz z przypisanymi do nich zdolnościami i "
-            "bronią. Wytrzymałość modelu jest równa początkowej sumie wytrzymałości jego elementów. Podczas przydzielania ran każdy element "
-            "traktowany jak jest jak osobny model, choć rany ponad maksimum nie przepadają. Nie może dołączyć do oddziału."
-        ),
     ),
     AbilityDefinition(
         slug="straznik",
@@ -328,12 +318,6 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Niebezpośredni",
         type="weapon",
         description="Nie wymaga linii wzroku.",
-    ),
-    AbilityDefinition(
-        slug="ciezki",
-        name="Ciężki",
-        type="weapon",
-        description="-1 do ataku, jeżeli atakujący się poruszył.",
     ),
     AbilityDefinition(
         slug="impet",
@@ -583,12 +567,20 @@ def _normalize(text: str | None) -> str:
     return value.casefold()
 
 
+ABILITY_ALIASES = {
+    _normalize("nieustepliwy"): "przygotowanie",
+}
+
+
 def slug_for_name(text: str | None) -> str | None:
     if not text:
         return None
     normalized = _normalize(text)
     if not normalized:
         return None
+    alias = ABILITY_ALIASES.get(normalized)
+    if alias:
+        return alias
     for definition in ABILITY_DEFINITIONS:
         if normalized in {
             _normalize(definition.slug),

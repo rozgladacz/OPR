@@ -741,7 +741,7 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
   if (melee && traitSet.has('furia')) {
     chance += 0.65;
   }
-  if (!melee && traitSet.has('nieustepliwy')) {
+  if (!melee && traitSet.has('przygotowanie')) {
     chance += 0.65;
   }
   if (!melee && traitSet.has('wojownik')) {
@@ -788,8 +788,6 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
       chance += 0.35;
       mult *= 1.1;
       apMod += lookupWithNearest(AP_NO_COVER, apValue);
-    } else if (['ciezki', 'heavy'].includes(norm)) {
-      chance -= 0.35;
     } else if (['impet', 'impact'].includes(norm)) {
       apMod += lookupWithNearest(AP_LANCE, apValue);
     } else if (['bez oslon', 'bez oslony', 'no cover'].includes(norm)) {

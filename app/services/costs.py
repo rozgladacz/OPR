@@ -521,7 +521,7 @@ def passive_cost(ability_name: str, tou: float = 1.0, aura: bool = False) -> flo
             return 3.5 * tou
         if slug == "furia":
             return 3.0 * tou
-        if slug == "nieustepliwy":
+        if slug == "przygotowanie":
             return 3.5 * tou
 
     if slug == "strach":
@@ -749,7 +749,7 @@ def _weapon_cost(
 
     if melee and "furia" in unit_set:
         chance += 0.65
-    if not melee and "nieustepliwy" in unit_set:
+    if not melee and "przygotowanie" in unit_set:
         chance += 0.65
     if "szpica" in unit_set:
         chance += 0.5
@@ -794,8 +794,6 @@ def _weapon_cost(
             chance += 0.35
             mult *= 1.1
             ap_mod += lookup_with_nearest(AP_NO_COVER, ap)
-        elif norm in {"ciezki", "heavy"}:
-            chance -= 0.35
         elif norm in {"impet", "impact"}:
             ap_mod += lookup_with_nearest(AP_LANCE, ap)
         elif norm in {"bez oslon", "bez oslony", "no cover"}:

@@ -20,7 +20,6 @@ EXCLUDED_AURA_AND_ORDER_SLUGS: set[str] = {
     "zle_strzela",
     "bohater",
     "transport",
-    "masywny",
     "strach",
 }
 
