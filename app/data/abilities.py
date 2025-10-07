@@ -152,6 +152,15 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Podczas obrony, za każdą naturalną 6 możesz zignorować następną ranę przydzieloną podczas tego ataku.",
     ),
     AbilityDefinition(
+        slug="szpica",
+        name="Szpica",
+        type="passive",
+        description=(
+            "+1 do testów ataku przeciwko oddziałom, które nie rozpoczęły swojej aktywacji w tej turze. "
+            "+1 do testów obrony po zakończeniu swojej aktywacji."
+        ),
+    ),
+    AbilityDefinition(
         slug="delikatny",
         name="Delikatny",
         type="passive",

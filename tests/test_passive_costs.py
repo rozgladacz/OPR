@@ -163,3 +163,31 @@ def test_defense_abilities_stack_additively() -> None:
     diff_regeneracja = cost_with_both - cost_without_regeneracja
 
     assert diff_both == pytest.approx(diff_niewrazliwy + diff_regeneracja, rel=1e-6)
+
+
+def test_szpica_defense_modifier_matches_table() -> None:
+    quality = 4
+    defense = 4
+    toughness = 6
+    base_cost = costs.base_model_cost(quality, defense, toughness, [])
+    szpica_cost = costs.base_model_cost(quality, defense, toughness, ["szpica"])
+
+    morale = costs.morale_modifier(quality)
+    toughness_value = costs.toughness_modifier(toughness)
+    delta = costs.DEFENSE_ABILITY_MODIFIERS["szpica"][defense]
+    expected = costs.BASE_COST_FACTOR * morale * toughness_value * delta
+
+    assert szpica_cost - base_cost == pytest.approx(expected, rel=1e-6)
+
+
+def test_szpica_increases_weapon_hit_chance() -> None:
+    weapon = models.Weapon(attacks=1.0, ap=0, range="Melee", armory_id=1)
+
+    cost_without = costs.weapon_cost(weapon, unit_quality=4, unit_flags=[])
+    cost_with = costs.weapon_cost(weapon, unit_quality=4, unit_flags=["Szpica"])
+
+    range_mod = costs.range_multiplier(0)
+    ap_mod = costs.lookup_with_nearest(costs.AP_BASE, 0)
+    expected_delta = round(2.0 * range_mod * ap_mod * 0.5, 2)
+
+    assert cost_with - cost_without == pytest.approx(expected_delta, rel=1e-6)
