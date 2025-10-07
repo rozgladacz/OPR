@@ -4,7 +4,7 @@ ruleset: default
 rosters:
   - name: 'Armia 2000 – mix'
     limit: 2000
-    expected_total: 2002.84
+    expected_total: 2088.52
     expected_warnings_contains:
       - "[HERO]"
       - "[SIZE]"
@@ -18,6 +18,6 @@ rosters:
               range: 24
               ap: 2
               attacks: 1
-              traits: ['Namierzanie','Ciężki']
+              traits: ['Namierzanie']
         expected_cost:
           total: 365

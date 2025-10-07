@@ -783,8 +783,6 @@ def _weapon_cost(
             chance += 0.35
             mult *= 1.1
             ap_mod += lookup_with_nearest(AP_NO_COVER, ap)
-        elif norm in {"ciezki", "heavy"}:
-            chance -= 0.35
         elif norm in {"impet", "impact"}:
             ap_mod += lookup_with_nearest(AP_LANCE, ap)
         elif norm in {"bez oslon", "bez oslony", "no cover"}:

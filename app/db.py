@@ -325,7 +325,7 @@ def init_db() -> None:
                     "range": "30",
                     "attacks": 1,
                     "ap": 0,
-                    "tags": "Rozprysk 3, Indirect, Ciężki",
+                    "tags": "Rozprysk 3, Indirect",
                 },
                 {
                     "name": "Ręczny miotacz ognia",
