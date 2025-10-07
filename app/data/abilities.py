@@ -135,7 +135,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
     ),
     AbilityDefinition(
         slug="nieustepliwy",
-        name="Nieustępliwy",
+        name="Przygotowanie",
         type="passive",
         description="Jeżeli model się nie poruszył naturalne 6 dają dodatkowe zwykłe trafienie.",
     ),
