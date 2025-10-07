@@ -191,3 +191,10 @@ def test_szpica_increases_weapon_hit_chance() -> None:
     expected_delta = round(2.0 * range_mod * ap_mod * 0.5, 2)
 
     assert cost_with - cost_without == pytest.approx(expected_delta, rel=1e-6)
+def test_instynkt_cost_scaling_with_toughness() -> None:
+    assert costs.passive_cost("instynkt", 5) == pytest.approx(-5)
+
+
+def test_instynkt_aura_and_order_costs() -> None:
+    assert costs.passive_cost("instynkt", 8, True) == pytest.approx(8)
+    assert costs.passive_cost("instynkt", 10, True) == pytest.approx(10)

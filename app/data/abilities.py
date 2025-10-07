@@ -74,6 +74,14 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Po ataku możesz się ruszyć o 2”.",
     ),
     AbilityDefinition(
+        slug="instynkt",
+        name="Instynkt",
+        type="passive",
+        description=(
+            "Rusza się zawsze w stronę najbliższego wroga i zawsze atakuje najbliższego wroga."
+        ),
+    ),
+    AbilityDefinition(
         slug="nieruchomy",
         name="Nieruchomy",
         type="passive",
@@ -179,6 +187,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Atakujący ma -1 do rzutów na trafienie, gdy jest dalej niż 6\".",
     ),
     AbilityDefinition(
+        slug="ostrozny",
+        name="Ostrożny",
+        type="passive",
+        description="Jeżeli nie ma wrogów w zasięgu 12” od oddziału modelu, +1 do rzutów na trafienie.",
+    ),
+    AbilityDefinition(
         slug="tarcza",
         name="Tarcza",
         type="passive",
@@ -220,6 +234,14 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Strażnik",
         type="passive",
         description="Gdy wrogi odział zakończy ruch, możesz przerwać aby zaatakować. Następnie ten odział zostaje wyczerpany.",
+    ),
+    AbilityDefinition(
+        slug="zemsta",
+        name="Zemsta",
+        type="passive",
+        description=(
+            "Zamiast przydzielać rany do oddziału możesz położyć je obok niego i przydzielić je na końcu jego aktywacji."
+        ),
     ),
     AbilityDefinition(
         slug="dobrze_strzela",
