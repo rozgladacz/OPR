@@ -894,6 +894,49 @@ def unit_default_weapons(unit: models.Unit | None) -> list[models.Weapon]:
                 seen.add(default_id)
     return weapons
 
+def _ability_link_is_default(link: models.UnitAbility) -> bool:
+    def _coerce_bool(value: Any) -> bool | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return False
+            lowered = text.casefold()
+            if lowered in {"true", "yes", "1", "on"}:
+                return True
+            if lowered in {"false", "no", "0", "off"}:
+                return False
+            try:
+                return float(text) != 0.0
+            except ValueError:
+                return True
+        return bool(value)
+
+    params_json = getattr(link, "params_json", None)
+    if not params_json:
+        return False
+    try:
+        params = json.loads(params_json)
+    except json.JSONDecodeError:
+        return False
+    default_flag: bool | None = None
+    for key in ("default", "is_default"):
+        if key in params:
+            default_flag = _coerce_bool(params.get(key))
+            break
+    if default_flag is None and "default_count" in params:
+        try:
+            return int(params.get("default_count") or 0) > 0
+        except (TypeError, ValueError):
+            return False
+    return bool(default_flag)
+
+
 def ability_cost(
     ability_link: models.UnitAbility,
     unit_traits: Sequence[str] | None = None,
@@ -935,6 +978,7 @@ def unit_total_cost(unit: models.Unit) -> float:
     cost += sum(
         ability_cost(link, unit_traits, toughness=unit.toughness)
         for link in unit.abilities
+        if _ability_link_is_default(link)
     )
     return round(cost, 2)
 

@@ -4,7 +4,7 @@ ruleset: default
 rosters:
   - name: 'Armia 2000 – mix'
     limit: 2000
-    expected_total: 1996
+    expected_total: 2002.84
     expected_warnings_contains:
       - "[HERO]"
       - "[SIZE]"
