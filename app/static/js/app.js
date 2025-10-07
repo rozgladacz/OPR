@@ -2271,10 +2271,6 @@ function renderWarningsList(container, warnings) {
   const list = Array.isArray(warnings) ? warnings : [];
   container.dataset.warnings = JSON.stringify(list);
   if (!list.length) {
-    const success = document.createElement('div');
-    success.className = 'alert alert-success mb-0';
-    success.textContent = 'Brak ostrzeżeń.';
-    container.appendChild(success);
     return;
   }
   const alertBox = document.createElement('div');
