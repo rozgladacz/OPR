@@ -77,7 +77,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="nieruchomy",
         name="Nieruchomy",
         type="passive",
-        description="Po rozstawieniu nie może się przemieszczać.",
+        description="Po rozstawieniu nie może się przemieszczać i nie może zostać przyszpilony.",
     ),
     AbilityDefinition(
         slug="zwinny",
