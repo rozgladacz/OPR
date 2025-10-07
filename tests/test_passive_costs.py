@@ -163,3 +163,12 @@ def test_defense_abilities_stack_additively() -> None:
     diff_regeneracja = cost_with_both - cost_without_regeneracja
 
     assert diff_both == pytest.approx(diff_niewrazliwy + diff_regeneracja, rel=1e-6)
+
+
+def test_instynkt_cost_scaling_with_toughness() -> None:
+    assert costs.passive_cost("instynkt", 5) == pytest.approx(-5)
+
+
+def test_instynkt_aura_and_order_costs() -> None:
+    assert costs.passive_cost("instynkt", 8, True) == pytest.approx(8)
+    assert costs.passive_cost("instynkt", 10, True) == pytest.approx(10)

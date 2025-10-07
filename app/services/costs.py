@@ -484,6 +484,8 @@ def passive_cost(ability_name: str, tou: float = 1.0, aura: bool = False) -> flo
         return -1.0 * tou
     if slug == "harcownik":
         return 1.5 * tou
+    if slug == "instynkt":
+        return (-1.0 if not aura else 1.0) * tou
     if slug == "nieruchomy":
         return 2.5 * tou
     if slug == "zwinny":
