@@ -197,16 +197,6 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         value_type="number",
     ),
     AbilityDefinition(
-        slug="masywny",
-        name="Masywny",
-        type="passive",
-        description=(
-            "Są na nim wydzielone elementy o własnej wytrzymałości, które mogą zostać zniszczone wraz z przypisanymi do nich zdolnościami i "
-            "bronią. Wytrzymałość modelu jest równa początkowej sumie wytrzymałości jego elementów. Podczas przydzielania ran każdy element "
-            "traktowany jak jest jak osobny model, choć rany ponad maksimum nie przepadają. Nie może dołączyć do oddziału."
-        ),
-    ),
-    AbilityDefinition(
         slug="straznik",
         name="Strażnik",
         type="passive",
@@ -297,12 +287,6 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Niebezpośredni",
         type="weapon",
         description="Nie wymaga linii wzroku.",
-    ),
-    AbilityDefinition(
-        slug="ciezki",
-        name="Ciężki",
-        type="weapon",
-        description="-1 do ataku, jeżeli atakujący się poruszył.",
     ),
     AbilityDefinition(
         slug="impet",

@@ -45,7 +45,7 @@ TEMPLATE_LIBRARY: dict[str, dict[str, Any]] = {
             "range": 36,
             "attacks": 5,
             "ap": 2,
-            "traits": ["Namierzanie", "Ciężki"],
+            "traits": ["Namierzanie"],
         },
         "base_models": 4,
         "abilities": ["Bohater"],

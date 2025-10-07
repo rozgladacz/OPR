@@ -28,7 +28,6 @@ WEAPON_SYNONYMS = {
     "deadly": "zabojczy",
     "blast": "rozprysk",
     "indirect": "niebezposredni",
-    "heavy": "ciezki",
     "impact": "impet",
     "lock on": "namierzanie",
     "limited": "zuzywalny",

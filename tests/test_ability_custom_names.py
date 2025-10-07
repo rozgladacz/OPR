@@ -140,7 +140,6 @@ def test_definition_payload_excludes_disallowed_aura_and_order_choices():
         "zle_strzela",
         "bohater",
         "transport",
-        "masywny",
     }
 
     session = DummySession()
