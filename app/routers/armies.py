@@ -39,6 +39,12 @@ def _is_hidden_trait(slug: str | None) -> bool:
     return bool(normalized and normalized in utils.HIDDEN_TRAIT_SLUGS)
 
 
+def _parse_bool(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.lower() in {"1", "true", "on", "yes"}
+
+
 PASSIVE_DEFINITIONS = [
     entry
     for entry in (
@@ -444,6 +450,7 @@ def new_army_form(
             "army": None,
             "armories": armories,
             "selected_armory_id": selected_armory_id,
+            "is_global": False,
             "error": None,
         },
     )
@@ -454,6 +461,7 @@ def create_army(
     request: Request,
     name: str = Form(...),
     armory_id: str = Form(...),
+    is_global: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -479,6 +487,7 @@ def create_army(
                 "army": None,
                 "armories": armories,
                 "selected_armory_id": selected_id,
+                "is_global": _parse_bool(is_global),
                 "error": "Wybrana zbrojownia nie istnieje.",
             },
         )
@@ -495,14 +504,24 @@ def create_army(
                 "army": None,
                 "armories": armories,
                 "selected_armory_id": selected_id,
+                "is_global": _parse_bool(is_global),
                 "error": "Brak uprawnień do wybranej zbrojowni.",
             },
         )
 
+    owner_id = current_user.id
+    if _parse_bool(is_global):
+        if not current_user.is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="Tylko administrator może tworzyć globalne armie",
+            )
+        owner_id = None
+
     army = models.Army(
         name=name,
         ruleset=ruleset,
-        owner_id=current_user.id,
+        owner_id=owner_id,
         armory=armory,
     )
     db.add(army)
