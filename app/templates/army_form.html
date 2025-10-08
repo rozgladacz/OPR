@@ -31,6 +31,20 @@
             </div>
             {% endif %}
           </div>
+          {% if user.is_admin %}
+          <div class="form-check form-switch mb-3">
+            <input
+              class="form-check-input"
+              id="is_global"
+              name="is_global"
+              type="checkbox"
+              value="1"
+              {% if is_global %}checked{% endif %}
+            />
+            <label class="form-check-label" for="is_global">Armia globalna</label>
+            <div class="form-text">Globalne armie są dostępne dla wszystkich użytkowników.</div>
+          </div>
+          {% endif %}
           <div class="mb-3">
             <label class="form-label">Zestaw zasad</label>
             <input
