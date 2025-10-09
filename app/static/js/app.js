@@ -449,6 +449,7 @@ const AP_CORROSIVE = { '-1': 0.05, 0: 0.05, 1: 0.1, 2: 0.25, 3: 0.4, 4: 0.5, 5: 
 const BLAST_MULTIPLIER = { 2: 1.95, 3: 2.8, 6: 4.3 };
 const DEADLY_MULTIPLIER = { 2: 1.9, 3: 2.6, 6: 3.8 };
 const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
+const LOCKED_PASSIVE_SLUGS = new Set(['bohater', 'samolot']);
 const ABILITY_NAME_MAX_LENGTH = 60;
 
 function splitTraits(text) {
@@ -1425,7 +1426,7 @@ function renderPassiveEditor(
     }
     const slug = String(entry.slug);
     const normalizedSlug = slug.trim().toLowerCase();
-    const isHeroAbility = normalizedSlug === 'bohater';
+    const isLockedAbility = LOCKED_PASSIVE_SLUGS.has(normalizedSlug);
     let currentValue = Number(stateMap.get(slug));
     if (!Number.isFinite(currentValue)) {
       currentValue = Number(entry.default_count ?? (entry.is_default ? 1 : 0));
@@ -1435,7 +1436,7 @@ function renderPassiveEditor(
     } else {
       currentValue = 1;
     }
-    if (isHeroAbility) {
+    if (isLockedAbility) {
       currentValue = 1;
     }
     stateMap.set(slug, currentValue);
@@ -1457,7 +1458,7 @@ function renderPassiveEditor(
     const costValue = Number(entry.cost);
     const multiplier = Math.max(totalModels, 1);
     let currentFlag = currentValue > 0 ? 1 : 0;
-    if (isHeroAbility) {
+    if (isLockedAbility) {
       currentFlag = 1;
     }
     const computeDelta = () => {
@@ -1512,21 +1513,21 @@ function renderPassiveEditor(
       input.className = 'form-check-input';
       input.id = `passive-${slug}-${Math.random().toString(16).slice(2)}`;
       input.checked = currentFlag > 0;
-      if (isHeroAbility) {
+      if (isLockedAbility) {
         input.disabled = true;
       }
       const label = document.createElement('label');
       label.className = 'form-check-label small';
       label.setAttribute('for', input.id);
       const updateLabel = () => {
-        if (isHeroAbility) {
+        if (isLockedAbility) {
           label.textContent = 'Zawsze aktywna';
           return;
         }
         label.textContent = input.checked ? 'Aktywna' : 'Wyłączona';
       };
       updateLabel();
-      if (!isHeroAbility) {
+      if (!isLockedAbility) {
         input.addEventListener('change', () => {
           const flag = input.checked ? 1 : 0;
           stateMap.set(slug, flag);
