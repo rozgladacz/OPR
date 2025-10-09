@@ -151,6 +151,7 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
     }
 
     missing_ids = parent_weapon_ids - existing_parent_ids
+    created_new_clones = False
     for parent_weapon_id in missing_ids:
         parent_weapon = db.get(models.Weapon, parent_weapon_id)
         if not parent_weapon:
@@ -161,14 +162,26 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
             parent=parent_weapon,
             name=None,
             range=None,
-            attacks=None,
-            ap=None,
+            attacks=(
+                parent_weapon.attacks
+                if parent_weapon.attacks is not None
+                else parent_weapon.effective_attacks
+            ),
+            ap=(
+                parent_weapon.ap
+                if parent_weapon.ap is not None
+                else parent_weapon.effective_ap
+            ),
             tags=None,
             notes=None,
         )
         clone.cached_cost = None
-        
+
         db.add(clone)
+        created_new_clones = True
+
+    if created_new_clones:
+        db.flush()
 
     variant_weapons = db.execute(
         select(models.Weapon).where(
