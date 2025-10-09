@@ -3588,6 +3588,174 @@ function initSpellAbilityForms() {
   });
 }
 
+function initArmoryWeaponTable() {
+  const table = document.getElementById('armory-weapons-table');
+  if (!table) {
+    return;
+  }
+  const tbody = table.querySelector('tbody');
+  if (!tbody) {
+    return;
+  }
+  const dataRows = Array.from(tbody.querySelectorAll('tr[data-weapon-row]'));
+  const filterRow = tbody.querySelector('tr[data-empty-message="filter"]');
+  const staticEmptyRow = tbody.querySelector('tr[data-empty-message="always"]');
+  const filterInput = document.getElementById('weapons-filter');
+  if (!dataRows.length) {
+    if (filterInput) {
+      filterInput.disabled = true;
+      filterInput.placeholder = 'Brak pozycji do filtrowania';
+    }
+    return;
+  }
+
+  const normalizeText = typeof normalizeName === 'function'
+    ? (value) => normalizeName(value || '')
+    : (value) => (value === undefined || value === null ? '' : String(value).toLowerCase());
+
+  const originalOrder = dataRows.slice();
+  const originalIndex = new Map();
+  originalOrder.forEach((row, index) => {
+    originalIndex.set(row, index);
+  });
+
+  let currentOrder = dataRows.slice();
+  const headers = Array.from(table.querySelectorAll('th[data-sortable]'));
+
+  dataRows.forEach((row) => {
+    row.dataset.filterText = normalizeText(row.textContent || '');
+  });
+
+  const indicatorSymbols = { asc: '▲', desc: '▼' };
+  const sortState = { index: null, direction: 'none' };
+
+  const placeRow = (row) => {
+    if (filterRow) {
+      tbody.insertBefore(row, filterRow);
+    } else if (staticEmptyRow) {
+      tbody.insertBefore(row, staticEmptyRow);
+    } else {
+      tbody.appendChild(row);
+    }
+  };
+
+  const applyFilter = () => {
+    if (!filterInput) {
+      if (filterRow) {
+        filterRow.classList.add('d-none');
+      }
+      return;
+    }
+    const query = normalizeText(filterInput.value || '');
+    let visible = 0;
+    currentOrder.forEach((row) => {
+      const haystack = row.dataset.filterText || '';
+      if (!query || haystack.includes(query)) {
+        row.style.removeProperty('display');
+        visible += 1;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+    if (filterRow) {
+      if (query && visible === 0) {
+        filterRow.classList.remove('d-none');
+      } else {
+        filterRow.classList.add('d-none');
+      }
+    }
+  };
+
+  const updateIndicators = (activeIndex, direction) => {
+    headers.forEach((header, index) => {
+      const indicator = header.querySelector('.table-sort-indicator');
+      const isActive = index === activeIndex && direction !== 'none';
+      header.dataset.sortDirection = isActive ? direction : 'none';
+      if (indicator) {
+        indicator.textContent = isActive ? indicatorSymbols[direction] || '' : '';
+      }
+    });
+  };
+
+  const resetOrder = () => {
+    currentOrder = originalOrder.slice();
+    currentOrder.forEach((row) => {
+      placeRow(row);
+    });
+  };
+
+  const parseNumber = (value) => {
+    const normalized = String(value || '')
+      .replace(/,/g, '.')
+      .replace(/[^0-9+\-\.]/g, '')
+      .trim();
+    if (!normalized) {
+      return Number.NaN;
+    }
+    return Number.parseFloat(normalized);
+  };
+
+  const sortRows = (columnIndex, direction, type) => {
+    const sorted = currentOrder.slice().sort((a, b) => {
+      const cellA = a.querySelectorAll('td')[columnIndex];
+      const cellB = b.querySelectorAll('td')[columnIndex];
+      const rawA = cellA ? (cellA.dataset.sortValue ?? cellA.textContent ?? '') : '';
+      const rawB = cellB ? (cellB.dataset.sortValue ?? cellB.textContent ?? '') : '';
+      let compare = 0;
+      if (type === 'number') {
+        const numA = parseNumber(rawA);
+        const numB = parseNumber(rawB);
+        const safeA = Number.isNaN(numA) ? Number.NEGATIVE_INFINITY : numA;
+        const safeB = Number.isNaN(numB) ? Number.NEGATIVE_INFINITY : numB;
+        compare = safeA - safeB;
+      } else {
+        const textA = normalizeText(rawA);
+        const textB = normalizeText(rawB);
+        compare = textA.localeCompare(textB, undefined, { sensitivity: 'base' });
+      }
+      if (compare === 0) {
+        compare = (originalIndex.get(a) || 0) - (originalIndex.get(b) || 0);
+      }
+      return direction === 'asc' ? compare : -compare;
+    });
+    currentOrder = sorted;
+    currentOrder.forEach((row) => {
+      placeRow(row);
+    });
+  };
+
+  headers.forEach((header, index) => {
+    const trigger = header.querySelector('.table-sort-btn') || header;
+    const type = header.dataset.sortType || 'text';
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      let nextDirection = 'asc';
+      if (sortState.index === index) {
+        nextDirection = sortState.direction === 'asc' ? 'desc' : sortState.direction === 'desc' ? 'none' : 'asc';
+      }
+      sortState.index = nextDirection === 'none' ? null : index;
+      sortState.direction = nextDirection;
+      if (nextDirection === 'none') {
+        resetOrder();
+      } else {
+        sortRows(index, nextDirection, type);
+      }
+      updateIndicators(sortState.index ?? -1, nextDirection);
+      applyFilter();
+    });
+  });
+
+  if (filterInput) {
+    filterInput.addEventListener('input', () => {
+      applyFilter();
+    });
+  }
+
+  resetOrder();
+  updateIndicators(-1, 'none');
+  applyFilter();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initAbilityPickers();
   initNumberPickers();
@@ -3596,4 +3764,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initRosterEditor();
   initWeaponDefaults();
   initSpellAbilityForms();
+  initArmoryWeaponTable();
 });
