@@ -171,84 +171,125 @@
         <div class="list-group roster-unit-list" data-roster-list>
           {% for item in roster_items %}
           {% set ru = item.instance %}
-          <button
-            type="button"
-            class="list-group-item list-group-item-action roster-unit-item text-start position-relative roster-card"
-            data-roster-item
-            data-roster-unit-id="{{ ru.id }}"
-            data-unit-name="{{ ru.unit.name }}"
-            data-unit-count="{{ ru.count }}"
-            data-unit-cost="{{ ru.cached_cost }}"
-            data-base-cost-per-model="{{ item.base_cost_per_model }}"
-            data-unit-quality="{{ ru.unit.quality }}"
-            data-unit-defense="{{ ru.unit.defense }}"
-            data-unit-toughness="{{ ru.unit.toughness }}"
-            data-unit-custom-name="{{ ru.custom_name or '' }}"
-            data-default-summary="{{ item.default_summary }}"
-            data-unit-flags='{{ ru.unit.flags | default('', true) | e }}'
-            data-weapon-options='{{ item.weapon_options | tojson | e }}'
-            data-selected-weapon-id="{{ ru.selected_weapon_id or '' }}"
-            data-passives='{{ item.passive_items | tojson | e }}'
-            data-actives='{{ item.active_items | tojson | e }}'
-            data-auras='{{ item.aura_items | tojson | e }}'
-            data-selected-passives='{{ item.selected_passive_items | tojson | e }}'
-            data-selected-actives='{{ item.selected_active_items | tojson | e }}'
-            data-selected-auras='{{ item.selected_aura_items | tojson | e }}'
-            data-loadout='{{ item.loadout | tojson | e }}'
-            data-unit-classification='{{ item.classification | tojson | e }}'
-          >
-            <span class="badge text-bg-primary roster-cost-badge" data-roster-unit-cost>{{ ru.cached_cost }} pkt</span>
-            <div class="fw-semibold" data-roster-unit-title>{{ ru.count }}x {{ ru.unit.name }}</div>
-            <div class="text-muted small {% if not ru.custom_name %}d-none{% endif %}" data-roster-unit-custom>
-              {{ ru.custom_name }}
+          <div class="list-group-item border-0 px-0 py-2">
+            <div class="roster-unit-entry">
+              {% if can_edit %}
+              <div class="roster-unit-reorder">
+                <form
+                  method="post"
+                  action="/rosters/{{ roster.id }}/units/{{ ru.id }}/move"
+                  data-roster-move-form
+                >
+                  <input type="hidden" name="direction" value="up" />
+                  <button
+                    class="btn btn-outline-secondary btn-sm"
+                    type="submit"
+                    data-roster-move
+                    aria-label="Przesuń jednostkę w górę"
+                    {% if loop.first %}disabled{% endif %}
+                  >
+                    ↑
+                  </button>
+                </form>
+                <form
+                  method="post"
+                  action="/rosters/{{ roster.id }}/units/{{ ru.id }}/move"
+                  data-roster-move-form
+                >
+                  <input type="hidden" name="direction" value="down" />
+                  <button
+                    class="btn btn-outline-secondary btn-sm"
+                    type="submit"
+                    data-roster-move
+                    aria-label="Przesuń jednostkę w dół"
+                    {% if loop.last %}disabled{% endif %}
+                  >
+                    ↓
+                  </button>
+                </form>
+              </div>
+              {% endif %}
+              <div
+                class="roster-unit-item roster-card text-start position-relative flex-grow-1 border rounded p-3 bg-body"
+                data-roster-item
+                data-roster-unit-id="{{ ru.id }}"
+                data-unit-name="{{ ru.unit.name }}"
+                data-unit-count="{{ ru.count }}"
+                data-unit-cost="{{ ru.cached_cost }}"
+                data-base-cost-per-model="{{ item.base_cost_per_model }}"
+                data-unit-quality="{{ ru.unit.quality }}"
+                data-unit-defense="{{ ru.unit.defense }}"
+                data-unit-toughness="{{ ru.unit.toughness }}"
+                data-unit-custom-name="{{ ru.custom_name or '' }}"
+                data-default-summary="{{ item.default_summary }}"
+                data-unit-flags='{{ ru.unit.flags | default('', true) | e }}'
+                data-weapon-options='{{ item.weapon_options | tojson | e }}'
+                data-selected-weapon-id="{{ ru.selected_weapon_id or '' }}"
+                data-passives='{{ item.passive_items | tojson | e }}'
+                data-actives='{{ item.active_items | tojson | e }}'
+                data-auras='{{ item.aura_items | tojson | e }}'
+                data-selected-passives='{{ item.selected_passive_items | tojson | e }}'
+                data-selected-actives='{{ item.selected_active_items | tojson | e }}'
+                data-selected-auras='{{ item.selected_aura_items | tojson | e }}'
+                data-loadout='{{ item.loadout | tojson | e }}'
+                data-unit-classification='{{ item.classification | tojson | e }}'
+                role="button"
+                tabindex="0"
+              >
+                <span class="badge text-bg-primary roster-cost-badge" data-roster-unit-cost>{{ ru.cached_cost }} pkt</span>
+                <div class="fw-semibold" data-roster-unit-title>{{ ru.count }}x {{ ru.unit.name }}</div>
+                <div class="text-muted small {% if not ru.custom_name %}d-none{% endif %}" data-roster-unit-custom>
+                  {{ ru.custom_name }}
+                </div>
+                <div class="text-muted small">
+                  Jakość {{ ru.unit.quality }} / Obrona {{ ru.unit.defense }} / Wytrzymałość {{ ru.unit.toughness }}
+                </div>
+                {% set selected_passives = item.selected_passive_items or [] %}
+                {% set selected_actives = item.selected_active_items or [] %}
+                {% set selected_auras = item.selected_aura_items or [] %}
+                <div class="d-flex flex-wrap gap-1 mt-2" data-roster-unit-abilities>
+                  {% for ability in selected_passives %}
+                  {% set base_label = ability.label or ability.raw or ability.slug %}
+                  {% if ability.custom_name %}
+                  {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+                  {% else %}
+                  {% set display_label = base_label %}
+                  {% endif %}
+                  <span class="badge text-bg-secondary" title="{{ ability.description }}">{{ display_label }}</span>
+                  {% endfor %}
+                  {% for ability in selected_actives %}
+                  {% set base_label = ability.label or ability.raw or ability.slug %}
+                  {% if ability.custom_name %}
+                  {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+                  {% else %}
+                  {% set display_label = base_label %}
+                  {% endif %}
+                  <span class="badge text-bg-info text-dark" title="{{ ability.description }}">{{ display_label }}{% if ability.count and ability.count|int > 1 %} ×{{ ability.count }}{% endif %}</span>
+                  {% endfor %}
+                  {% for ability in selected_auras %}
+                  {% set base_label = ability.label or ability.raw or ability.slug %}
+                  {% if ability.custom_name %}
+                  {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+                  {% else %}
+                  {% set display_label = base_label %}
+                  {% endif %}
+                  <span class="badge text-bg-warning text-dark" title="{{ ability.description }}">{{ display_label }}{% if ability.count and ability.count|int > 1 %} ×{{ ability.count }}{% endif %}</span>
+                  {% endfor %}
+                  {% if not selected_passives and not selected_actives and not selected_auras %}
+                  <span class="text-muted small">Brak dodatkowych zdolności</span>
+                  {% endif %}
+                </div>
+                <div class="text-muted small mt-2" data-roster-unit-loadout>
+                  Uzbrojenie:
+                  {% if item.loadout_summary %}
+                  {{ item.loadout_summary }}
+                  {% else %}
+                  {{ item.default_summary }}
+                  {% endif %}
+                </div>
+              </div>
             </div>
-            <div class="text-muted small">
-              Jakość {{ ru.unit.quality }} / Obrona {{ ru.unit.defense }} / Wytrzymałość {{ ru.unit.toughness }}
-            </div>
-            {% set selected_passives = item.selected_passive_items or [] %}
-            {% set selected_actives = item.selected_active_items or [] %}
-            {% set selected_auras = item.selected_aura_items or [] %}
-            <div class="d-flex flex-wrap gap-1 mt-2" data-roster-unit-abilities>
-              {% for ability in selected_passives %}
-              {% set base_label = ability.label or ability.raw or ability.slug %}
-              {% if ability.custom_name %}
-              {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
-              {% else %}
-              {% set display_label = base_label %}
-              {% endif %}
-              <span class="badge text-bg-secondary" title="{{ ability.description }}">{{ display_label }}</span>
-              {% endfor %}
-              {% for ability in selected_actives %}
-              {% set base_label = ability.label or ability.raw or ability.slug %}
-              {% if ability.custom_name %}
-              {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
-              {% else %}
-              {% set display_label = base_label %}
-              {% endif %}
-              <span class="badge text-bg-info text-dark" title="{{ ability.description }}">{{ display_label }}{% if ability.count and ability.count|int > 1 %} ×{{ ability.count }}{% endif %}</span>
-              {% endfor %}
-              {% for ability in selected_auras %}
-              {% set base_label = ability.label or ability.raw or ability.slug %}
-              {% if ability.custom_name %}
-              {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
-              {% else %}
-              {% set display_label = base_label %}
-              {% endif %}
-              <span class="badge text-bg-warning text-dark" title="{{ ability.description }}">{{ display_label }}{% if ability.count and ability.count|int > 1 %} ×{{ ability.count }}{% endif %}</span>
-              {% endfor %}
-              {% if not selected_passives and not selected_actives and not selected_auras %}
-              <span class="text-muted small">Brak dodatkowych zdolności</span>
-              {% endif %}
-            </div>
-            <div class="text-muted small mt-2" data-roster-unit-loadout>
-              Uzbrojenie:
-              {% if item.loadout_summary %}
-              {{ item.loadout_summary }}
-              {% else %}
-              {{ item.default_summary }}
-              {% endif %}
-            </div>
-          </button>
+          </div>
           {% endfor %}
         </div>
         {% else %}

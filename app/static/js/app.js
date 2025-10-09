@@ -3326,6 +3326,24 @@ function renderEditors(precomputedWeaponMap = null) {
 
   items.forEach((item) => {
     item.addEventListener('click', () => selectItem(item));
+    item.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        selectItem(item);
+      }
+    });
+  });
+
+  root.querySelectorAll('[data-roster-move]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+  });
+
+  root.querySelectorAll('[data-roster-move-form]').forEach((form) => {
+    form.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
   });
 
   if (countInput) {

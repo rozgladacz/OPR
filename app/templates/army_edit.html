@@ -72,6 +72,7 @@
 <table class="table table-striped align-middle">
   <thead>
     <tr>
+      <th class="text-center" style="width: 1%;">Kolejność</th>
       <th>Nazwa</th>
       <th>Statystyki</th>
       <th class="d-none d-xl-table-cell">Zdolności pasywne</th>
@@ -85,6 +86,44 @@
   <tbody>
     {% for item in units %}
     <tr>
+      <td class="align-middle text-center">
+        {% if can_edit %}
+        <div class="d-flex flex-column gap-1 align-items-center justify-content-center">
+          <form
+            method="post"
+            action="/armies/{{ army.id }}/units/{{ item.instance.id }}/move"
+            class="m-0"
+          >
+            <input type="hidden" name="direction" value="up" />
+            <button
+              class="btn btn-outline-secondary btn-sm"
+              type="submit"
+              {% if loop.first %}disabled{% endif %}
+              aria-label="Przesuń jednostkę w górę"
+            >
+              ↑
+            </button>
+          </form>
+          <form
+            method="post"
+            action="/armies/{{ army.id }}/units/{{ item.instance.id }}/move"
+            class="m-0"
+          >
+            <input type="hidden" name="direction" value="down" />
+            <button
+              class="btn btn-outline-secondary btn-sm"
+              type="submit"
+              {% if loop.last %}disabled{% endif %}
+              aria-label="Przesuń jednostkę w dół"
+            >
+              ↓
+            </button>
+          </form>
+        </div>
+        {% else %}
+        <span class="text-muted small">-</span>
+        {% endif %}
+      </td>
       <td>
         {{ item.instance.name }}
         <div class="d-xl-none mt-2 small">
