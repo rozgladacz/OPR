@@ -1424,6 +1424,8 @@ function renderPassiveEditor(
       return;
     }
     const slug = String(entry.slug);
+    const normalizedSlug = slug.trim().toLowerCase();
+    const isHeroAbility = normalizedSlug === 'bohater';
     let currentValue = Number(stateMap.get(slug));
     if (!Number.isFinite(currentValue)) {
       currentValue = Number(entry.default_count ?? (entry.is_default ? 1 : 0));
@@ -1431,6 +1433,9 @@ function renderPassiveEditor(
     if (!Number.isFinite(currentValue) || currentValue <= 0) {
       currentValue = 0;
     } else {
+      currentValue = 1;
+    }
+    if (isHeroAbility) {
       currentValue = 1;
     }
     stateMap.set(slug, currentValue);
@@ -1452,6 +1457,9 @@ function renderPassiveEditor(
     const costValue = Number(entry.cost);
     const multiplier = Math.max(totalModels, 1);
     let currentFlag = currentValue > 0 ? 1 : 0;
+    if (isHeroAbility) {
+      currentFlag = 1;
+    }
     const computeDelta = () => {
       if (typeof getDelta === 'function') {
         try {
@@ -1504,24 +1512,33 @@ function renderPassiveEditor(
       input.className = 'form-check-input';
       input.id = `passive-${slug}-${Math.random().toString(16).slice(2)}`;
       input.checked = currentFlag > 0;
+      if (isHeroAbility) {
+        input.disabled = true;
+      }
       const label = document.createElement('label');
       label.className = 'form-check-label small';
       label.setAttribute('for', input.id);
-      label.textContent = input.checked ? 'Aktywna' : 'Wyłączona';
       const updateLabel = () => {
+        if (isHeroAbility) {
+          label.textContent = 'Zawsze aktywna';
+          return;
+        }
         label.textContent = input.checked ? 'Aktywna' : 'Wyłączona';
       };
-      input.addEventListener('change', () => {
-        const flag = input.checked ? 1 : 0;
-        stateMap.set(slug, flag);
-        currentFlag = flag;
-        deltaValue = computeDelta();
-        cost.textContent = formatDeltaText();
-        updateLabel();
-        if (typeof onChange === 'function') {
-          onChange();
-        }
-      });
+      updateLabel();
+      if (!isHeroAbility) {
+        input.addEventListener('change', () => {
+          const flag = input.checked ? 1 : 0;
+          stateMap.set(slug, flag);
+          currentFlag = flag;
+          deltaValue = computeDelta();
+          cost.textContent = formatDeltaText();
+          updateLabel();
+          if (typeof onChange === 'function') {
+            onChange();
+          }
+        });
+      }
       wrapperCheck.appendChild(input);
       wrapperCheck.appendChild(label);
       controls.appendChild(wrapperCheck);
