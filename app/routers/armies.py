@@ -416,6 +416,50 @@ def _parse_weapon_payload(
     return results
 
 
+def _apply_unit_form_data(
+    unit: models.Unit,
+    *,
+    name: str,
+    quality: int,
+    defense: int,
+    toughness: int,
+    passive_items: list[dict],
+    active_items: list[dict],
+    aura_items: list[dict],
+    weapon_entries: list[tuple[models.Weapon, bool, int]],
+    db: Session,
+) -> None:
+    unit.name = name
+    unit.quality = quality
+    unit.defense = defense
+    unit.toughness = toughness
+    unit.flags = utils.passive_payload_to_flags(passive_items)
+
+    weapon_links: list[models.UnitWeapon] = []
+    default_assigned = False
+    fallback_weapon = None
+    for weapon, is_default, count in weapon_entries:
+        link = models.UnitWeapon(
+            weapon=weapon,
+            is_default=is_default,
+            default_count=count,
+        )
+        weapon_links.append(link)
+        if fallback_weapon is None and count > 0:
+            fallback_weapon = weapon
+        if is_default and count > 0 and not default_assigned:
+            unit.default_weapon = weapon
+            default_assigned = True
+    if not default_assigned:
+        unit.default_weapon = fallback_weapon
+    unit.weapon_links = weapon_links
+
+    unit.abilities = (
+        ability_registry.build_unit_abilities(db, active_items, "active")
+        + ability_registry.build_unit_abilities(db, aura_items, "aura")
+    )
+
+
 @router.get("", response_class=HTMLResponse)
 def list_armies(
     request: Request,
@@ -923,15 +967,8 @@ def add_unit(
     passive_items = _parse_selection_payload(passive_abilities)
     active_items = _parse_selection_payload(active_abilities)
     aura_items = _parse_selection_payload(aura_abilities)
-    active_links = ability_registry.build_unit_abilities(db, active_items, "active")
-    aura_links = ability_registry.build_unit_abilities(db, aura_items, "aura")
 
     unit = models.Unit(
-        name=name,
-        quality=quality,
-        defense=defense,
-        toughness=toughness,
-        flags=utils.passive_payload_to_flags(passive_items),
         army=army,
         owner_id=army.owner_id if army.owner_id is not None else current_user.id,
     )
@@ -942,25 +979,18 @@ def add_unit(
         or -1
     )
     unit.position = max_position + 1
-    weapon_links: list[models.UnitWeapon] = []
-    default_assigned = False
-    fallback_weapon = None
-    for weapon, is_default, count in weapon_entries:
-        link = models.UnitWeapon(
-            weapon=weapon,
-            is_default=is_default,
-            default_count=count,
-        )
-        weapon_links.append(link)
-        if fallback_weapon is None and count > 0:
-            fallback_weapon = weapon
-        if is_default and count > 0 and not default_assigned:
-            unit.default_weapon = weapon
-            default_assigned = True
-    if not default_assigned:
-        unit.default_weapon = fallback_weapon
-    unit.weapon_links = weapon_links
-    unit.abilities = active_links + aura_links
+    _apply_unit_form_data(
+        unit,
+        name=name,
+        quality=quality,
+        defense=defense,
+        toughness=toughness,
+        passive_items=passive_items,
+        active_items=active_items,
+        aura_items=aura_items,
+        weapon_entries=weapon_entries,
+        db=db,
+    )
     db.add(unit)
     db.commit()
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
@@ -1062,6 +1092,7 @@ def update_unit(
     passive_abilities: str | None = Form(None),
     active_abilities: str | None = Form(None),
     aura_abilities: str | None = Form(None),
+    submit_action: str = Form("save"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -1071,35 +1102,50 @@ def update_unit(
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
 
-    unit.name = name
-    unit.quality = quality
-    unit.defense = defense
-    unit.toughness = toughness
-
-    passive_items = _parse_selection_payload(passive_abilities)
-    unit.flags = utils.passive_payload_to_flags(passive_items)
     weapon_entries = _parse_weapon_payload(db, army.armory, weapons)
-    weapon_links: list[models.UnitWeapon] = []
-    default_assigned = False
-    fallback_weapon = None
-    for weapon, is_default, count in weapon_entries:
-        link = models.UnitWeapon(
-            weapon=weapon,
-            is_default=is_default,
-            default_count=count,
-        )
-        weapon_links.append(link)
-        if fallback_weapon is None and count > 0:
-            fallback_weapon = weapon
-        if is_default and count > 0 and not default_assigned:
-            unit.default_weapon = weapon
-            default_assigned = True
-    if not default_assigned:
-        unit.default_weapon = fallback_weapon
-    unit.weapon_links = weapon_links
+    passive_items = _parse_selection_payload(passive_abilities)
     active_items = _parse_selection_payload(active_abilities)
     aura_items = _parse_selection_payload(aura_abilities)
-    unit.abilities = ability_registry.build_unit_abilities(db, active_items, "active") + ability_registry.build_unit_abilities(db, aura_items, "aura")
+
+    normalized_action = (submit_action or "save").strip().lower()
+    if normalized_action == "new":
+        new_unit = models.Unit(
+            army=army,
+            owner_id=army.owner_id if army.owner_id is not None else current_user.id,
+        )
+        max_position = (
+            db.execute(
+                select(func.max(models.Unit.position)).where(models.Unit.army_id == army.id)
+            ).scalar_one_or_none()
+            or -1
+        )
+        new_unit.position = max_position + 1
+        _apply_unit_form_data(
+            new_unit,
+            name=name,
+            quality=quality,
+            defense=defense,
+            toughness=toughness,
+            passive_items=passive_items,
+            active_items=active_items,
+            aura_items=aura_items,
+            weapon_entries=weapon_entries,
+            db=db,
+        )
+        db.add(new_unit)
+    else:
+        _apply_unit_form_data(
+            unit,
+            name=name,
+            quality=quality,
+            defense=defense,
+            toughness=toughness,
+            passive_items=passive_items,
+            active_items=active_items,
+            aura_items=aura_items,
+            weapon_entries=weapon_entries,
+            db=db,
+        )
 
     db.commit()
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)

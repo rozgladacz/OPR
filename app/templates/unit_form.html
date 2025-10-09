@@ -171,7 +171,8 @@
             <input type="hidden" id="unit-weapons" name="weapons" value='{{ weapon_payload | tojson }}' />
             <div class="form-text">Wybierz listę dostępnych broni i ustaw domyślną ilość (0 oznacza brak w wyposażeniu domyślnym).</div>
           </div>
-          <button class="btn btn-primary" type="submit">Zapisz</button>
+          <button class="btn btn-primary" type="submit" name="submit_action" value="save">Zapisz</button>
+          <button class="btn btn-outline-primary" type="submit" name="submit_action" value="new">Nowa jednostka</button>
           <a class="btn btn-secondary" href="/armies/{{ army.id }}">Anuluj</a>
         </form>
       </div>
