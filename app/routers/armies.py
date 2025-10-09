@@ -45,14 +45,17 @@ def _parse_bool(value: str | None) -> bool:
     return value.lower() in {"1", "true", "on", "yes"}
 
 
-PASSIVE_DEFINITIONS = [
-    entry
-    for entry in (
-        ability_catalog.to_dict(definition)
-        for definition in ability_catalog.definitions_by_type("passive")
-    )
-    if not _is_hidden_trait(entry.get("slug"))
-]
+PASSIVE_DEFINITIONS = sorted(
+    (
+        entry
+        for entry in (
+            ability_catalog.to_dict(definition)
+            for definition in ability_catalog.definitions_by_type("passive")
+        )
+        if not _is_hidden_trait(entry.get("slug"))
+    ),
+    key=lambda entry: entry.get("display_name", "").casefold(),
+)
 
 
 def _ensure_army_view_access(army: models.Army, user: models.User) -> None:
