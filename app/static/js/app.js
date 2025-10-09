@@ -13,6 +13,8 @@ function initAbilityPicker(root) {
   const allowDefaultToggle = root.dataset.defaultToggle === 'true';
   const defaultInitial = root.dataset.defaultInitial === 'true';
   const allowCustomName = root.dataset.allowCustomName === 'true';
+  const hideOwnedAbilities = root.dataset.hideOwnedAbilities === 'true';
+  let isUpdatingSelectOptions = false;
   let items = [];
 
   function getDefinition(slug) {
@@ -167,6 +169,7 @@ function initAbilityPicker(root) {
       empty.className = 'text-muted mb-0';
       empty.textContent = 'Brak wybranych zdolności.';
       listEl.appendChild(empty);
+      updateSelectOptionVisibility();
       return;
     }
     const wrapper = document.createElement('div');
@@ -265,6 +268,45 @@ function initAbilityPicker(root) {
       wrapper.appendChild(row);
     });
     listEl.appendChild(wrapper);
+
+    updateSelectOptionVisibility();
+  }
+
+  function updateSelectOptionVisibility() {
+    if (!hideOwnedAbilities || !selectEl) {
+      return;
+    }
+    const usedKeys = new Set(
+      items
+        .map((entry) => abilityKey(entry))
+        .filter((key) => typeof key === 'string' && key)
+    );
+    let selectionCleared = false;
+    Array.from(selectEl.options).forEach((option) => {
+      if (!option.value) {
+        option.hidden = false;
+        option.disabled = false;
+        return;
+      }
+      const definition = getDefinition(option.value);
+      const optionKey = abilityKey({
+        slug: definition ? definition.slug : option.value,
+      });
+      const shouldHide = optionKey ? usedKeys.has(optionKey) : false;
+      option.hidden = shouldHide;
+      option.disabled = shouldHide;
+      if (shouldHide && option.selected) {
+        selectionCleared = true;
+      }
+    });
+    if (selectionCleared) {
+      selectEl.value = '';
+      if (!isUpdatingSelectOptions) {
+        isUpdatingSelectOptions = true;
+        handleSelectChange();
+        isUpdatingSelectOptions = false;
+      }
+    }
   }
 
   function resetValueInputs() {
@@ -425,12 +467,14 @@ function initAbilityPicker(root) {
   parseInitial();
   renderList();
   handleSelectChange();
+  updateSelectOptionVisibility();
 
   root.abilityPicker = {
     setItems(newItems) {
       items = Array.isArray(newItems) ? newItems.map((entry) => normalizeEntry(entry || {})) : [];
       updateHidden();
       renderList();
+      updateSelectOptionVisibility();
     },
   };
 }
