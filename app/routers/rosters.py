@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -74,6 +74,23 @@ def _ensure_roster_edit_access(roster: models.Roster, user: models.User) -> None
         return
     if roster.owner_id != user.id:
         raise HTTPException(status_code=403, detail="Brak dostępu do rozpiski")
+
+
+def _ordered_roster_units(db: Session, roster: models.Roster) -> list[models.RosterUnit]:
+    return (
+        db.execute(
+            select(models.RosterUnit)
+            .where(models.RosterUnit.roster_id == roster.id)
+            .order_by(models.RosterUnit.position, models.RosterUnit.id)
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _resequence_roster_units(units: list[models.RosterUnit]) -> None:
+    for index, item in enumerate(units):
+        item.position = index
 
 
 @router.get("", response_class=HTMLResponse)
@@ -352,6 +369,16 @@ def add_roster_unit(
         selected_weapon_id=weapon.id if weapon else None,
     )
 
+    max_position = (
+        db.execute(
+            select(func.max(models.RosterUnit.position)).where(
+                models.RosterUnit.roster_id == roster.id
+            )
+        ).scalar_one_or_none()
+        or -1
+    )
+    roster_unit.position = max_position + 1
+
     classification = _roster_unit_classification(roster_unit, loadout)
     loadout = _apply_classification_to_loadout(loadout, classification) or loadout
 
@@ -360,6 +387,52 @@ def add_roster_unit(
     db.add(roster_unit)
     db.commit()
     db.refresh(roster_unit)
+    return RedirectResponse(
+        url=f"/rosters/{roster.id}?selected={roster_unit.id}",
+        status_code=303,
+    )
+
+
+@router.post("/{roster_id}/units/{roster_unit_id}/move")
+def move_roster_unit(
+    roster_id: int,
+    roster_unit_id: int,
+    direction: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    roster = db.get(models.Roster, roster_id)
+    roster_unit = db.get(models.RosterUnit, roster_unit_id)
+    if not roster or not roster_unit or roster_unit.roster_id != roster.id:
+        raise HTTPException(status_code=404)
+    _ensure_roster_edit_access(roster, current_user)
+
+    normalized_direction = (direction or "").strip().lower()
+    if normalized_direction not in {"up", "down"}:
+        raise HTTPException(status_code=400, detail="Nieprawidłowy kierunek")
+
+    units = _ordered_roster_units(db, roster)
+    try:
+        index = next(i for i, item in enumerate(units) if item.id == roster_unit.id)
+    except StopIteration:
+        raise HTTPException(status_code=404) from None
+
+    target_index = index
+    if normalized_direction == "up" and index > 0:
+        target_index = index - 1
+    elif normalized_direction == "down" and index < len(units) - 1:
+        target_index = index + 1
+
+    if target_index == index:
+        return RedirectResponse(
+            url=f"/rosters/{roster.id}?selected={roster_unit.id}",
+            status_code=303,
+        )
+
+    item = units.pop(index)
+    units.insert(target_index, item)
+    _resequence_roster_units(units)
+    db.commit()
     return RedirectResponse(
         url=f"/rosters/{roster.id}?selected={roster_unit.id}",
         status_code=303,
@@ -499,9 +572,19 @@ def duplicate_roster_unit(
         custom_name=roster_unit.custom_name,
     )
     clone.cached_cost = costs.roster_unit_cost(clone)
+    clone.position = (roster_unit.position or 0) + 1
     db.add(clone)
+    db.flush()
+    units = _ordered_roster_units(db, roster)
+    units = [item for item in units if item.id != clone.id]
+    insert_index = 0
+    for idx, item in enumerate(units):
+        if item.id == roster_unit.id:
+            insert_index = idx + 1
+            break
+    units.insert(insert_index, clone)
+    _resequence_roster_units(units)
     db.commit()
-    db.refresh(clone)
     return RedirectResponse(
         url=f"/rosters/{roster.id}?selected={clone.id}",
         status_code=303,
@@ -522,6 +605,9 @@ def delete_roster_unit(
     _ensure_roster_edit_access(roster, current_user)
 
     db.delete(roster_unit)
+    db.flush()
+    remaining_units = _ordered_roster_units(db, roster)
+    _resequence_roster_units(remaining_units)
     db.commit()
     return RedirectResponse(url=f"/rosters/{roster.id}", status_code=303)
 def _default_loadout_summary(unit: models.Unit) -> str:

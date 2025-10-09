@@ -137,6 +137,42 @@ def _rebuild_unit_weapons_table(connection) -> None:
         connection.execute(text("DROP TABLE unit_weapons_old"))
     finally:
         connection.execute(text("PRAGMA foreign_keys=ON"))
+
+
+def _initialize_unit_positions(connection) -> None:
+    logger.info("Initializing unit positions")
+    rows = connection.execute(
+        text("SELECT id, army_id FROM units ORDER BY army_id, id")
+    ).all()
+    offsets: dict[int, int] = {}
+    for row in rows:
+        mapping = row._mapping
+        army_id = mapping["army_id"]
+        position = offsets.get(army_id, 0)
+        connection.execute(
+            text("UPDATE units SET position = :position WHERE id = :id"),
+            {"position": position, "id": mapping["id"]},
+        )
+        offsets[army_id] = position + 1
+
+
+def _initialize_roster_unit_positions(connection) -> None:
+    logger.info("Initializing roster unit positions")
+    rows = connection.execute(
+        text("SELECT id, roster_id FROM roster_units ORDER BY roster_id, id")
+    ).all()
+    offsets: dict[int, int] = {}
+    for row in rows:
+        mapping = row._mapping
+        roster_id = mapping["roster_id"]
+        position = offsets.get(roster_id, 0)
+        connection.execute(
+            text("UPDATE roster_units SET position = :position WHERE id = :id"),
+            {"position": position, "id": mapping["id"]},
+        )
+        offsets[roster_id] = position + 1
+
+
 def _migrate_schema() -> None:
     from sqlalchemy import inspect
 
@@ -173,13 +209,34 @@ def _migrate_schema() -> None:
             if "default_count" not in {column["name"] for column in columns}:
                 _rebuild_unit_weapons_table(connection)
 
+        if "units" in table_names:
+            columns = inspector.get_columns("units")
+            column_names = {column["name"] for column in columns}
+            if "position" not in column_names:
+                logger.info("Adding position column to units table")
+                connection.execute(
+                    text(
+                        "ALTER TABLE units ADD COLUMN position INTEGER NOT NULL DEFAULT 0"
+                    )
+                )
+                _initialize_unit_positions(connection)
+
         if "roster_units" in table_names:
             columns = inspector.get_columns("roster_units")
-            if "custom_name" not in {column["name"] for column in columns}:
+            column_names = {column["name"] for column in columns}
+            if "custom_name" not in column_names:
                 logger.info("Adding custom_name column to roster_units table")
                 connection.execute(
                     text("ALTER TABLE roster_units ADD COLUMN custom_name VARCHAR(120)")
                 )
+            if "position" not in column_names:
+                logger.info("Adding position column to roster_units table")
+                connection.execute(
+                    text(
+                        "ALTER TABLE roster_units ADD COLUMN position INTEGER NOT NULL DEFAULT 0"
+                    )
+                )
+                _initialize_roster_unit_positions(connection)
 
 
 

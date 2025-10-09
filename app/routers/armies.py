@@ -6,7 +6,7 @@ import math
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -67,6 +67,23 @@ def _ensure_army_edit_access(army: models.Army, user: models.User) -> None:
         return
     if army.owner_id != user.id:
         raise HTTPException(status_code=403, detail="Brak dostępu do armii")
+
+
+def _ordered_army_units(db: Session, army: models.Army) -> list[models.Unit]:
+    return (
+        db.execute(
+            select(models.Unit)
+            .where(models.Unit.army_id == army.id)
+            .order_by(models.Unit.position, models.Unit.id)
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _resequence_army_units(units: list[models.Unit]) -> None:
+    for index, unit in enumerate(units):
+        unit.position = index
 
 
 def _get_default_ruleset(db: Session) -> models.RuleSet | None:
@@ -918,6 +935,13 @@ def add_unit(
         army=army,
         owner_id=army.owner_id if army.owner_id is not None else current_user.id,
     )
+    max_position = (
+        db.execute(
+            select(func.max(models.Unit.position)).where(models.Unit.army_id == army.id)
+        ).scalar_one_or_none()
+        or -1
+    )
+    unit.position = max_position + 1
     weapon_links: list[models.UnitWeapon] = []
     default_assigned = False
     fallback_weapon = None
@@ -939,6 +963,45 @@ def add_unit(
     unit.abilities = active_links + aura_links
     db.add(unit)
     db.commit()
+    return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
+
+
+@router.post("/{army_id}/units/{unit_id}/move")
+def move_army_unit(
+    army_id: int,
+    unit_id: int,
+    direction: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    unit = db.get(models.Unit, unit_id)
+    if not army or not unit or unit.army_id != army.id:
+        raise HTTPException(status_code=404)
+    _ensure_army_edit_access(army, current_user)
+
+    normalized_direction = (direction or "").strip().lower()
+    if normalized_direction not in {"up", "down"}:
+        raise HTTPException(status_code=400, detail="Nieprawidłowy kierunek")
+
+    units = _ordered_army_units(db, army)
+    try:
+        index = next(i for i, item in enumerate(units) if item.id == unit.id)
+    except StopIteration:
+        raise HTTPException(status_code=404) from None
+
+    target_index = index
+    if normalized_direction == "up" and index > 0:
+        target_index = index - 1
+    elif normalized_direction == "down" and index < len(units) - 1:
+        target_index = index + 1
+
+    if target_index != index:
+        item = units.pop(index)
+        units.insert(target_index, item)
+        _resequence_army_units(units)
+        db.commit()
+
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
 
 
@@ -1055,5 +1118,8 @@ def delete_unit(
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
     db.delete(unit)
+    db.flush()
+    remaining_units = _ordered_army_units(db, army)
+    _resequence_army_units(remaining_units)
     db.commit()
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)

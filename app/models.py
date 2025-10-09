@@ -199,7 +199,11 @@ class Army(TimestampMixin, Base):
     owner: Mapped[Optional[User]] = relationship(back_populates="armies")
     ruleset: Mapped[RuleSet] = relationship(back_populates="armies")
     armory: Mapped[Armory] = relationship(back_populates="armies")
-    units: Mapped[List["Unit"]] = relationship(back_populates="army", cascade="all, delete-orphan")
+    units: Mapped[List["Unit"]] = relationship(
+        back_populates="army",
+        cascade="all, delete-orphan",
+        order_by="Unit.position",
+    )
     weapons: Mapped[List[Weapon]] = relationship(back_populates="army")
     rosters: Mapped[List["Roster"]] = relationship(back_populates="army")
     spells: Mapped[List["ArmySpell"]] = relationship(
@@ -283,6 +287,7 @@ class Unit(TimestampMixin, Base):
     parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("units.id"), nullable=True)
     army_id: Mapped[int] = mapped_column(ForeignKey("armies.id"), nullable=False)
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     army: Mapped[Army] = relationship(back_populates="units")
     owner: Mapped[Optional[User]] = relationship()
@@ -403,7 +408,11 @@ class Roster(TimestampMixin, Base):
 
     army: Mapped[Army] = relationship(back_populates="rosters")
     owner: Mapped[Optional[User]] = relationship(back_populates="rosters")
-    roster_units: Mapped[List["RosterUnit"]] = relationship(back_populates="roster", cascade="all, delete-orphan")
+    roster_units: Mapped[List["RosterUnit"]] = relationship(
+        back_populates="roster",
+        cascade="all, delete-orphan",
+        order_by="RosterUnit.position",
+    )
 
 
 class RosterUnit(TimestampMixin, Base):
@@ -417,6 +426,7 @@ class RosterUnit(TimestampMixin, Base):
     extra_weapons_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cached_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     custom_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     roster: Mapped[Roster] = relationship(back_populates="roster_units")
     unit: Mapped[Unit] = relationship(back_populates="roster_units")

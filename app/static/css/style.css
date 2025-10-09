@@ -30,6 +30,34 @@ body {
   background-color: rgba(13, 110, 253, 0.08);
 }
 
+.roster-unit-entry {
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.roster-unit-reorder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.roster-unit-reorder .btn {
+  padding: 0.25rem 0.5rem;
+  line-height: 1;
+}
+
+.roster-unit-item[data-roster-item] {
+  cursor: pointer;
+}
+
+.roster-unit-item[data-roster-item]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
 .roster-ability-list {
   min-height: 2rem;
 }
