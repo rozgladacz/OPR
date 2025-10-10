@@ -532,6 +532,7 @@ def create_army(
     ruleset = _get_default_ruleset(db)
     if not ruleset:
         raise HTTPException(status_code=404)
+    is_global_flag = _parse_bool(is_global)
     try:
         armory_pk = int(armory_id)
     except ValueError:
@@ -551,7 +552,7 @@ def create_army(
                 "army": None,
                 "armories": armories,
                 "selected_armory_id": selected_id,
-                "is_global": _parse_bool(is_global),
+                "is_global": is_global_flag,
                 "error": "Wybrana zbrojownia nie istnieje.",
             },
         )
@@ -568,13 +569,30 @@ def create_army(
                 "army": None,
                 "armories": armories,
                 "selected_armory_id": selected_id,
-                "is_global": _parse_bool(is_global),
+                "is_global": is_global_flag,
                 "error": "Brak uprawnień do wybranej zbrojowni.",
             },
         )
 
+    if is_global_flag and armory.owner_id is not None:
+        armories = _available_armories(db, current_user)
+        selected_id = armory.id if armory else (armories[0].id if armories else None)
+        return templates.TemplateResponse(
+            "army_form.html",
+            {
+                "request": request,
+                "user": current_user,
+                "default_ruleset": ruleset,
+                "army": None,
+                "armories": armories,
+                "selected_armory_id": selected_id,
+                "is_global": is_global_flag,
+                "error": "Globalna armia wymaga globalnej zbrojowni.",
+            },
+        )
+
     owner_id = current_user.id
-    if _parse_bool(is_global):
+    if is_global_flag:
         if not current_user.is_admin:
             raise HTTPException(
                 status_code=403,
