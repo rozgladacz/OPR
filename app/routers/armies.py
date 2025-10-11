@@ -419,6 +419,47 @@ def _parse_weapon_payload(
     return results
 
 
+def _normalized_role_slug(slug: str | None) -> str | None:
+    if not slug:
+        return None
+    normalized = costs.ability_identifier(slug)
+    if normalized in costs.ROLE_SLUGS:
+        return normalized
+    text = str(slug).strip()
+    if text.endswith("?"):
+        text = text[:-1].strip()
+    normalized = costs.ability_identifier(text)
+    if normalized in costs.ROLE_SLUGS:
+        return normalized
+    return None
+
+
+def _existing_role_entry(unit: models.Unit) -> dict[str, object] | None:
+    for entry in utils.passive_flags_to_payload(getattr(unit, "flags", None)):
+        slug = _normalized_role_slug(entry.get("slug"))
+        if not slug:
+            continue
+        return {
+            "slug": slug,
+            "is_default": bool(entry.get("is_default", True)),
+        }
+    return None
+
+
+def _infer_unit_role_slug(unit: models.Unit) -> str | None:
+    roster_unit = models.RosterUnit(unit=unit, count=1)
+    totals = costs.roster_unit_role_totals(roster_unit)
+    warrior = float(totals.get("wojownik") or 0.0)
+    shooter = float(totals.get("strzelec") or 0.0)
+    if warrior <= 0.0 and shooter <= 0.0:
+        return None
+    if shooter > warrior:
+        return "strzelec"
+    if warrior > shooter:
+        return "wojownik"
+    return "wojownik"
+
+
 def _apply_unit_form_data(
     unit: models.Unit,
     *,
@@ -432,11 +473,32 @@ def _apply_unit_form_data(
     weapon_entries: list[tuple[models.Weapon, bool, int]],
     db: Session,
 ) -> None:
+    existing_role = _existing_role_entry(unit)
+
+    sanitized_passives: list[dict] = []
+    payload_role: dict[str, object] | None = None
+    for item in passive_items:
+        if not isinstance(item, dict):
+            continue
+        slug_text = str(item.get("slug") or "").strip()
+        if not slug_text:
+            continue
+        normalized_role = _normalized_role_slug(slug_text)
+        if normalized_role:
+            payload_role = {
+                "slug": normalized_role,
+                "is_default": bool(item.get("is_default", True)),
+            }
+            continue
+        entry = dict(item)
+        entry["slug"] = slug_text
+        sanitized_passives.append(entry)
+
     unit.name = name
     unit.quality = quality
     unit.defense = defense
     unit.toughness = toughness
-    unit.flags = utils.passive_payload_to_flags(passive_items)
+    unit.flags = utils.passive_payload_to_flags(sanitized_passives)
 
     weapon_links: list[models.UnitWeapon] = []
     default_assigned = False
@@ -461,6 +523,19 @@ def _apply_unit_form_data(
         ability_registry.build_unit_abilities(db, active_items, "active")
         + ability_registry.build_unit_abilities(db, aura_items, "aura")
     )
+
+    role_entry = payload_role or existing_role
+    if role_entry is None:
+        inferred_slug = _infer_unit_role_slug(unit)
+        if inferred_slug:
+            role_entry = {"slug": inferred_slug, "is_default": True}
+
+    if role_entry:
+        final_passives = list(sanitized_passives) + [role_entry]
+    else:
+        final_passives = sanitized_passives
+
+    unit.flags = utils.passive_payload_to_flags(final_passives)
 
 
 @router.get("", response_class=HTMLResponse)
