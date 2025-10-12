@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .. import models
 from ..db import get_db
@@ -102,7 +102,14 @@ def list_rosters(
     if not current_user:
         return RedirectResponse(url="/auth/login", status_code=303)
 
-    query = select(models.Roster).order_by(models.Roster.created_at.desc())
+    query = (
+        select(models.Roster)
+        .options(
+            selectinload(models.Roster.army),
+            selectinload(models.Roster.owner),
+        )
+        .order_by(models.Roster.created_at.desc())
+    )
     if not current_user.is_admin:
         query = query.where(
             or_(
@@ -111,8 +118,6 @@ def list_rosters(
             )
         )
     rosters = db.execute(query).scalars().all()
-    for roster in rosters:
-        costs.update_cached_costs(roster.roster_units)
     mine, global_items, others = utils.split_owned(rosters, current_user)
     return templates.TemplateResponse(
         "rosters_list.html",
