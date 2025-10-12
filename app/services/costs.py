@@ -1244,7 +1244,19 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
 
 
 def roster_total(roster: models.Roster) -> float:
-    return round(sum(roster_unit_cost(ru) for ru in roster.roster_units), 2)
+    total = 0.0
+    for roster_unit in getattr(roster, "roster_units", []):
+        cost_value = getattr(roster_unit, "cached_cost", None)
+        if cost_value is None:
+            cost_value = roster_unit_cost(roster_unit)
+            if hasattr(roster_unit, "cached_cost"):
+                roster_unit.cached_cost = cost_value
+        try:
+            numeric = float(cost_value)
+        except (TypeError, ValueError):
+            continue
+        total += numeric
+    return round(total, 2)
 
 
 def update_cached_costs(roster_units: Iterable[models.RosterUnit]) -> None:

@@ -141,7 +141,9 @@ def _summaries(roster: models.Roster) -> Iterable[UnitSummary]:
         yield summary
 
 
-def collect_roster_warnings(roster: models.Roster) -> List[str]:
+def collect_roster_warnings(
+    roster: models.Roster, total_cost: float | None = None
+) -> List[str]:
     config = costs.default_ruleset_config()
     warnings_cfg = config.get("warnings", {}) if isinstance(config, dict) else {}
 
@@ -150,7 +152,10 @@ def collect_roster_warnings(roster: models.Roster) -> List[str]:
     max_share = float(warnings_cfg.get("max_share", 0.35) or 0.35)
     heroes_per_points = int(warnings_cfg.get("heroes_per_points", 500) or 500)
 
-    total_cost = float(costs.roster_total(roster))
+    if total_cost is None:
+        total_cost = float(costs.roster_total(roster))
+    else:
+        total_cost = float(total_cost)
     points_limit = 0.0
     try:
         raw_limit = getattr(roster, "points_limit", 0)
