@@ -4,13 +4,13 @@ import json
 import math
 from collections.abc import Mapping, Sequence, Set as AbstractSet
 from decimal import Decimal
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .. import models
 from ..db import get_db
@@ -193,7 +193,30 @@ def edit_roster(
 ):
     if not current_user:
         return RedirectResponse(url="/auth/login", status_code=303)
-    roster = db.get(models.Roster, roster_id)
+    roster_stmt = (
+        select(models.Roster)
+        .options(
+            selectinload(models.Roster.roster_units).options(
+                selectinload(models.RosterUnit.unit).options(
+                    selectinload(models.Unit.weapon_links).selectinload(
+                        models.UnitWeapon.weapon
+                    ),
+                    selectinload(models.Unit.default_weapon),
+                    selectinload(models.Unit.abilities).selectinload(
+                        models.UnitAbility.ability
+                    ),
+                ),
+                selectinload(models.RosterUnit.selected_weapon),
+            )
+        )
+        .where(models.Roster.id == roster_id)
+    )
+    roster = (
+        db.execute(roster_stmt)
+        .scalars()
+        .unique()
+        .one_or_none()
+    )
     if not roster:
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
@@ -201,17 +224,49 @@ def edit_roster(
     selected_id = request.query_params.get("selected")
 
     costs.update_cached_costs(roster.roster_units)
+    available_units_stmt = (
+        select(models.Unit)
+        .where(models.Unit.army_id == roster.army_id)
+        .options(
+            selectinload(models.Unit.weapon_links).selectinload(
+                models.UnitWeapon.weapon
+            ),
+            selectinload(models.Unit.default_weapon),
+            selectinload(models.Unit.abilities).selectinload(
+                models.UnitAbility.ability
+            ),
+        )
+        .order_by(models.Unit.name)
+    )
     available_units = (
-        db.execute(select(models.Unit).where(models.Unit.army_id == roster.army_id).order_by(models.Unit.name))
+        db.execute(available_units_stmt)
         .scalars()
+        .unique()
         .all()
     )
+    unit_data_cache: dict[int, dict[str, Any]] = {}
+
+    def _unit_cache_value(unit: models.Unit, key: str, factory: Callable[[], Any]) -> Any:
+        store = unit_data_cache.setdefault(unit.id, {})
+        if key in store:
+            return store[key]
+        value = factory()
+        store[key] = value
+        return value
     available_unit_options = []
     for unit in available_units:
-        weapon_options = _unit_weapon_options(unit)
-        passive_items = _passive_entries(unit)
-        active_items = _ability_entries(unit, "active")
-        aura_items = _ability_entries(unit, "aura")
+        weapon_options = _unit_cache_value(
+            unit, "weapon_options", lambda: _unit_weapon_options(unit)
+        )
+        passive_items = _unit_cache_value(
+            unit, "passive_entries", lambda: _passive_entries(unit)
+        )
+        active_items = _unit_cache_value(
+            unit, "ability_active", lambda: _ability_entries(unit, "active")
+        )
+        aura_items = _unit_cache_value(
+            unit, "ability_aura", lambda: _ability_entries(unit, "aura")
+        )
         available_unit_options.append(
             {
                 "unit": unit,
@@ -227,10 +282,18 @@ def edit_roster(
     roster_items = []
     for roster_unit in roster.roster_units:
         unit = roster_unit.unit
-        weapon_options = _unit_weapon_options(unit)
-        passive_items = _passive_entries(unit)
-        active_items = _ability_entries(unit, "active")
-        aura_items = _ability_entries(unit, "aura")
+        weapon_options = _unit_cache_value(
+            unit, "weapon_options", lambda: _unit_weapon_options(unit)
+        )
+        passive_items = _unit_cache_value(
+            unit, "passive_entries", lambda: _passive_entries(unit)
+        )
+        active_items = _unit_cache_value(
+            unit, "ability_active", lambda: _ability_entries(unit, "active")
+        )
+        aura_items = _unit_cache_value(
+            unit, "ability_aura", lambda: _ability_entries(unit, "aura")
+        )
         loadout = _roster_unit_loadout(
             roster_unit,
             weapon_options=weapon_options,
