@@ -9,7 +9,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from .. import models
@@ -681,10 +681,17 @@ def delete_roster_unit(
         raise HTTPException(status_code=404)
     _ensure_roster_edit_access(roster, current_user)
 
+    removed_position = roster_unit.position or 0
     db.delete(roster_unit)
     db.flush()
-    remaining_units = _ordered_roster_units(db, roster)
-    _resequence_roster_units(remaining_units)
+    db.execute(
+        update(models.RosterUnit)
+        .where(
+            models.RosterUnit.roster_id == roster.id,
+            models.RosterUnit.position > removed_position,
+        )
+        .values(position=models.RosterUnit.position - 1)
+    )
     db.commit()
     return RedirectResponse(url=f"/rosters/{roster.id}", status_code=303)
 def _default_loadout_summary(unit: models.Unit) -> str:
