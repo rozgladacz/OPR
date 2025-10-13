@@ -27,43 +27,78 @@
 <div class="collapse mb-4" id="army-settings">
   <div class="card">
     <div class="card-body">
-      <h5 class="card-title">Informacje o armii</h5>
-      <form method="post" action="/armies/{{ army.id }}/update" class="row g-3 align-items-end">
-        <div class="col-md-4">
-          <label class="form-label" for="name">Nazwa</label>
-          <input class="form-control" id="name" name="name" value="{{ army.name }}" required {% if not can_edit %}disabled{% endif %} />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Zbrojownia</label>
-          <input class="form-control" value="{{ army.armory.name }}" disabled />
-          <div class="form-text">
-            {% if army.armory.parent %}
-            Wariant z listy {{ army.armory.parent.name }}.
-            {% else %}
-            Zbrojownia określa dostępne uzbrojenie armii.
-            {% endif %}
+      <div class="row g-4">
+        <div class="col-12 col-xl-4">
+          <h5 class="card-title">Informacje o armii</h5>
+          <form method="post" action="/armies/{{ army.id }}/update" class="row g-3 align-items-end">
+            <div class="col-md-4">
+              <label class="form-label" for="name">Nazwa</label>
+              <input class="form-control" id="name" name="name" value="{{ army.name }}" required {% if not can_edit %}disabled{% endif %} />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Zbrojownia</label>
+              <input class="form-control" value="{{ army.armory.name }}" disabled />
+              <div class="form-text">
+                {% if army.armory.parent %}
+                Wariant z listy {{ army.armory.parent.name }}.
+                {% else %}
+                Zbrojownia określa dostępne uzbrojenie armii.
+                {% endif %}
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Zestaw zasad</label>
+              <input class="form-control" value="{{ army.ruleset.name }}" disabled />
+            </div>
+            <div class="col-12">
+              <button class="btn btn-primary" type="submit" {% if not can_edit %}disabled{% endif %}>Zapisz</button>
+            </div>
+          </form>
+          {% if can_delete %}
+          <hr class="my-4" />
+          <form method="post" action="/armies/{{ army.id }}/delete" onsubmit="return confirm('Usunąć armię? Tej operacji nie można cofnąć.');">
+            <button class="btn btn-outline-danger" type="submit">Usuń armię</button>
+          </form>
+          {% endif %}
+          {% if not can_edit %}
+          <div class="alert alert-info mt-3">
+            Jest to armia globalna. Tylko administrator może wprowadzać w niej zmiany.
           </div>
+          {% endif %}
         </div>
-        <div class="col-md-4">
-          <label class="form-label">Zestaw zasad</label>
-          <input class="form-control" value="{{ army.ruleset.name }}" disabled />
+        <div class="col-12 col-xl-4">
+          <h5 class="card-title">Utwórz kopię</h5>
+          <form method="post" action="/armies/{{ army.id }}/copy">
+            <div class="mb-3">
+              <label class="form-label" for="copy-name">Nazwa kopii</label>
+              <input class="form-control" id="copy-name" name="name" value="{{ army.name }} (kopia)" required />
+            </div>
+            {% if user and user.is_admin %}
+            <div class="form-check mb-3">
+              <input class="form-check-input" id="copy-global" name="is_global" type="checkbox" />
+              <label class="form-check-label" for="copy-global">Utwórz jako globalną</label>
+            </div>
+            {% endif %}
+            <button class="btn btn-outline-primary" type="submit">Stwórz kopię</button>
+          </form>
         </div>
-        <div class="col-12">
-          <button class="btn btn-primary" type="submit" {% if not can_edit %}disabled{% endif %}>Zapisz</button>
+        <div class="col-12 col-xl-4">
+          <h5 class="card-title">Utwórz wariant</h5>
+          <form method="post" action="/armies/{{ army.id }}/variant">
+            <div class="mb-3">
+              <label class="form-label" for="variant-name">Nazwa wariantu</label>
+              <input class="form-control" id="variant-name" name="name" value="{{ army.name }} - wariant" required />
+            </div>
+            {% if user and user.is_admin %}
+            <div class="form-check mb-3">
+              <input class="form-check-input" id="variant-global" name="is_global" type="checkbox" />
+              <label class="form-check-label" for="variant-global">Utwórz jako globalny wariant</label>
+            </div>
+            {% endif %}
+            <button class="btn btn-outline-primary" type="submit">Stwórz wariant</button>
+          </form>
         </div>
-      </form>
-      {% if can_delete %}
-      <hr class="my-4" />
-      <form method="post" action="/armies/{{ army.id }}/delete" onsubmit="return confirm('Usunąć armię? Tej operacji nie można cofnąć.');">
-        <button class="btn btn-outline-danger" type="submit">Usuń armię</button>
-      </form>
-      {% endif %}
-      {% if not can_edit %}
-      <div class="alert alert-info mt-3">
-        Jest to armia globalna. Tylko administrator może wprowadzać w niej zmiany.
-
       </div>
-      {% endif %}
     </div>
   </div>
 </div>
