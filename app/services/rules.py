@@ -22,7 +22,7 @@ class UnitSummary:
     hero_models: int
 
 
-def _unit_is_hero(
+def unit_is_hero(
     unit: models.Unit, roster_unit: models.RosterUnit | None = None
 ) -> bool:
     for link in getattr(unit, "abilities", []):
@@ -136,7 +136,7 @@ def _summaries(roster: models.Roster) -> Iterable[UnitSummary]:
             total_cost=total_cost,
             active_count=active_cnt,
             has_aura=_has_aura(unit),
-            hero_models=models_count if _unit_is_hero(unit, roster_unit) else 0,
+            hero_models=models_count if unit_is_hero(unit, roster_unit) else 0,
         )
         yield summary
 

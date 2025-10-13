@@ -16,7 +16,7 @@ from .. import models
 from ..db import get_db
 from ..security import get_current_user
 from ..services import ability_registry, costs, utils
-from ..services.rules import collect_roster_warnings
+from ..services.rules import collect_roster_warnings, unit_is_hero
 
 router = APIRouter(prefix="/rosters", tags=["rosters"])
 templates = Jinja2Templates(directory="app/templates")
@@ -329,6 +329,14 @@ def edit_roster(
                 "classification": classification,
             }
         )
+    non_hero_unit_count = 0
+    for item in roster_items:
+        roster_unit = item.get("instance")
+        unit = getattr(roster_unit, "unit", None)
+        if roster_unit is None or unit is None:
+            continue
+        if not unit_is_hero(unit, roster_unit):
+            non_hero_unit_count += 1
     total_cost = costs.roster_total(roster)
     warnings = collect_roster_warnings(roster, total_cost=total_cost)
     can_edit = current_user.is_admin or roster.owner_id == current_user.id
@@ -342,6 +350,7 @@ def edit_roster(
             "roster": roster,
             "available_units": available_unit_options,
             "roster_items": roster_items,
+            "non_hero_unit_count": non_hero_unit_count,
             "total_cost": total_cost,
             "error": None,
             "can_edit": can_edit,
