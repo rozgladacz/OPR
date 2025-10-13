@@ -84,6 +84,66 @@ def _ordered_army_units(db: Session, army: models.Army) -> list[models.Unit]:
     )
 
 
+def _clone_army_contents(
+    db: Session,
+    source: models.Army,
+    target: models.Army,
+    *,
+    link_parent_units: bool,
+) -> None:
+    unit_owner_id = target.owner_id
+    for unit in _ordered_army_units(db, source):
+        cloned_unit = models.Unit(
+            army=target,
+            owner_id=unit_owner_id,
+            name=unit.name,
+            quality=unit.quality,
+            defense=unit.defense,
+            toughness=unit.toughness,
+            flags=unit.flags,
+            default_weapon_id=unit.default_weapon_id,
+            position=unit.position,
+        )
+        if link_parent_units:
+            cloned_unit.parent = unit
+        db.add(cloned_unit)
+
+        for ability_link in getattr(unit, "abilities", []) or []:
+            db.add(
+                models.UnitAbility(
+                    unit=cloned_unit,
+                    ability_id=ability_link.ability_id,
+                    params_json=ability_link.params_json,
+                )
+            )
+
+        for weapon_link in getattr(unit, "weapon_links", []) or []:
+            db.add(
+                models.UnitWeapon(
+                    unit=cloned_unit,
+                    weapon_id=weapon_link.weapon_id,
+                    is_default=weapon_link.is_default,
+                    default_count=weapon_link.default_count,
+                )
+            )
+
+    for spell in list(getattr(source, "spells", []) or []):
+        db.add(
+            models.ArmySpell(
+                army=target,
+                kind=spell.kind,
+                ability_id=spell.ability_id,
+                ability_value=spell.ability_value,
+                weapon_id=spell.weapon_id,
+                base_label=spell.base_label,
+                description=spell.description,
+                cost=spell.cost,
+                position=spell.position,
+                custom_name=spell.custom_name,
+            )
+        )
+
+
 def _resequence_army_units(units: list[models.Unit]) -> None:
     for index, unit in enumerate(units):
         unit.position = index
@@ -799,6 +859,89 @@ def delete_army(
     db.delete(army)
     db.commit()
     return RedirectResponse(url="/armies", status_code=303)
+
+
+@router.post("/{army_id}/copy")
+def copy_army(
+    army_id: int,
+    name: str = Form(...),
+    is_global: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    source = db.get(models.Army, army_id)
+    if not source:
+        raise HTTPException(status_code=404)
+    _ensure_army_view_access(source, current_user)
+
+    cleaned_name = name.strip()
+    if not cleaned_name:
+        raise HTTPException(status_code=400, detail="Nazwa kopii jest wymagana")
+
+    owner_id = current_user.id
+    if _parse_bool(is_global):
+        if not current_user.is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="Tylko administrator może tworzyć globalne armie",
+            )
+        owner_id = None
+
+    new_army = models.Army(
+        name=cleaned_name,
+        owner_id=owner_id,
+        ruleset=source.ruleset,
+        armory=source.armory,
+    )
+    db.add(new_army)
+    db.flush()
+
+    _clone_army_contents(db, source, new_army, link_parent_units=False)
+    db.commit()
+
+    return RedirectResponse(url=f"/armies/{new_army.id}", status_code=303)
+
+
+@router.post("/{army_id}/variant")
+def create_army_variant(
+    army_id: int,
+    name: str = Form(...),
+    is_global: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    base_army = db.get(models.Army, army_id)
+    if not base_army:
+        raise HTTPException(status_code=404)
+    _ensure_army_view_access(base_army, current_user)
+
+    cleaned_name = name.strip()
+    if not cleaned_name:
+        raise HTTPException(status_code=400, detail="Nazwa wariantu jest wymagana")
+
+    owner_id = current_user.id
+    if _parse_bool(is_global):
+        if not current_user.is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="Tylko administrator może tworzyć globalne armie",
+            )
+        owner_id = None
+
+    variant = models.Army(
+        name=cleaned_name,
+        owner_id=owner_id,
+        ruleset=base_army.ruleset,
+        armory=base_army.armory,
+        parent=base_army,
+    )
+    db.add(variant)
+    db.flush()
+
+    _clone_army_contents(db, base_army, variant, link_parent_units=True)
+    db.commit()
+
+    return RedirectResponse(url=f"/armies/{variant.id}", status_code=303)
 
 
 @router.get("/{army_id}/spells", response_class=HTMLResponse)
