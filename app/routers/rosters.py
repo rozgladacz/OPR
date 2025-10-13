@@ -325,7 +325,7 @@ def edit_roster(
             }
         )
     total_cost = costs.roster_total(roster)
-    warnings = collect_roster_warnings(roster)
+    warnings = collect_roster_warnings(roster, total_cost=total_cost)
     can_edit = current_user.is_admin or roster.owner_id == current_user.id
     can_delete = can_edit
 
@@ -581,7 +581,7 @@ def update_roster_unit(
         )
         selected_actives = _selected_ability_entries(loadout, active_items, "active")
         selected_auras = _selected_ability_entries(loadout, aura_items, "aura")
-        warnings = collect_roster_warnings(roster)
+        warnings = collect_roster_warnings(roster, total_cost=total_cost)
         payload = {
             "unit": {
                 "id": roster_unit.id,
