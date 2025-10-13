@@ -352,7 +352,8 @@ function initAbilityPicker(root) {
       const moveUpBtn = document.createElement('button');
       moveUpBtn.type = 'button';
       moveUpBtn.className = 'btn btn-outline-secondary btn-sm';
-      moveUpBtn.textContent = 'Góra';
+      moveUpBtn.textContent = '↑';
+      moveUpBtn.setAttribute('aria-label', 'Przesuń w górę');
       moveUpBtn.disabled = index === 0;
       moveUpBtn.addEventListener('click', (event) => {
         event.preventDefault();
@@ -361,7 +362,8 @@ function initAbilityPicker(root) {
       const moveDownBtn = document.createElement('button');
       moveDownBtn.type = 'button';
       moveDownBtn.className = 'btn btn-outline-secondary btn-sm';
-      moveDownBtn.textContent = 'Dół';
+      moveDownBtn.textContent = '↓';
+      moveDownBtn.setAttribute('aria-label', 'Przesuń w dół');
       moveDownBtn.disabled = index === items.length - 1;
       moveDownBtn.addEventListener('click', (event) => {
         event.preventDefault();
@@ -1533,7 +1535,8 @@ function initWeaponPicker(root) {
       const moveUpBtn = document.createElement('button');
       moveUpBtn.type = 'button';
       moveUpBtn.className = 'btn btn-outline-secondary btn-sm';
-      moveUpBtn.textContent = 'Góra';
+      moveUpBtn.textContent = '↑';
+      moveUpBtn.setAttribute('aria-label', 'Przesuń w górę');
       moveUpBtn.disabled = index === 0;
       moveUpBtn.addEventListener('click', (event) => {
         event.preventDefault();
@@ -1542,7 +1545,8 @@ function initWeaponPicker(root) {
       const moveDownBtn = document.createElement('button');
       moveDownBtn.type = 'button';
       moveDownBtn.className = 'btn btn-outline-secondary btn-sm';
-      moveDownBtn.textContent = 'Dół';
+      moveDownBtn.textContent = '↓';
+      moveDownBtn.setAttribute('aria-label', 'Przesuń w dół');
       moveDownBtn.disabled = index === items.length - 1;
       moveDownBtn.addEventListener('click', (event) => {
         event.preventDefault();
