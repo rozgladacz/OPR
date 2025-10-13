@@ -118,3 +118,48 @@ def test_apply_unit_form_data_preserves_existing_role_classification() -> None:
     )
 
     assert _role_slugs_from_flags(unit.flags) == {"strzelec"}
+
+
+def test_passive_payload_handles_mandatory_flag() -> None:
+    flags = utils.passive_payload_to_flags(
+        [
+            {"slug": "bohater", "is_default": False, "is_mandatory": True},
+        ]
+    )
+
+    assert flags == "bohater!"
+
+    payload = utils.passive_flags_to_payload(flags)
+
+    assert payload and payload[0]["slug"].casefold() == "bohater"
+    assert payload[0]["is_default"] is True
+    assert payload[0]["is_mandatory"] is True
+
+
+def test_apply_unit_form_data_keeps_optional_trait_optional() -> None:
+    unit = models.Unit(
+        name="Champion",
+        quality=2,
+        defense=2,
+        toughness=4,
+        army_id=1,
+    )
+
+    armies._apply_unit_form_data(
+        unit,
+        name=unit.name,
+        quality=unit.quality,
+        defense=unit.defense,
+        toughness=unit.toughness,
+        passive_items=[{"slug": "bohater", "is_default": False, "is_mandatory": False}],
+        active_items=[],
+        aura_items=[],
+        weapon_entries=[],
+        db=None,  # type: ignore[arg-type]
+    )
+
+    payload = utils.passive_flags_to_payload(unit.flags)
+
+    assert payload and payload[0]["slug"] == "bohater"
+    assert payload[0]["is_default"] is False
+    assert payload[0]["is_mandatory"] is False

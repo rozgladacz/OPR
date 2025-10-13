@@ -12,6 +12,8 @@ function initAbilityPicker(root) {
   const listEl = root.querySelector('.ability-picker-list');
   const allowDefaultToggle = root.dataset.defaultToggle === 'true';
   const defaultInitial = root.dataset.defaultInitial === 'true';
+  const allowMandatoryToggle = root.dataset.mandatoryToggle === 'true';
+  const mandatoryInitial = root.dataset.mandatoryInitial === 'true';
   const allowCustomName = root.dataset.allowCustomName === 'true';
   const hideOwnedAbilities = root.dataset.hideOwnedAbilities === 'true';
   let isUpdatingSelectOptions = false;
@@ -70,7 +72,13 @@ function initAbilityPicker(root) {
     const rawLabel = entry.raw !== undefined && entry.raw !== null ? String(entry.raw) : '';
     const label = entry.label || formatLabel(definition, rawValue, rawLabel);
     const abilityId = entry.ability_id ?? (definition && Object.prototype.hasOwnProperty.call(definition, 'ability_id') ? definition.ability_id : null);
-    const isDefault = allowDefaultToggle ? Boolean(entry.is_default ?? defaultInitial) : false;
+    let isDefault = allowDefaultToggle ? Boolean(entry.is_default ?? defaultInitial) : false;
+    const isMandatory = allowMandatoryToggle
+      ? Boolean(entry.is_mandatory ?? mandatoryInitial)
+      : Boolean(entry.is_mandatory ?? false);
+    if (allowDefaultToggle && isMandatory && !isDefault) {
+      isDefault = true;
+    }
     const baseLabel = entry.base_label || label || rawLabel || rawValue;
     let customName = '';
     if (typeof entry.custom_name === 'string') {
@@ -85,6 +93,7 @@ function initAbilityPicker(root) {
       custom_name: customName,
       ability_id: abilityId,
       is_default: isDefault,
+      is_mandatory: isMandatory,
       description: entry.description || descriptionFor({ slug }),
     };
   }
@@ -145,6 +154,9 @@ function initAbilityPicker(root) {
         ability_id: entry.ability_id ?? null,
         is_default: entry.is_default ?? false,
       };
+      if (allowMandatoryToggle || entry.is_mandatory) {
+        payload.is_mandatory = Boolean(entry.is_mandatory);
+      }
       if (allowCustomName) {
         const customName = typeof entry.custom_name === 'string' ? entry.custom_name.trim() : '';
         if (customName) {
@@ -233,25 +245,83 @@ function initAbilityPicker(root) {
 
       row.appendChild(labelWrapper);
 
-      if (allowDefaultToggle) {
-        const defaultWrapper = document.createElement('div');
-        defaultWrapper.className = 'form-check mb-0';
-        const defaultInput = document.createElement('input');
-        defaultInput.type = 'checkbox';
-        defaultInput.className = 'form-check-input';
-        defaultInput.id = `ability-default-${index}-${Math.random().toString(16).slice(2)}`;
-        defaultInput.checked = Boolean(item.is_default);
-        defaultInput.addEventListener('change', () => {
-          item.is_default = defaultInput.checked;
-          updateHidden();
-        });
-        const defaultLabel = document.createElement('label');
-        defaultLabel.className = 'form-check-label small';
-        defaultLabel.setAttribute('for', defaultInput.id);
-        defaultLabel.textContent = 'Domyślna';
-        defaultWrapper.appendChild(defaultInput);
-        defaultWrapper.appendChild(defaultLabel);
-        row.appendChild(defaultWrapper);
+      if (allowDefaultToggle || allowMandatoryToggle) {
+        const toggleWrapper = document.createElement('div');
+        toggleWrapper.className = 'd-flex flex-column gap-1 mb-0';
+
+        let defaultInput;
+        let mandatoryInput;
+
+        const syncDefaultState = () => {
+          if (!allowDefaultToggle || !defaultInput) {
+            return;
+          }
+          const shouldDisable = allowMandatoryToggle && Boolean(item.is_mandatory);
+          defaultInput.disabled = shouldDisable;
+          if (shouldDisable) {
+            defaultInput.checked = true;
+            item.is_default = true;
+          }
+        };
+
+        if (allowDefaultToggle) {
+          const defaultWrapper = document.createElement('div');
+          defaultWrapper.className = 'form-check mb-0';
+          defaultInput = document.createElement('input');
+          defaultInput.type = 'checkbox';
+          defaultInput.className = 'form-check-input';
+          defaultInput.id = `ability-default-${index}-${Math.random().toString(16).slice(2)}`;
+          defaultInput.checked = Boolean(item.is_default);
+          defaultInput.addEventListener('change', () => {
+            const checked = defaultInput.checked;
+            item.is_default = checked;
+            if (!checked && allowMandatoryToggle && item.is_mandatory) {
+              item.is_mandatory = false;
+              if (mandatoryInput) {
+                mandatoryInput.checked = false;
+              }
+              syncDefaultState();
+            }
+            updateHidden();
+          });
+          const defaultLabel = document.createElement('label');
+          defaultLabel.className = 'form-check-label small';
+          defaultLabel.setAttribute('for', defaultInput.id);
+          defaultLabel.textContent = 'Domyślna';
+          defaultWrapper.appendChild(defaultInput);
+          defaultWrapper.appendChild(defaultLabel);
+          toggleWrapper.appendChild(defaultWrapper);
+        }
+
+        if (allowMandatoryToggle) {
+          const mandatoryWrapper = document.createElement('div');
+          mandatoryWrapper.className = 'form-check mb-0';
+          mandatoryInput = document.createElement('input');
+          mandatoryInput.type = 'checkbox';
+          mandatoryInput.className = 'form-check-input';
+          mandatoryInput.id = `ability-mandatory-${index}-${Math.random().toString(16).slice(2)}`;
+          mandatoryInput.checked = Boolean(item.is_mandatory);
+          mandatoryInput.addEventListener('change', () => {
+            const checked = mandatoryInput.checked;
+            item.is_mandatory = checked;
+            if (checked && allowDefaultToggle && defaultInput && !defaultInput.checked) {
+              defaultInput.checked = true;
+              item.is_default = true;
+            }
+            syncDefaultState();
+            updateHidden();
+          });
+          const mandatoryLabel = document.createElement('label');
+          mandatoryLabel.className = 'form-check-label small';
+          mandatoryLabel.setAttribute('for', mandatoryInput.id);
+          mandatoryLabel.textContent = 'Obowiązkowe';
+          mandatoryWrapper.appendChild(mandatoryInput);
+          mandatoryWrapper.appendChild(mandatoryLabel);
+          toggleWrapper.appendChild(mandatoryWrapper);
+        }
+
+        syncDefaultState();
+        row.appendChild(toggleWrapper);
       }
 
       const removeBtn = document.createElement('button');
@@ -493,7 +563,6 @@ const AP_CORROSIVE = { '-1': 0.05, 0: 0.05, 1: 0.1, 2: 0.25, 3: 0.4, 4: 0.5, 5: 
 const BLAST_MULTIPLIER = { 2: 1.95, 3: 2.8, 6: 4.3 };
 const DEADLY_MULTIPLIER = { 2: 1.9, 3: 2.6, 6: 3.8 };
 const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
-const LOCKED_PASSIVE_SLUGS = new Set(['bohater', 'samolot']);
 const ABILITY_NAME_MAX_LENGTH = 60;
 
 function splitTraits(text) {
@@ -529,6 +598,7 @@ function normalizeName(text) {
       .replace(/ź/g, 'z');
   }
   value = value.replace(/[-_]/g, ' ');
+  value = value.replace(/[!?]+$/g, '');
   value = value.replace(/\s+/g, ' ').trim();
   return value.toLowerCase();
 }
@@ -558,8 +628,8 @@ function abilityIdentifier(text) {
     }
   });
   base = base.replace(/[“”]/g, '"');
-  if (base.endsWith('?')) {
-    base = base.slice(0, -1);
+  while (base.endsWith('?') || base.endsWith('!')) {
+    base = base.slice(0, -1).trim();
   }
   return normalizeName(base);
 }
@@ -570,8 +640,12 @@ function passiveIdentifier(text) {
     return ident;
   }
   const norm = normalizeName(text);
-  if (norm.endsWith('?')) {
-    return norm.slice(0, -1);
+  let trimmed = norm;
+  while (trimmed.endsWith('?') || trimmed.endsWith('!')) {
+    trimmed = trimmed.slice(0, -1).trim();
+  }
+  if (trimmed) {
+    return trimmed;
   }
   return norm;
 }
@@ -610,8 +684,8 @@ function flagsToAbilityList(flags) {
     if (!name) {
       return;
     }
-    if (name.endsWith('?')) {
-      name = name.slice(0, -1);
+    while (name.endsWith('?') || name.endsWith('!')) {
+      name = name.slice(0, -1).trim();
     }
     const slug = abilityIdentifier(name) || normalizeName(name);
     if (typeof value === 'boolean') {
@@ -735,10 +809,17 @@ function buildWeaponFlags(baseFlags, passiveItems, passiveState) {
     }
     const slug = String(entry.slug);
     const ident = passiveIdentifier(slug);
+    const isMandatory = Boolean(entry.is_mandatory);
     const defaultCount = Number(entry.default_count ?? (entry.is_default ? 1 : 0));
     const defaultFlag = Number.isFinite(defaultCount) && defaultCount > 0 ? 1 : 0;
     const stored = stateMap.get(slug);
-    const selectedFlag = Number.isFinite(stored) ? (stored > 0 ? 1 : 0) : defaultFlag;
+    const selectedFlag = isMandatory
+      ? 1
+      : Number.isFinite(stored)
+        ? stored > 0
+          ? 1
+          : 0
+        : defaultFlag;
     const enabled = selectedFlag > 0;
     const keys = identifierKeys.get(ident) || [];
     if (enabled) {
@@ -1470,7 +1551,7 @@ function renderPassiveEditor(
     }
     const slug = String(entry.slug);
     const normalizedSlug = slug.trim().toLowerCase();
-    const isLockedAbility = LOCKED_PASSIVE_SLUGS.has(normalizedSlug);
+    const isLockedAbility = Boolean(entry.is_mandatory);
     let currentValue = Number(stateMap.get(slug));
     if (!Number.isFinite(currentValue)) {
       currentValue = Number(entry.default_count ?? (entry.is_default ? 1 : 0));

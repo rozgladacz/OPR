@@ -760,7 +760,8 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
         label = item.get("label") or slug
         value = item.get("value")
         description = item.get("description") or ""
-        is_default = bool(item.get("is_default", False))
+        is_mandatory = bool(item.get("is_mandatory", False))
+        is_default = bool(item.get("is_default", False)) or is_mandatory
         try:
             cost_value = float(
                 costs.ability_cost_from_name(
@@ -794,6 +795,7 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
                 "cost": cost_value,
                 "is_default": is_default,
                 "default_count": 1 if is_default else 0,
+                "is_mandatory": is_mandatory,
             }
         )
     return entries
@@ -921,7 +923,10 @@ def _selected_passive_entries(
                 seen_identifiers.add(identifier)
             continue
         default_flag = 1 if entry.get("is_default") or entry.get("default_count") else 0
+        is_mandatory = bool(entry.get("is_mandatory", False))
         selected_flag = flags.get(slug, default_flag)
+        if is_mandatory:
+            selected_flag = 1
         if selected_flag <= 0:
             seen_slugs.add(slug)
             if identifier:
@@ -930,6 +935,8 @@ def _selected_passive_entries(
         item = dict(entry)
         item["selected"] = True
         item["count"] = 1
+        if is_mandatory:
+            item["is_mandatory"] = True
         selected.append(item)
         seen_slugs.add(slug)
         if identifier:
@@ -1001,7 +1008,7 @@ def _role_slug_map(unit: models.Unit | None) -> dict[str, str]:
         value = str(raw_key).strip()
         if not value:
             continue
-        if value.endswith("?"):
+        while value.endswith(("?", "!")):
             value = value[:-1].strip()
         identifier = costs.ability_identifier(value)
         if identifier in costs.ROLE_SLUGS and identifier not in mapping:
@@ -1056,7 +1063,7 @@ def _apply_classification_to_loadout(
         if target_key is None:
             target_key = target_identifier
         cleaned_key = str(target_key).strip()
-        if cleaned_key.endswith("?"):
+        while cleaned_key.endswith(("?", "!")):
             cleaned_key = cleaned_key[:-1].strip()
         passive_section[cleaned_key or target_identifier] = 1
 
@@ -1326,7 +1333,8 @@ def _default_loadout_payload(
         slug = entry.get("slug")
         if not slug:
             continue
-        payload["passive"][str(slug)] = 1 if entry.get("is_default") else 0
+        is_mandatory = bool(entry.get("is_mandatory", False))
+        payload["passive"][str(slug)] = 1 if (entry.get("is_default") or is_mandatory) else 0
 
     return payload
 
@@ -1464,12 +1472,15 @@ def _sanitize_loadout(
     aura_items: list[dict] | None = None,
     passive_items: list[dict] | None = None,
 ) -> dict[str, Any]:
+    resolved_passive_items = (
+        passive_items if passive_items is not None else _passive_entries(unit)
+    )
     defaults = _default_loadout_payload(
         unit,
         weapon_options=weapon_options,
         active_items=active_items,
         aura_items=aura_items,
-        passive_items=passive_items,
+        passive_items=resolved_passive_items,
     )
     mode_value: str | None = None
     if isinstance(payload, dict):
@@ -1632,6 +1643,20 @@ def _sanitize_loadout(
     _merge("active")
     _merge("aura")
     _merge("passive", clamp=1)
+
+    passive_defaults = defaults.get("passive")
+    if not isinstance(passive_defaults, dict):
+        passive_defaults = {}
+        defaults["passive"] = passive_defaults
+    for entry in resolved_passive_items:
+        if not entry:
+            continue
+        slug_value = str(entry.get("slug") or "").strip()
+        if not slug_value:
+            continue
+        if not entry.get("is_mandatory"):
+            continue
+        passive_defaults[slug_value] = 1
 
     for section in ("active", "aura"):
         defaults[f"{section}_labels"] = normalized_label_maps.get(section, {})

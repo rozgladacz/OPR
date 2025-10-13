@@ -426,7 +426,7 @@ def _normalized_role_slug(slug: str | None) -> str | None:
     if normalized in costs.ROLE_SLUGS:
         return normalized
     text = str(slug).strip()
-    if text.endswith("?"):
+    while text.endswith(("?", "!")):
         text = text[:-1].strip()
     normalized = costs.ability_identifier(text)
     if normalized in costs.ROLE_SLUGS:

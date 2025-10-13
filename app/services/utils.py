@@ -17,8 +17,6 @@ HIDDEN_TRAIT_SLUGS: set[str] = set()
 # should never be presented in the UI when editing armies/rosters.  They are
 # filtered out anywhere `_is_hidden_trait` is used.
 HIDDEN_TRAIT_SLUGS: set[str] = {"wojownik", "strzelec"}
-
-
 def round_points(value: Any) -> int:
     if value is None:
         return 0
@@ -74,10 +72,21 @@ def passive_flags_to_payload(text: str | None) -> list[dict]:
         if not raw_slug:
             continue
         is_default = True
+        is_mandatory = False
         slug_text = raw_slug
-        if raw_slug.endswith("?"):
-            slug_text = raw_slug[:-1]
-            is_default = False
+        while slug_text.endswith(("?", "!")):
+            if slug_text.endswith("!"):
+                slug_text = slug_text[:-1].strip()
+                is_mandatory = True
+                continue
+            if slug_text.endswith("?"):
+                slug_text = slug_text[:-1].strip()
+                is_default = False
+                continue
+            break
+        slug_text = slug_text.strip()
+        if not slug_text:
+            continue
         definition = ability_catalog.find_definition(slug_text)
         if isinstance(value, bool) and value:
             value_text = None
@@ -100,6 +109,7 @@ def passive_flags_to_payload(text: str | None) -> list[dict]:
                     value_text,
                 ),
                 "is_default": is_default,
+                "is_mandatory": is_mandatory,
             }
         )
     return payload
@@ -112,10 +122,20 @@ def passive_payload_to_flags(items: list[dict]) -> str:
         if not slug:
             continue
         value = item.get("value")
-        is_default = item.get("is_default")
-        target_slug = slug
-        if isinstance(is_default, bool) and not is_default:
-            target_slug = f"{slug}?"
+        is_default_raw = item.get("is_default")
+        is_mandatory = bool(item.get("is_mandatory", False))
+        if isinstance(is_default_raw, bool):
+            is_default = is_default_raw
+        else:
+            is_default = True
+        if is_mandatory:
+            is_default = True
+        suffix = ""
+        if not is_default:
+            suffix += "?"
+        if is_mandatory:
+            suffix += "!"
+        target_slug = f"{slug}{suffix}" if suffix else slug
         if value is None or (isinstance(value, str) and not value.strip()):
             entries.append(target_slug)
         else:
