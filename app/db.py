@@ -173,6 +173,23 @@ def _initialize_roster_unit_positions(connection) -> None:
         offsets[roster_id] = position + 1
 
 
+def _initialize_unit_ability_positions(connection) -> None:
+    logger.info("Initializing unit ability positions")
+    rows = connection.execute(
+        text("SELECT id, unit_id FROM unit_abilities ORDER BY unit_id, id")
+    ).all()
+    offsets: dict[int, int] = {}
+    for row in rows:
+        mapping = row._mapping
+        unit_id = mapping["unit_id"]
+        position = offsets.get(unit_id, 0)
+        connection.execute(
+            text("UPDATE unit_abilities SET position = :position WHERE id = :id"),
+            {"position": position, "id": mapping["id"]},
+        )
+        offsets[unit_id] = position + 1
+
+
 def _migrate_schema() -> None:
     from sqlalchemy import inspect
 
@@ -238,6 +255,18 @@ def _migrate_schema() -> None:
                     )
                 )
                 _initialize_roster_unit_positions(connection)
+
+        if "unit_abilities" in table_names:
+            columns = inspector.get_columns("unit_abilities")
+            column_names = {column["name"] for column in columns}
+            if "position" not in column_names:
+                logger.info("Adding position column to unit_abilities table")
+                connection.execute(
+                    text(
+                        "ALTER TABLE unit_abilities ADD COLUMN position INTEGER NOT NULL DEFAULT 0"
+                    )
+                )
+                _initialize_unit_ability_positions(connection)
 
 
 
