@@ -17,6 +17,58 @@ from ..services import ability_registry, costs, utils
 
 MAX_ARMY_SPELLS = 6
 FORBIDDEN_SPELL_SLUGS = {"mag", "przekaznik"}
+FORBIDDEN_SPELL_WEAPON_TRAITS = {
+    "impet",
+    "zuzywalny",
+    "podkrecenie",
+    "niezawodny",
+    "rozrywajacy",
+    "szturmowa",
+    "atak_wrecz",
+}
+
+SPELL_WEAPON_DEFINITIONS = [
+    definition
+    for definition in ability_catalog.definitions_by_type("weapon")
+    if definition.slug not in FORBIDDEN_SPELL_WEAPON_TRAITS
+]
+SPELL_WEAPON_DEFINITION_MAP = {
+    definition.slug: definition for definition in SPELL_WEAPON_DEFINITIONS
+}
+SPELL_WEAPON_DEFINITION_PAYLOAD = [
+    ability_catalog.to_dict(definition)
+    for definition in SPELL_WEAPON_DEFINITIONS
+]
+SPELL_WEAPON_SYNONYMS = {
+    "deadly": "zabojczy",
+    "blast": "rozprysk",
+    "indirect": "niebezposredni",
+    "impact": "impet",
+    "lock on": "namierzanie",
+    "limited": "zuzywalny",
+    "reliable": "niezawodny",
+    "rending": "rozrywajacy",
+    "precise": "precyzyjny",
+    "corrosive": "zracy",
+    "assault": "szturmowa",
+    "no cover": "bez_oslon",
+    "brutal": "brutalny",
+    "brutalny": "brutalny",
+    "brutalna": "brutalny",
+    "bez oslon": "bez_oslon",
+    "bez osłon": "bez_oslon",
+    "bez regeneracji": "brutalny",
+    "bez regegenracji": "brutalny",
+    "no regen": "brutalny",
+    "no regeneration": "brutalny",
+    "overcharge": "podkrecenie",
+    "overclock": "podkrecenie",
+}
+
+SPELL_RANGE_OPTIONS = []
+for value in sorted(costs.RANGE_TABLE.keys()):
+    label = "Wręcz" if value == 0 else f"{value}\""
+    SPELL_RANGE_OPTIONS.append({"value": str(value), "label": label})
 
 router = APIRouter(prefix="/armies", tags=["armies"])
 templates = Jinja2Templates(directory="app/templates")
@@ -127,14 +179,38 @@ def _clone_army_contents(
                 )
             )
 
+    spell_weapon_map: dict[int, models.Weapon] = {}
     for spell in list(getattr(source, "spells", []) or []):
+        new_weapon: models.Weapon | None = None
+        weapon_id = spell.weapon_id
+        if spell.kind == "weapon" and spell.weapon_id:
+            source_weapon = spell.weapon
+            if source_weapon and source_weapon.army_id == source.id:
+                new_weapon = spell_weapon_map.get(source_weapon.id)
+                if new_weapon is None:
+                    new_weapon = models.Weapon(
+                        armory=target.armory,
+                        army=target,
+                        owner_id=target.owner_id,
+                        name=source_weapon.name,
+                        range=source_weapon.range,
+                        attacks=source_weapon.attacks,
+                        ap=source_weapon.ap,
+                        tags=source_weapon.tags,
+                        notes=source_weapon.notes,
+                    )
+                    new_weapon.cached_cost = source_weapon.cached_cost
+                    db.add(new_weapon)
+                    spell_weapon_map[source_weapon.id] = new_weapon
+                weapon_id = None
         db.add(
             models.ArmySpell(
                 army=target,
                 kind=spell.kind,
                 ability_id=spell.ability_id,
                 ability_value=spell.ability_value,
-                weapon_id=spell.weapon_id,
+                weapon=new_weapon,
+                weapon_id=weapon_id,
                 base_label=spell.base_label,
                 description=spell.description,
                 cost=spell.cost,
@@ -180,7 +256,10 @@ def _armory_weapons(db: Session, armory: models.Armory) -> list[models.Weapon]:
     utils.ensure_armory_variant_sync(db, armory)
     weapons = (
         db.execute(
-            select(models.Weapon).where(models.Weapon.armory_id == armory.id)
+            select(models.Weapon).where(
+                models.Weapon.armory_id == armory.id,
+                models.Weapon.army_id.is_(None),
+            )
         ).scalars().all()
     )
     weapons.sort(key=lambda weapon: weapon.effective_name.casefold())
@@ -334,12 +413,6 @@ def _spell_page_context(
         if entry.get("ability_id") and entry.get("slug") not in FORBIDDEN_SPELL_SLUGS
     ]
     ability_options.sort(key=lambda entry: (entry.get("display_name") or entry.get("name") or "").casefold())
-    weapon_options: list[dict[str, object]] = []
-    for weapon in _armory_weapons(db, army.armory):
-        base_label, _ = _weapon_spell_base_details(weapon)
-        name = (weapon.effective_name or "").strip() or "Broń"
-        label = f"{name} – {base_label}" if base_label else name
-        weapon_options.append({"id": weapon.id, "label": label})
     remaining_slots = max(0, MAX_ARMY_SPELLS - len(spells))
     return {
         "request": request,
@@ -347,7 +420,6 @@ def _spell_page_context(
         "army": army,
         "spells": spells,
         "ability_options": ability_options,
-        "weapon_options": weapon_options,
         "remaining_slots": remaining_slots,
         "name_max_length": models.ARMY_SPELL_NAME_MAX_LENGTH,
         "passive_definitions": PASSIVE_DEFINITIONS,
@@ -377,6 +449,222 @@ def _parse_selection_payload(text: str | None) -> list[dict]:
     except json.JSONDecodeError:
         return []
     return data if isinstance(data, list) else []
+
+
+def _spell_parse_optional_float(value: str | None) -> float | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        return float(text.replace(",", "."))
+    except ValueError as exc:  # pragma: no cover - validation branch
+        raise ValueError("Nieprawidłowa wartość liczby ataków") from exc
+
+
+def _spell_parse_optional_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        return int(text)
+    except ValueError as exc:  # pragma: no cover - validation branch
+        raise ValueError("Nieprawidłowa wartość AP") from exc
+
+
+def _spell_trait_base_and_value(trait: str) -> tuple[str, str]:
+    normalized = costs.normalize_name(trait)
+    number = costs.extract_number(normalized)
+    value = ""
+    base = normalized.strip()
+    if number:
+        if abs(number - int(number)) < 1e-6:
+            number_text = str(int(number))
+        else:
+            number_text = str(number)
+        if "(" in normalized and normalized.endswith(")"):
+            base = normalized.split("(", 1)[0].strip()
+        else:
+            base = normalized.split(number_text, 1)[0].strip()
+        value = number_text
+    return base, value
+
+
+def _spell_weapon_tags_payload(tags_text: str | None) -> list[dict]:
+    payload: list[dict] = []
+    if not tags_text:
+        return payload
+    traits = costs.split_traits(tags_text)
+    for trait in traits:
+        base, value = _spell_trait_base_and_value(trait)
+        slug = SPELL_WEAPON_SYNONYMS.get(base, base.replace(" ", "_"))
+        if slug in FORBIDDEN_SPELL_WEAPON_TRAITS:
+            continue
+        definition = SPELL_WEAPON_DEFINITION_MAP.get(slug)
+        value_text = value
+        if definition and not definition.value_label:
+            value_text = ""
+        label = (
+            ability_catalog.display_with_value(definition, value_text)
+            if definition
+            else trait.strip()
+        )
+        description = ""
+        if definition:
+            description = ability_catalog.description_with_value(
+                definition, value_text
+            )
+        if not description:
+            description = trait.strip()
+        payload.append(
+            {
+                "slug": definition.slug if definition else "__custom__",
+                "value": value_text,
+                "label": label,
+                "raw": trait.strip(),
+                "description": description,
+            }
+        )
+    return payload
+
+
+def _spell_normalized_trait_slug(item: dict) -> str | None:
+    slug = (item.get("slug") or "").strip().casefold()
+    if slug and slug != "__custom__":
+        return slug
+    raw = (item.get("raw") or "").strip()
+    if not raw:
+        raw = (item.get("label") or "").strip()
+    if not raw:
+        return None
+    base, _ = _spell_trait_base_and_value(raw)
+    normalized = SPELL_WEAPON_SYNONYMS.get(base, base.replace(" ", "_"))
+    return normalized.casefold() if normalized else base.replace(" ", "_").casefold()
+
+
+def _filter_spell_weapon_abilities(items: list[dict]) -> list[dict]:
+    filtered: list[dict] = []
+    for entry in items or []:
+        slug = (entry.get("slug") or "").strip()
+        normalized = _spell_normalized_trait_slug(entry) or ""
+        if normalized in FORBIDDEN_SPELL_WEAPON_TRAITS:
+            continue
+        raw_text = (entry.get("raw") or "").strip()
+        filtered.append(
+            {
+                "slug": slug or "__custom__",
+                "value": entry.get("value", ""),
+                "label": entry.get("label", ""),
+                "raw": raw_text,
+                "description": entry.get("description", ""),
+            }
+        )
+    return filtered
+
+
+def _parse_spell_weapon_ability_payload(text: str | None) -> list[dict]:
+    if not text:
+        return []
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    result: list[dict] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        result.append(
+            {
+                "slug": item.get("slug"),
+                "value": item.get("value", ""),
+                "label": item.get("label", ""),
+                "raw": item.get("raw", ""),
+                "description": item.get("description", ""),
+            }
+        )
+    return result
+
+
+def _serialize_spell_weapon_tags(items: list[dict]) -> str:
+    entries: list[str] = []
+    for item in items or []:
+        slug = (item.get("slug") or "").strip()
+        normalized = _spell_normalized_trait_slug(item) or ""
+        if normalized in FORBIDDEN_SPELL_WEAPON_TRAITS:
+            continue
+        if slug == "__custom__" or not slug:
+            raw = (item.get("raw") or "").strip()
+            if not raw:
+                continue
+            entries.append(raw)
+            continue
+        definition = SPELL_WEAPON_DEFINITION_MAP.get(normalized)
+        if not definition:
+            continue
+        value = item.get("value")
+        value_text = str(value).strip() if value is not None else ""
+        if definition.value_label and not value_text:
+            entries.append(definition.display_name())
+        else:
+            entries.append(
+                ability_catalog.display_with_value(definition, value_text)
+            )
+    return ", ".join(entries)
+
+
+def _spell_weapon_form_values(weapon: models.Weapon | None) -> dict:
+    if not weapon:
+        return {
+            "name": "",
+            "range": "",
+            "attacks": "1",
+            "ap": "0",
+            "notes": "",
+            "abilities": [],
+        }
+    return {
+        "name": weapon.effective_name,
+        "range": weapon.effective_range,
+        "attacks": str(weapon.display_attacks),
+        "ap": str(weapon.effective_ap),
+        "notes": weapon.effective_notes or "",
+        "abilities": _spell_weapon_tags_payload(weapon.effective_tags),
+    }
+
+
+def _spell_weapon_form_context(
+    request: Request,
+    army: models.Army,
+    user: models.User,
+    *,
+    weapon: models.Weapon | None,
+    form_values: dict,
+    error: str | None = None,
+    custom_name: str = "",
+    allow_custom_name: bool = False,
+) -> dict:
+    return {
+        "request": request,
+        "user": user,
+        "armory": army.armory,
+        "army": army,
+        "weapon": weapon,
+        "form_values": form_values,
+        "range_options": SPELL_RANGE_OPTIONS,
+        "parent_defaults": None,
+        "weapon_abilities": SPELL_WEAPON_DEFINITION_PAYLOAD,
+        "error": error,
+        "cancel_url": f"/armies/{army.id}/spells",
+        "allow_variants": False,
+        "custom_name_field": allow_custom_name,
+        "custom_name_value": custom_name,
+        "custom_name_max_length": models.ARMY_SPELL_NAME_MAX_LENGTH,
+    }
 
 
 def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
@@ -1000,6 +1288,292 @@ def _validate_spell_capacity(
     return None
 
 
+@router.get("/{army_id}/spells/weapons/new", response_class=HTMLResponse)
+def new_spell_weapon_form(
+    army_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    _ensure_army_edit_access(army, current_user)
+
+    capacity_response = _validate_spell_capacity(army, request, current_user, db)
+    if capacity_response is not None:
+        return capacity_response
+
+    return templates.TemplateResponse(
+        "armory_weapon_form.html",
+        _spell_weapon_form_context(
+            request,
+            army,
+            current_user,
+            weapon=None,
+            form_values=_spell_weapon_form_values(None),
+            allow_custom_name=True,
+        ),
+    )
+
+
+@router.post("/{army_id}/spells/weapons/new")
+def create_spell_weapon(
+    army_id: int,
+    request: Request,
+    name: str = Form(...),
+    range: str = Form(""),
+    attacks: str = Form("1"),
+    ap: str = Form("0"),
+    abilities: str | None = Form(None),
+    notes: str | None = Form(None),
+    custom_name: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    _ensure_army_edit_access(army, current_user)
+
+    capacity_response = _validate_spell_capacity(army, request, current_user, db)
+    if capacity_response is not None:
+        return capacity_response
+
+    ability_items = _filter_spell_weapon_abilities(
+        _parse_spell_weapon_ability_payload(abilities)
+    )
+    form_values = {
+        "name": name,
+        "range": range,
+        "attacks": attacks,
+        "ap": ap,
+        "notes": notes or "",
+        "abilities": ability_items,
+    }
+    cleaned_name = name.strip()
+    if not cleaned_name:
+        return templates.TemplateResponse(
+            "armory_weapon_form.html",
+            _spell_weapon_form_context(
+                request,
+                army,
+                current_user,
+                weapon=None,
+                form_values=form_values,
+                error="Nazwa broni jest wymagana.",
+                custom_name=custom_name or "",
+                allow_custom_name=True,
+            ),
+            status_code=400,
+        )
+
+    try:
+        attacks_value = _spell_parse_optional_float(attacks)
+        ap_value = _spell_parse_optional_int(ap)
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            "armory_weapon_form.html",
+            _spell_weapon_form_context(
+                request,
+                army,
+                current_user,
+                weapon=None,
+                form_values=form_values,
+                error=str(exc),
+                custom_name=custom_name or "",
+                allow_custom_name=True,
+            ),
+            status_code=400,
+        )
+
+    if attacks_value is None:
+        attacks_value = 1.0
+    if ap_value is None:
+        ap_value = 0
+
+    cleaned_range = range.strip()
+    tags_text = _serialize_spell_weapon_tags(ability_items)
+    cleaned_notes = (notes or "").strip()
+
+    weapon = models.Weapon(
+        armory=army.armory,
+        army=army,
+        owner_id=army.owner_id,
+        name=cleaned_name,
+        range=cleaned_range,
+        attacks=attacks_value,
+        ap=ap_value,
+        tags=tags_text or None,
+        notes=cleaned_notes or None,
+    )
+    weapon.cached_cost = costs.weapon_cost(weapon)
+    db.add(weapon)
+
+    base_label, description, cost = _weapon_spell_details(weapon)
+    custom_text = _normalized_custom_name(custom_name)
+    spell = models.ArmySpell(
+        army=army,
+        kind="weapon",
+        weapon=weapon,
+        base_label=base_label,
+        description=description,
+        cost=cost,
+        position=_next_spell_position(army),
+        custom_name=custom_text or None,
+    )
+    db.add(spell)
+    _resequence_spells(army)
+    db.commit()
+    return RedirectResponse(
+        url=f"/armies/{army.id}/spells",
+        status_code=303,
+    )
+
+
+def _get_spell_weapon(
+    db: Session, army: models.Army, weapon_id: int
+) -> models.Weapon:
+    weapon = db.get(models.Weapon, weapon_id)
+    if not weapon or weapon.army_id != army.id:
+        raise HTTPException(status_code=404)
+    return weapon
+
+
+@router.get(
+    "/{army_id}/spells/weapons/{weapon_id}/edit", response_class=HTMLResponse
+)
+def edit_spell_weapon_form(
+    army_id: int,
+    weapon_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    _ensure_army_edit_access(army, current_user)
+    weapon = _get_spell_weapon(db, army, weapon_id)
+
+    return templates.TemplateResponse(
+        "armory_weapon_form.html",
+        _spell_weapon_form_context(
+            request,
+            army,
+            current_user,
+            weapon=weapon,
+            form_values=_spell_weapon_form_values(weapon),
+        ),
+    )
+
+
+@router.post("/{army_id}/spells/weapons/{weapon_id}/edit")
+def update_spell_weapon(
+    army_id: int,
+    weapon_id: int,
+    request: Request,
+    name: str = Form(...),
+    range: str = Form(""),
+    attacks: str = Form("1"),
+    ap: str = Form("0"),
+    abilities: str | None = Form(None),
+    notes: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    _ensure_army_edit_access(army, current_user)
+    weapon = _get_spell_weapon(db, army, weapon_id)
+
+    ability_items = _filter_spell_weapon_abilities(
+        _parse_spell_weapon_ability_payload(abilities)
+    )
+    form_values = {
+        "name": name,
+        "range": range,
+        "attacks": attacks,
+        "ap": ap,
+        "notes": notes or "",
+        "abilities": ability_items,
+    }
+
+    cleaned_name = name.strip()
+    if not cleaned_name:
+        return templates.TemplateResponse(
+            "armory_weapon_form.html",
+            _spell_weapon_form_context(
+                request,
+                army,
+                current_user,
+                weapon=weapon,
+                form_values=form_values,
+                error="Nazwa broni jest wymagana.",
+            ),
+            status_code=400,
+        )
+
+    try:
+        attacks_value = _spell_parse_optional_float(attacks)
+        ap_value = _spell_parse_optional_int(ap)
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            "armory_weapon_form.html",
+            _spell_weapon_form_context(
+                request,
+                army,
+                current_user,
+                weapon=weapon,
+                form_values=form_values,
+                error=str(exc),
+            ),
+            status_code=400,
+        )
+
+    if attacks_value is None:
+        attacks_value = weapon.attacks if weapon.attacks is not None else 1.0
+    if ap_value is None:
+        ap_value = weapon.ap if weapon.ap is not None else 0
+
+    cleaned_range = range.strip()
+    tags_text = _serialize_spell_weapon_tags(ability_items)
+    cleaned_notes = (notes or "").strip()
+
+    weapon.name = cleaned_name
+    weapon.range = cleaned_range
+    weapon.attacks = attacks_value
+    weapon.ap = ap_value
+    weapon.tags = tags_text or None
+    weapon.notes = cleaned_notes or None
+    weapon.owner_id = army.owner_id
+    weapon.army = army
+    weapon.armory = army.armory
+    weapon.cached_cost = costs.weapon_cost(weapon)
+
+    base_label, description, cost = _weapon_spell_details(weapon)
+    linked_spells = (
+        db.execute(
+            select(models.ArmySpell)
+            .where(models.ArmySpell.army_id == army.id)
+            .where(models.ArmySpell.weapon_id == weapon.id)
+        )
+        .scalars()
+        .all()
+    )
+    for spell in linked_spells:
+        spell.base_label = base_label
+        spell.description = description
+        spell.cost = cost
+
+    db.commit()
+    return RedirectResponse(
+        url=f"/armies/{army.id}/spells",
+        status_code=303,
+    )
+
+
 @router.post("/{army_id}/spells/add-ability")
 def add_army_spell_ability(
     army_id: int,
@@ -1193,8 +1767,15 @@ def delete_army_spell(
     if not spell or spell.army_id != army.id:
         raise HTTPException(status_code=404)
 
+    weapon = spell.weapon
     db.delete(spell)
     db.flush()
+    if weapon and weapon.army_id == army.id:
+        remaining = db.execute(
+            select(models.ArmySpell.id).where(models.ArmySpell.weapon_id == weapon.id)
+        ).first()
+        if not remaining:
+            db.delete(weapon)
     db.refresh(army, attribute_names=["spells"])
     _resequence_spells(army)
     db.commit()

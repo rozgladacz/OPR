@@ -71,13 +71,23 @@
               </form>
             </td>
             <td>
-              <form
-                method="post"
-                action="/armies/{{ army.id }}/spells/{{ spell.id }}/delete"
-                onsubmit="return confirm('Usunąć wybraną moc?');"
-              >
-                <button class="btn btn-outline-danger btn-sm" type="submit">Usuń</button>
-              </form>
+              <div class="d-flex justify-content-end gap-2">
+                {% if spell.kind == 'weapon' and spell.weapon_id and spell.weapon and spell.weapon.army_id == army.id %}
+                <a
+                  class="btn btn-outline-secondary btn-sm"
+                  href="/armies/{{ army.id }}/spells/weapons/{{ spell.weapon_id }}/edit"
+                >
+                  Edytuj broń
+                </a>
+                {% endif %}
+                <form
+                  method="post"
+                  action="/armies/{{ army.id }}/spells/{{ spell.id }}/delete"
+                  onsubmit="return confirm('Usunąć wybraną moc?');"
+                >
+                  <button class="btn btn-outline-danger btn-sm" type="submit">Usuń</button>
+                </form>
+              </div>
             </td>
           </tr>
           {% endfor %}
@@ -168,31 +178,10 @@
       </div>
       <div class="col-md-6">
         <h6>Trafienie z broni</h6>
-        <form method="post" action="/armies/{{ army.id }}/spells/add-weapon" class="vstack gap-3">
-          <div>
-            <label class="form-label" for="weapon-select">Broń</label>
-            <select class="form-select" id="weapon-select" name="weapon_id" required>
-              <option value="">Wybierz broń</option>
-              {% for weapon in weapon_options %}
-              <option value="{{ weapon.id }}">{{ weapon.label }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="form-label" for="weapon-custom-name">Nazwa własna (opcjonalnie)</label>
-            <input
-              class="form-control"
-              id="weapon-custom-name"
-              name="custom_name"
-              type="text"
-              maxlength="{{ name_max_length }}"
-              placeholder="Np. Cios"
-            />
-          </div>
-          <div>
-            <button class="btn btn-primary" type="submit">Dodaj trafienie</button>
-          </div>
-        </form>
+        <p class="text-muted mb-3">
+          Stwórz nową broń specjalnie dla tej mocy. Po zapisaniu będzie można ją edytować.
+        </p>
+        <a class="btn btn-primary" href="/armies/{{ army.id }}/spells/weapons/new">Nowa broń</a>
       </div>
     </div>
   </div>
