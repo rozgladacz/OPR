@@ -151,10 +151,19 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
 
 def unit_ability_payload(unit: models.Unit, ability_type: str) -> list[dict]:
     items: list[dict] = []
-    for link in getattr(unit, "abilities", []):
+    links = [
+        link
+        for link in getattr(unit, "abilities", [])
+        if link.ability and link.ability.type == ability_type
+    ]
+    links.sort(
+        key=lambda link: (
+            getattr(link, "position", 0),
+            getattr(link, "id", 0) or 0,
+        )
+    )
+    for link in links:
         ability = link.ability
-        if not ability or ability.type != ability_type:
-            continue
         slug = ability_slug(ability) or ""
         definition = ability_catalog.find_definition(slug)
         value: str | None = None

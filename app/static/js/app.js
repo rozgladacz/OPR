@@ -159,6 +159,26 @@ function initAbilityPicker(root) {
     hiddenInput.value = JSON.stringify(safeItems);
   }
 
+  function moveItem(fromIndex, toIndex) {
+    if (!Array.isArray(items)) {
+      return;
+    }
+    const lastIndex = items.length - 1;
+    if (
+      fromIndex === toIndex ||
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex > lastIndex ||
+      toIndex > lastIndex
+    ) {
+      return;
+    }
+    const [entry] = items.splice(fromIndex, 1);
+    items.splice(toIndex, 0, entry);
+    updateHidden();
+    renderList();
+  }
+
   function renderList() {
     if (!listEl) {
       return;
@@ -254,6 +274,33 @@ function initAbilityPicker(root) {
         row.appendChild(defaultWrapper);
       }
 
+      const controlsWrapper = document.createElement('div');
+      controlsWrapper.className = 'd-flex flex-column flex-sm-row gap-2';
+
+      const reorderGroup = document.createElement('div');
+      reorderGroup.className = 'btn-group-vertical';
+      const moveUpBtn = document.createElement('button');
+      moveUpBtn.type = 'button';
+      moveUpBtn.className = 'btn btn-outline-secondary btn-sm';
+      moveUpBtn.textContent = 'Góra';
+      moveUpBtn.disabled = index === 0;
+      moveUpBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        moveItem(index, index - 1);
+      });
+      const moveDownBtn = document.createElement('button');
+      moveDownBtn.type = 'button';
+      moveDownBtn.className = 'btn btn-outline-secondary btn-sm';
+      moveDownBtn.textContent = 'Dół';
+      moveDownBtn.disabled = index === items.length - 1;
+      moveDownBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        moveItem(index, index + 1);
+      });
+      reorderGroup.appendChild(moveUpBtn);
+      reorderGroup.appendChild(moveDownBtn);
+      controlsWrapper.appendChild(reorderGroup);
+
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'btn btn-outline-danger btn-sm';
@@ -263,7 +310,9 @@ function initAbilityPicker(root) {
         updateHidden();
         renderList();
       });
-      row.appendChild(removeBtn);
+      controlsWrapper.appendChild(removeBtn);
+
+      row.appendChild(controlsWrapper);
 
       wrapper.appendChild(row);
     });
@@ -1316,6 +1365,26 @@ function initWeaponPicker(root) {
     }
   }
 
+  function moveItem(fromIndex, toIndex) {
+    if (!Array.isArray(items)) {
+      return;
+    }
+    const lastIndex = items.length - 1;
+    if (
+      fromIndex === toIndex ||
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex > lastIndex ||
+      toIndex > lastIndex
+    ) {
+      return;
+    }
+    const [entry] = items.splice(fromIndex, 1);
+    items.splice(toIndex, 0, entry);
+    updateHidden();
+    renderList();
+  }
+
   function ensureUnique(weaponId) {
     return !items.some((entry) => String(entry.weapon_id) === String(weaponId));
   }
@@ -1372,6 +1441,36 @@ function initWeaponPicker(root) {
       defaultGroup.appendChild(defaultLabel);
       defaultGroup.appendChild(defaultField);
 
+      row.appendChild(nameSpan);
+      row.appendChild(defaultGroup);
+
+      const actionsWrapper = document.createElement('div');
+      actionsWrapper.className = 'd-flex flex-column flex-sm-row gap-2';
+
+      const reorderGroup = document.createElement('div');
+      reorderGroup.className = 'btn-group-vertical';
+      const moveUpBtn = document.createElement('button');
+      moveUpBtn.type = 'button';
+      moveUpBtn.className = 'btn btn-outline-secondary btn-sm';
+      moveUpBtn.textContent = 'Góra';
+      moveUpBtn.disabled = index === 0;
+      moveUpBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        moveItem(index, index - 1);
+      });
+      const moveDownBtn = document.createElement('button');
+      moveDownBtn.type = 'button';
+      moveDownBtn.className = 'btn btn-outline-secondary btn-sm';
+      moveDownBtn.textContent = 'Dół';
+      moveDownBtn.disabled = index === items.length - 1;
+      moveDownBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        moveItem(index, index + 1);
+      });
+      reorderGroup.appendChild(moveUpBtn);
+      reorderGroup.appendChild(moveDownBtn);
+      actionsWrapper.appendChild(reorderGroup);
+
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'btn btn-outline-danger btn-sm';
@@ -1381,10 +1480,9 @@ function initWeaponPicker(root) {
         updateHidden();
         renderList();
       });
+      actionsWrapper.appendChild(removeBtn);
 
-      row.appendChild(nameSpan);
-      row.appendChild(defaultGroup);
-      row.appendChild(removeBtn);
+      row.appendChild(actionsWrapper);
       wrapper.appendChild(row);
     });
     listEl.appendChild(wrapper);

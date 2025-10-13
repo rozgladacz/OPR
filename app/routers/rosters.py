@@ -1172,10 +1172,19 @@ def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
         payload_by_id.setdefault(key, []).append(item)
     flags = utils.parse_flags(unit.flags)
     unit_traits = costs.flags_to_ability_list(flags)
-    for link in getattr(unit, "abilities", []):
+    ability_links = [
+        link
+        for link in getattr(unit, "abilities", [])
+        if link.ability and link.ability.type == ability_type
+    ]
+    ability_links.sort(
+        key=lambda link: (
+            getattr(link, "position", 0),
+            getattr(link, "id", 0) or 0,
+        )
+    )
+    for link in ability_links:
         ability = link.ability
-        if not ability or ability.type != ability_type:
-            continue
         params: dict[str, Any] = {}
         if link.params_json:
             try:
