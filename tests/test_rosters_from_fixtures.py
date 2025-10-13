@@ -19,6 +19,7 @@ from app import models
 from app.data import abilities as ability_catalog
 from app.services import costs
 from app.services.rules import collect_roster_warnings
+from app.routers import rosters as roster_routes
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "rosters"
@@ -192,18 +193,33 @@ def _build_roster(roster_payload: dict[str, Any]) -> models.Roster:
         )
         total_models = max(base_models * roster_unit.count, 0)
         setattr(roster_unit, "models", total_models)
+        weapon_options = roster_routes._unit_weapon_options(unit)
+        active_items = roster_routes._ability_entries(unit, "active")
+        aura_items = roster_routes._ability_entries(unit, "aura")
+        passive_items = roster_routes._passive_entries(unit)
+        loadout = roster_routes._default_loadout_payload(
+            unit,
+            weapon_options=weapon_options,
+            active_items=active_items,
+            aura_items=aura_items,
+            passive_items=passive_items,
+        )
         override_payload = context.get("override_weapons") if context else None
         if override_payload:
-            melee_weapons = [entry["id"] for entry in override_payload if entry.get("is_melee")]
-        else:
-            melee_weapons = []
-        if melee_weapons:
-            loadout = {"mode": "per_model", "weapons": {}}
-            if unit.default_weapon_id is not None:
-                loadout["weapons"][str(unit.default_weapon_id)] = 0
-            for weapon_id in melee_weapons:
-                loadout["weapons"][str(weapon_id)] = 1
-            roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
+            for key in list(loadout.get("weapons", {}).keys()):
+                loadout["weapons"][key] = 0
+            for entry in override_payload:
+                weapon_id = entry.get("id")
+                if weapon_id is None:
+                    continue
+                loadout.setdefault("weapons", {})[str(weapon_id)] = 1
+        classification = roster_routes._roster_unit_classification(roster_unit, loadout)
+        loadout = roster_routes._apply_classification_to_loadout(
+            loadout,
+            classification,
+            role_slug_map=roster_routes._role_slug_map(unit),
+        ) or loadout
+        roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
         roster.roster_units.append(roster_unit)
     costs.update_cached_costs(roster.roster_units)
     for roster_unit in roster.roster_units:

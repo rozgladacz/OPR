@@ -211,7 +211,6 @@ def edit_roster(
                         models.UnitAbility.ability
                     ),
                 ),
-                selectinload(models.RosterUnit.selected_weapon),
             )
         )
         .where(models.Roster.id == roster_id)
@@ -400,7 +399,6 @@ def add_roster_unit(
     roster_id: int,
     unit_id: int = Form(...),
     count: int = Form(1),
-    selected_weapon_id: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -410,20 +408,12 @@ def add_roster_unit(
         raise HTTPException(status_code=404)
     _ensure_roster_edit_access(roster, current_user)
 
-    allowed_weapon_ids = _unit_allowed_weapon_ids(unit)
-    weapon_id = int(selected_weapon_id) if selected_weapon_id else None
-    weapon = db.get(models.Weapon, weapon_id) if weapon_id else None
-    if weapon_id and weapon_id not in allowed_weapon_ids:
-        weapon = None
-    if weapon and weapon.armory_id != roster.army.armory_id:
-        weapon = None
-    if weapon and not current_user.is_admin and weapon.owner_id not in (None, current_user.id):
-        raise HTTPException(status_code=403, detail="Brak dostępu do broni")
     count = max(int(count), 1)
     weapon_options = _unit_weapon_options(unit)
     active_items = _ability_entries(unit, "active")
     aura_items = _ability_entries(unit, "aura")
     passive_items = _passive_entries(unit)
+    role_slug_map = _role_slug_map(unit)
     loadout = _default_loadout_payload(
         unit,
         weapon_options=weapon_options,
@@ -431,19 +421,10 @@ def add_roster_unit(
         aura_items=aura_items,
         passive_items=passive_items,
     )
-    if weapon:
-        selected_key = str(weapon.id)
-        for key in list(loadout["weapons"].keys()):
-            loadout["weapons"][key] = 1 if key == selected_key else 0
-        if selected_key not in loadout["weapons"]:
-            loadout["weapons"][selected_key] = 1
-
     roster_unit = models.RosterUnit(
         roster=roster,
         unit=unit,
         count=count,
-        selected_weapon=weapon,
-        selected_weapon_id=weapon.id if weapon else None,
     )
 
     max_position = (
@@ -457,7 +438,12 @@ def add_roster_unit(
     roster_unit.position = max_position + 1
 
     classification = _roster_unit_classification(roster_unit, loadout)
-    loadout = _apply_classification_to_loadout(loadout, classification) or loadout
+    loadout = (
+        _apply_classification_to_loadout(
+            loadout, classification, role_slug_map=role_slug_map
+        )
+        or loadout
+    )
 
     roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
     roster_unit.cached_cost = costs.roster_unit_cost(roster_unit)
@@ -522,7 +508,6 @@ def update_roster_unit(
     roster_unit_id: int,
     request: Request,
     count: int = Form(...),
-    selected_weapon_id: str | None = Form(None),
     loadout_json: str | None = Form(None),
     custom_name: str | None = Form(None),
     db: Session = Depends(get_db),
@@ -541,7 +526,7 @@ def update_roster_unit(
     passive_items = _passive_entries(roster_unit.unit)
     role_slug_map = _role_slug_map(roster_unit.unit)
 
-    parsed_loadout = _parse_loadout_json(loadout_json) if loadout_json is not None else None
+    parsed_loadout = _parse_loadout_json(loadout_json)
     loadout = _sanitize_loadout(
         roster_unit.unit,
         roster_unit.count,
@@ -552,37 +537,13 @@ def update_roster_unit(
         passive_items=passive_items,
     )
 
-    weapon_id: int | None = roster_unit.selected_weapon_id
-    weapon: models.Weapon | None = roster_unit.selected_weapon
-
-    if loadout_json is None:
-        allowed_weapon_ids = _unit_allowed_weapon_ids(roster_unit.unit)
-        requested_weapon_id = int(selected_weapon_id) if selected_weapon_id else None
-        if requested_weapon_id:
-            weapon = db.get(models.Weapon, requested_weapon_id)
-            if (
-                not weapon
-                or weapon.id not in allowed_weapon_ids
-                or weapon.armory_id != roster.army.armory_id
-            ):
-                weapon = None
-                weapon_id = None
-            elif not current_user.is_admin and weapon.owner_id not in (None, current_user.id):
-                raise HTTPException(status_code=403, detail="Brak dostępu do broni")
-            else:
-                weapon_id = requested_weapon_id
-        if weapon_id:
-            selected_key = str(weapon_id)
-            for key in list(loadout["weapons"].keys()):
-                loadout["weapons"][key] = 1 if key == selected_key else 0
-            if selected_key not in loadout["weapons"]:
-                loadout["weapons"][selected_key] = 1
-
-    roster_unit.selected_weapon_id = weapon_id
-    roster_unit.selected_weapon = weapon
-
     classification = _roster_unit_classification(roster_unit, loadout)
-    loadout = _apply_classification_to_loadout(loadout, classification) or loadout
+    loadout = (
+        _apply_classification_to_loadout(
+            loadout, classification, role_slug_map=role_slug_map
+        )
+        or loadout
+    )
     roster_unit.custom_name = custom_name.strip() if custom_name else None
     roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
     roster_unit.cached_cost = costs.roster_unit_cost(roster_unit)
@@ -590,7 +551,7 @@ def update_roster_unit(
     accept_header = (request.headers.get("accept") or "").lower()
     if "application/json" in accept_header:
         total_cost = costs.roster_total(roster)
-        selected_passives = (
+        selected_passives = _selected_passive_entries(
             roster_unit, loadout, passive_items, classification
         )
         selected_actives = _selected_ability_entries(loadout, active_items, "active")
@@ -644,7 +605,6 @@ def duplicate_roster_unit(
         roster=roster,
         unit=roster_unit.unit,
         count=roster_unit.count,
-        selected_weapon_id=roster_unit.selected_weapon_id,
         extra_weapons_json=roster_unit.extra_weapons_json,
         custom_name=roster_unit.custom_name,
     )
@@ -754,13 +714,6 @@ def _unit_weapon_options(unit: models.Unit) -> list[dict]:
         )
     options.sort(key=lambda item: (not item["is_default"], item["name"].casefold()))
     return options
-
-
-def _unit_allowed_weapon_ids(unit: models.Unit) -> set[int]:
-    options = _unit_weapon_options(unit)
-    return {option["id"] for option in options}
-
-
 def _passive_entries(unit: models.Unit) -> list[dict]:
     payload = utils.passive_flags_to_payload(unit.flags)
     entries: list[dict] = []
@@ -1710,14 +1663,6 @@ def _roster_unit_loadout(
         passive_items=passive_items,
     )
 
-    # Backwards compatibility for legacy rosters using selected_weapon_id.
-    if (
-        not roster_unit.extra_weapons_json
-        and roster_unit.selected_weapon_id
-        and str(roster_unit.selected_weapon_id) not in loadout["weapons"]
-    ):
-        loadout["weapons"][str(roster_unit.selected_weapon_id)] = 1
-
     return loadout
 
 
@@ -1877,20 +1822,6 @@ def _loadout_weapon_details(
                 "traits": option.get("traits"),
             }
         )
-    if not details:
-        weapon = roster_unit.selected_weapon or roster_unit.unit.default_weapon
-        if weapon:
-            details.append(
-                {
-                    "name": weapon.effective_name or weapon.name or "Broń",
-                    "count": max(int(roster_unit.count), 0),
-                    "range": weapon.effective_range or weapon.range or "-",
-                    "attacks": getattr(weapon, "display_attacks", None)
-                    or weapon.effective_attacks,
-                    "ap": weapon.effective_ap,
-                    "traits": weapon.effective_tags or weapon.tags or "",
-                }
-            )
     return details
 
 

@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -190,6 +191,79 @@ def _initialize_unit_ability_positions(connection) -> None:
         offsets[unit_id] = position + 1
 
 
+def _normalize_roster_unit_loadouts(connection) -> None:
+    logger.info("Normalizing roster unit loadouts before removing selected_weapon_id")
+    rows = connection.execute(
+        text(
+            """
+            SELECT id, extra_weapons_json, selected_weapon_id
+            FROM roster_units
+            WHERE selected_weapon_id IS NOT NULL
+            """
+        )
+    ).mappings()
+    for row in rows:
+        weapon_id = row["selected_weapon_id"]
+        if weapon_id is None:
+            continue
+        payload_text = row["extra_weapons_json"]
+        if payload_text:
+            try:
+                payload = json.loads(payload_text)
+            except json.JSONDecodeError:
+                payload = {}
+        else:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        weapons = payload.get("weapons")
+        if not isinstance(weapons, dict):
+            weapons = {}
+        key = str(weapon_id)
+        if key not in weapons:
+            weapons[key] = 1
+        payload["weapons"] = weapons
+        payload.setdefault("active", {})
+        payload.setdefault("aura", {})
+        payload.setdefault("passive", {})
+        payload.setdefault("active_labels", {})
+        payload.setdefault("aura_labels", {})
+        connection.execute(
+            text(
+                "UPDATE roster_units SET extra_weapons_json = :payload WHERE id = :id"
+            ),
+            {"payload": json.dumps(payload, ensure_ascii=False), "id": row["id"]},
+        )
+
+
+def _rebuild_roster_units_table(connection) -> None:
+    from . import models
+
+    logger.info("Rebuilding roster_units table without selected_weapon_id column")
+    connection.execute(text("PRAGMA foreign_keys=OFF"))
+    try:
+        connection.execute(text("DROP TABLE IF EXISTS roster_units_old"))
+        connection.execute(text("ALTER TABLE roster_units RENAME TO roster_units_old"))
+        models.RosterUnit.__table__.create(connection)
+        connection.execute(
+            text(
+                """
+                INSERT INTO roster_units (
+                    id, roster_id, unit_id, count, extra_weapons_json,
+                    cached_cost, custom_name, position, created_at, updated_at
+                )
+                SELECT
+                    id, roster_id, unit_id, count, extra_weapons_json,
+                    cached_cost, custom_name, position, created_at, updated_at
+                FROM roster_units_old
+                """
+            )
+        )
+        connection.execute(text("DROP TABLE roster_units_old"))
+    finally:
+        connection.execute(text("PRAGMA foreign_keys=ON"))
+
+
 def _migrate_schema() -> None:
     from sqlalchemy import inspect
 
@@ -242,6 +316,11 @@ def _migrate_schema() -> None:
         if "roster_units" in table_names:
             columns = inspector.get_columns("roster_units")
             column_names = {column["name"] for column in columns}
+            if "selected_weapon_id" in column_names:
+                _normalize_roster_unit_loadouts(connection)
+                _rebuild_roster_units_table(connection)
+                columns = inspector.get_columns("roster_units")
+                column_names = {column["name"] for column in columns}
             if "custom_name" not in column_names:
                 logger.info("Adding custom_name column to roster_units table")
                 connection.execute(

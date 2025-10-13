@@ -105,7 +105,6 @@ class Weapon(TimestampMixin, Base):
     armory: Mapped[Armory] = relationship(back_populates="weapons")
     army: Mapped[Optional["Army"]] = relationship(back_populates="weapons")
     units: Mapped[List["Unit"]] = relationship(back_populates="default_weapon")
-    roster_units: Mapped[List["RosterUnit"]] = relationship(back_populates="selected_weapon")
 
     def _inherited_value(self, attr: str, default=None):
         current: Weapon | None = self
@@ -430,7 +429,6 @@ class RosterUnit(TimestampMixin, Base):
     roster_id: Mapped[int] = mapped_column(ForeignKey("rosters.id"), nullable=False)
     unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"), nullable=False)
     count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    selected_weapon_id: Mapped[Optional[int]] = mapped_column(ForeignKey("weapons.id"), nullable=True)
     extra_weapons_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cached_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     custom_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
@@ -438,7 +436,6 @@ class RosterUnit(TimestampMixin, Base):
 
     roster: Mapped[Roster] = relationship(back_populates="roster_units")
     unit: Mapped[Unit] = relationship(back_populates="roster_units")
-    selected_weapon: Mapped[Optional[Weapon]] = relationship(back_populates="roster_units")
 
 
 for cls in [
