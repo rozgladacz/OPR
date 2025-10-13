@@ -107,7 +107,7 @@ def _build_unit(
     unit.abilities = []
     for name in ability_names:
         ability = models.Ability(name=name, type=_ability_type(name), description="")
-        link = models.UnitAbility()
+        link = models.UnitAbility(position=len(unit.abilities))
         link.ability = ability
         unit.abilities.append(link)
 
@@ -152,7 +152,7 @@ def _build_unit(
         override_iterable = []
     for payload in override_iterable:
         custom_weapon = _make_weapon(payload)
-        link = models.UnitWeapon()
+        link = models.UnitWeapon(position=len(unit.weapon_links))
         link.weapon = custom_weapon
         link.weapon_id = custom_weapon.id
         link.is_default = False

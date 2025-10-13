@@ -64,6 +64,7 @@ def test_unit_ability_payload_includes_custom_name():
     )
     ability.config_json = json.dumps({"slug": "mag"})
     link = models.UnitAbility(
+        position=0,
         ability=ability,
         params_json=json.dumps({"value": "2", "custom_name": "Psyker"}),
     )

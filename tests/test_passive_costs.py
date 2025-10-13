@@ -20,7 +20,7 @@ from app.routers import rosters
 
 def _make_unit_with_default_passive() -> models.Unit:
     ability = models.Ability(name="Nieustraszony", type="passive", description="")
-    link = models.UnitAbility()
+    link = models.UnitAbility(position=0)
     link.ability = ability
     unit = models.Unit(
         name="Veterans",

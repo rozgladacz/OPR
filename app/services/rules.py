@@ -25,7 +25,7 @@ class UnitSummary:
 def _unit_is_hero(
     unit: models.Unit, roster_unit: models.RosterUnit | None = None
 ) -> bool:
-    for link in getattr(unit, "abilities", []):
+    for link in _sorted_ability_links(unit):
         ability = getattr(link, "ability", None)
         if not ability:
             continue
@@ -109,7 +109,7 @@ def _active_count(roster_unit: models.RosterUnit) -> int:
 def _has_aura(unit: models.Unit) -> bool:
     return any(
         getattr(getattr(link, "ability", None), "type", "").casefold() == "aura"
-        for link in getattr(unit, "abilities", [])
+        for link in _sorted_ability_links(unit)
     )
 
 
@@ -204,3 +204,14 @@ def collect_roster_warnings(
 
     return warnings
 
+
+
+def _sorted_ability_links(unit: models.Unit) -> list[models.UnitAbility]:
+    links = list(getattr(unit, "abilities", []))
+    links.sort(
+        key=lambda link: (
+            getattr(link, "position", 0),
+            getattr(link, "id", 0) or 0,
+        )
+    )
+    return links

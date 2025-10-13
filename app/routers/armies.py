@@ -515,14 +515,19 @@ def _apply_unit_form_data(
         if is_default and count > 0 and not default_assigned:
             unit.default_weapon = weapon
             default_assigned = True
+    for index, link in enumerate(weapon_links):
+        link.position = index
     if not default_assigned:
         unit.default_weapon = fallback_weapon
     unit.weapon_links = weapon_links
 
-    unit.abilities = (
+    ability_links = (
         ability_registry.build_unit_abilities(db, active_items, "active")
         + ability_registry.build_unit_abilities(db, aura_items, "aura")
     )
+    for index, link in enumerate(ability_links):
+        link.position = index
+    unit.abilities = ability_links
 
     role_entry = payload_role or existing_role
     if role_entry is None:

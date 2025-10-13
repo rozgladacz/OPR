@@ -477,8 +477,8 @@ def init_db() -> None:
                 army=army,
                 owner_id=None,
             )
-            unit1.weapon_links = [models.UnitWeapon(weapon=rifle)]
-            unit2.weapon_links = [models.UnitWeapon(weapon=sword)]
+            unit1.weapon_links = [models.UnitWeapon(weapon=rifle, position=0)]
+            unit2.weapon_links = [models.UnitWeapon(weapon=sword, position=0)]
             session.add_all([unit1, unit2])
 
         session.commit()

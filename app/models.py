@@ -293,10 +293,16 @@ class Unit(TimestampMixin, Base):
     owner: Mapped[Optional[User]] = relationship()
     default_weapon: Mapped[Optional[Weapon]] = relationship(back_populates="units", foreign_keys=[default_weapon_id])
     weapon_links: Mapped[List["UnitWeapon"]] = relationship(
-        back_populates="unit", cascade="all, delete-orphan"
+        back_populates="unit",
+        cascade="all, delete-orphan",
+        order_by=lambda: (UnitWeapon.position, UnitWeapon.id),
     )
     parent: Mapped[Optional["Unit"]] = relationship(remote_side="Unit.id")
-    abilities: Mapped[List["UnitAbility"]] = relationship(back_populates="unit", cascade="all, delete-orphan")
+    abilities: Mapped[List["UnitAbility"]] = relationship(
+        back_populates="unit",
+        cascade="all, delete-orphan",
+        order_by=lambda: (UnitAbility.position, UnitAbility.id),
+    )
     roster_units: Mapped[List["RosterUnit"]] = relationship(back_populates="unit")
 
     @property
@@ -380,6 +386,7 @@ class UnitWeapon(TimestampMixin, Base):
     weapon_id: Mapped[int] = mapped_column(ForeignKey("weapons.id"), nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     default_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     unit: Mapped[Unit] = relationship(back_populates="weapon_links")
     weapon: Mapped[Weapon] = relationship()
@@ -392,6 +399,7 @@ class UnitAbility(TimestampMixin, Base):
     unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"), nullable=False)
     ability_id: Mapped[int] = mapped_column(ForeignKey("abilities.id"), nullable=False)
     params_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     unit: Mapped[Unit] = relationship(back_populates="abilities")
     ability: Mapped[Ability] = relationship(back_populates="unit_links")

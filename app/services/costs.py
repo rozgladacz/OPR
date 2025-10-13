@@ -1153,10 +1153,15 @@ def roster_unit_role_totals(
         ability_map: dict[int, float] = {}
         passive_total = 0.0
         active_total = 0.0
-        for link in getattr(unit, "abilities", []):
+        links = [link for link in getattr(unit, "abilities", []) if link.ability]
+        links.sort(
+            key=lambda link: (
+                getattr(link, "position", 0),
+                getattr(link, "id", 0) or 0,
+            )
+        )
+        for link in links:
             ability = link.ability
-            if not ability:
-                continue
             cost_value = ability_cost(
                 link,
                 current_traits,
