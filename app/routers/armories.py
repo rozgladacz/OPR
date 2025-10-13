@@ -204,7 +204,10 @@ def _parse_ability_payload(text: str | None) -> list[dict]:
 def _armory_weapons(db: Session, armory: models.Armory) -> list[models.Weapon]:
     weapons = (
         db.execute(
-            select(models.Weapon).where(models.Weapon.armory_id == armory.id)
+            select(models.Weapon).where(
+                models.Weapon.armory_id == armory.id,
+                models.Weapon.army_id.is_(None),
+            )
         ).scalars().all()
     )
     weapons.sort(key=lambda weapon: weapon.effective_name.casefold())
