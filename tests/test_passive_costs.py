@@ -191,6 +191,62 @@ def test_szpica_increases_weapon_hit_chance() -> None:
     expected_delta = round(2.0 * range_mod * ap_mod * 0.5, 2)
 
     assert cost_with - cost_without == pytest.approx(expected_delta, rel=1e-6)
+
+
+def test_przygotowanie_only_modifies_weapon_cost() -> None:
+    weapon = models.Weapon(
+        id=1,
+        name="Karabin",  # arbitrary label for clarity
+        range="24\"",
+        attacks=1.0,
+        ap=0,
+        tags=None,
+        armory_id=1,
+    )
+
+    unit = models.Unit(
+        name="Drużyna wsparcia",
+        quality=4,
+        defense=4,
+        toughness=4,
+        flags="Przygotowanie",
+        army_id=1,
+    )
+    unit.abilities = []
+    unit.weapon_links = []
+    unit.default_weapon = weapon
+    unit.default_weapon_id = weapon.id
+
+    entries = rosters._passive_entries(unit)
+    przygotowanie_entry = next(
+        entry for entry in entries if costs.ability_identifier(entry.get("slug")) == "przygotowanie"
+    )
+
+    assert przygotowanie_entry["cost"] == pytest.approx(0.0, abs=1e-9)
+
+    base_cost = costs.weapon_cost(weapon, unit_quality=unit.quality, unit_flags=[])
+    with_przygotowanie = costs.weapon_cost(
+        weapon,
+        unit_quality=unit.quality,
+        unit_flags=["Przygotowanie"],
+    )
+
+    range_value = costs.normalize_range_value(weapon.effective_range)
+    range_mod = costs.range_multiplier(range_value)
+    ap_mod = costs.lookup_with_nearest(costs.AP_BASE, weapon.effective_ap)
+    expected_delta = round(2.0 * range_mod * ap_mod * 0.65, 2)
+
+    assert with_przygotowanie - base_cost == pytest.approx(expected_delta, rel=1e-6)
+
+    roster_unit = models.RosterUnit(unit=unit, count=1)
+    totals_default = costs.roster_unit_role_totals(roster_unit)
+    totals_without = costs.roster_unit_role_totals(
+        roster_unit,
+        {"passive": {"Przygotowanie": 0}},
+    )
+
+    assert totals_default["strzelec"] > totals_without["strzelec"]
+    assert totals_default["strzelec"] - totals_without["strzelec"] >= expected_delta - 1e-6
 def test_instynkt_cost_scaling_with_toughness() -> None:
     assert costs.passive_cost("instynkt", 5) == pytest.approx(-5)
 
