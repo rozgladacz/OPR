@@ -46,6 +46,18 @@ def _ability_config(definition: ability_catalog.AbilityDefinition) -> dict:
     }
 
 
+_SYNC_CACHE_KEY = "_definitions_synced"
+_PAYLOAD_CACHE_KEY = "_definition_payload_cache"
+
+
+def _session_info(session: Session) -> dict:
+    info = getattr(session, "info", None)
+    if info is None:
+        info = {}
+        setattr(session, "info", info)
+    return info
+
+
 def sync_definitions(session: Session) -> None:
     existing_by_slug: dict[str, models.Ability] = {}
     existing_by_name: dict[str, models.Ability] = {}
@@ -91,10 +103,30 @@ def sync_definitions(session: Session) -> None:
         )
 
     session.flush()
+    info = _session_info(session)
+    info.pop(_PAYLOAD_CACHE_KEY, None)
+    _mark_definitions_synced(session)
+
+
+def _get_definition_payload_cache(session: Session) -> dict[str, list[dict]]:
+    info = _session_info(session)
+    return info.setdefault(_PAYLOAD_CACHE_KEY, {})
+
+
+def _mark_definitions_synced(session: Session) -> None:
+    _session_info(session)[_SYNC_CACHE_KEY] = True
 
 
 def definition_payload(session: Session, ability_type: str) -> list[dict]:
-    sync_definitions(session)
+    cache = _get_definition_payload_cache(session)
+    info = _session_info(session)
+    if info.get(_SYNC_CACHE_KEY):
+        cached_payload = cache.get(ability_type)
+        if cached_payload is not None:
+            return cached_payload
+    else:
+        sync_definitions(session)
+        cache = _get_definition_payload_cache(session)
     definitions = ability_catalog.definitions_by_type(ability_type)
     passive_definitions = [
         definition
@@ -146,7 +178,16 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
         ability = ability_by_slug.get(definition.slug)
         entry["ability_id"] = ability.id if ability else None
         payload.append(entry)
+    cache[ability_type] = payload
     return payload
+
+
+def clear_definition_payload_cache(session: Session) -> None:
+    """Invalidate cached ability definitions for the current session."""
+
+    info = _session_info(session)
+    info[_SYNC_CACHE_KEY] = False
+    info.pop(_PAYLOAD_CACHE_KEY, None)
 
 
 def unit_ability_payload(unit: models.Unit, ability_type: str) -> list[dict]:
