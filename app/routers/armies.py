@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .. import models
 from ..data import abilities as ability_catalog
@@ -760,8 +760,25 @@ def view_army(
 ):
     if not current_user:
         return RedirectResponse(url="/auth/login", status_code=303)
-    army = db.get(models.Army, army_id)
-    if not army:
+    army = (
+        db.execute(
+            select(models.Army)
+            .options(
+                selectinload(models.Army.armory),
+                selectinload(models.Army.units).options(
+                    selectinload(models.Unit.weapon_links)
+                    .selectinload(models.UnitWeapon.weapon),
+                    selectinload(models.Unit.default_weapon),
+                    selectinload(models.Unit.abilities)
+                    .selectinload(models.UnitAbility.ability),
+                ),
+            )
+            .where(models.Army.id == army_id)
+        )
+        .scalars()
+        .first()
+    )
+    if army is None:
         raise HTTPException(status_code=404)
     _ensure_army_view_access(army, current_user)
 
