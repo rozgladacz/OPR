@@ -734,6 +734,7 @@ def update_weapon(
     abilities: str | None = Form(None),
 
     notes: str | None = Form(None),
+    action: str = Form("save"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -799,13 +800,75 @@ def update_weapon(
             },
         )
 
+    cleaned_range = range.strip()
+    tags_text = _serialize_weapon_tags(ability_items)
+    cleaned_notes_text = (notes or "").strip()
+
+    if action == "create_weapon":
+        new_weapon = models.Weapon(
+            armory=armory,
+            owner_id=armory.owner_id,
+            name=cleaned_name,
+            range=cleaned_range,
+            attacks=attacks_value if attacks_value is not None else 1.0,
+            ap=ap_value if ap_value is not None else 0,
+            tags=tags_text or None,
+            notes=cleaned_notes_text or None,
+        )
+        _update_weapon_cost(new_weapon)
+        db.add(new_weapon)
+        db.flush()
+        _sync_descendant_variants(db, armory)
+        db.commit()
+        return RedirectResponse(
+            url=f"/armories/{armory.id}/weapons/{new_weapon.id}/edit", status_code=303
+        )
+
+    if action == "create_variant":
+        parent = weapon
+        new_weapon = models.Weapon(
+            armory=armory,
+            owner_id=armory.owner_id,
+            parent=parent,
+        )
+
+        if cleaned_name != parent.effective_name:
+            new_weapon.name = cleaned_name
+
+        if cleaned_range != parent.effective_range:
+            new_weapon.range = cleaned_range
+
+        if attacks_value is not None and not math.isclose(
+            attacks_value, parent.effective_attacks, rel_tol=1e-9, abs_tol=1e-9
+        ):
+            new_weapon.attacks = attacks_value
+
+        if ap_value is not None and ap_value != parent.effective_ap:
+            new_weapon.ap = ap_value
+
+        cleaned_tags_value = tags_text or None
+        if cleaned_tags_value != parent.effective_tags:
+            new_weapon.tags = cleaned_tags_value
+
+        cleaned_notes_value = cleaned_notes_text or None
+        if cleaned_notes_value != parent.effective_notes:
+            new_weapon.notes = cleaned_notes_value
+
+        _update_weapon_cost(new_weapon)
+        db.add(new_weapon)
+        db.flush()
+        _sync_descendant_variants(db, armory)
+        db.commit()
+        return RedirectResponse(
+            url=f"/armories/{armory.id}/weapons/{new_weapon.id}/edit", status_code=303
+        )
+
     if weapon.parent:
         parent = weapon.parent
         weapon.name = None if cleaned_name == parent.effective_name else cleaned_name
     else:
         weapon.name = cleaned_name
 
-    cleaned_range = range.strip()
     if weapon.parent:
         weapon.range = None if cleaned_range == weapon.parent.effective_range else cleaned_range
     else:
@@ -834,14 +897,13 @@ def update_weapon(
         else:
             weapon.ap = ap_value
 
-    cleaned_tags = _serialize_weapon_tags(ability_items)
-    cleaned_tags = cleaned_tags or None
+    cleaned_tags = tags_text or None
     if weapon.parent:
         weapon.tags = None if cleaned_tags == weapon.parent.effective_tags else cleaned_tags
     else:
         weapon.tags = cleaned_tags
 
-    cleaned_notes = (notes or "").strip() or None
+    cleaned_notes = cleaned_notes_text or None
     if weapon.parent:
         weapon.notes = None if cleaned_notes == weapon.parent.effective_notes else cleaned_notes
     else:

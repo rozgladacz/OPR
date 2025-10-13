@@ -152,7 +152,11 @@
             <button class="btn btn-outline-secondary" type="button" data-weapon-reset>Przywróć wartości domyślne</button>
             {% endif %}
             <a class="btn btn-secondary" href="/armories/{{ armory.id }}">Anuluj</a>
-            <button class="btn btn-primary" type="submit">Zapisz</button>
+            {% if weapon %}
+            <button class="btn btn-outline-primary" type="submit" name="action" value="create_weapon">Nowa broń</button>
+            <button class="btn btn-outline-primary" type="submit" name="action" value="create_variant">Nowy wariant</button>
+            {% endif %}
+            <button class="btn btn-primary" type="submit" name="action" value="save">Zapisz</button>
           </div>
         </form>
       </div>
