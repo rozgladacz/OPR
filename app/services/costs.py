@@ -296,6 +296,7 @@ def normalize_name(text: str | None) -> str:
     value = unicodedata.normalize("NFKD", str(text))
     value = _ascii_letters(value)
     value = value.replace("-", " ").replace("_", " ")
+    value = re.sub(r"[!?]+$", "", value)
     value = re.sub(r"\s+", " ", value.strip())
     return value.casefold()
 
@@ -317,8 +318,17 @@ def flags_to_ability_list(flags: dict | None) -> list[str]:
         raw_name = str(key).strip()
         if not raw_name:
             continue
-        is_optional = raw_name.endswith("?")
-        name = raw_name[:-1] if is_optional else raw_name
+        is_optional = False
+        name = raw_name
+        while name.endswith(("?", "!")):
+            if name.endswith("!"):
+                name = name[:-1].strip()
+                continue
+            if name.endswith("?"):
+                name = name[:-1].strip()
+                is_optional = True
+                continue
+            break
         if not name:
             continue
         slug = ability_catalog.slug_for_name(name) or name
@@ -462,6 +472,7 @@ def ability_identifier(text: str | None) -> str:
     for separator in ("(", "=", ":"):
         if separator in base:
             base = base.split(separator, 1)[0].strip()
+    base = base.rstrip("?!").strip()
     slug = ability_catalog.slug_for_name(base)
     if slug:
         return slug

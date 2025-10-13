@@ -178,6 +178,9 @@
                 {% if ability.is_default %}
                 <span class="small text-uppercase ms-1">Domyślna</span>
                 {% endif %}
+                {% if ability.is_mandatory %}
+                <span class="small text-uppercase ms-1">Obowiązkowa</span>
+                {% endif %}
               </span>
               {% endfor %}
             </span>
@@ -201,6 +204,9 @@
                 {% if ability.is_default %}
                 <span class="small text-uppercase ms-1">Domyślna</span>
                 {% endif %}
+                {% if ability.is_mandatory %}
+                <span class="small text-uppercase ms-1">Obowiązkowa</span>
+                {% endif %}
               </span>
               {% endfor %}
             </span>
@@ -223,6 +229,9 @@
                 <span>{{ display_label }}</span>
                 {% if ability.is_default %}
                 <span class="small text-uppercase ms-1">Domyślna</span>
+                {% endif %}
+                {% if ability.is_mandatory %}
+                <span class="small text-uppercase ms-1">Obowiązkowa</span>
                 {% endif %}
               </span>
               {% endfor %}
@@ -252,6 +261,9 @@
             {% if ability.is_default %}
             <span class="small text-uppercase ms-1">Domyślna</span>
             {% endif %}
+            {% if ability.is_mandatory %}
+            <span class="small text-uppercase ms-1">Obowiązkowa</span>
+            {% endif %}
           </span>
           {% endfor %}
         </div>
@@ -274,6 +286,9 @@
             {% if ability.is_default %}
             <span class="small text-uppercase ms-1">Domyślna</span>
             {% endif %}
+            {% if ability.is_mandatory %}
+            <span class="small text-uppercase ms-1">Obowiązkowa</span>
+            {% endif %}
           </span>
           {% endfor %}
         </div>
@@ -295,6 +310,9 @@
             <span>{{ display_label }}</span>
             {% if ability.is_default %}
             <span class="small text-uppercase ms-1">Domyślna</span>
+            {% endif %}
+            {% if ability.is_mandatory %}
+            <span class="small text-uppercase ms-1">Obowiązkowa</span>
             {% endif %}
           </span>
           {% endfor %}
@@ -381,6 +399,7 @@
             data-target-input="unit-passive-abilities"
             data-default-toggle="true"
             data-default-initial="true"
+            data-mandatory-toggle="true"
             data-allow-custom-name="true"
             data-hide-owned-abilities="true"
           >
