@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Sequence
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .. import models
 from ..data import abilities as ability_catalog
@@ -183,24 +183,34 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
     if created_new_clones:
         db.flush()
 
-    variant_weapons = db.execute(
-        select(models.Weapon).where(
-            models.Weapon.armory_id == armory.id,
-            models.Weapon.parent_id.is_not(None),
+    variant_weapons = (
+        db.execute(
+            select(models.Weapon)
+            .where(
+                models.Weapon.armory_id == armory.id,
+                models.Weapon.parent_id.is_not(None),
+            )
+            .options(
+                selectinload(models.Weapon.parent).selectinload(
+                    models.Weapon.parent
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     cleaned = False
     for weapon in variant_weapons:
-        if weapon.parent_id is not None and db.get(models.Weapon, weapon.parent_id) is None:
+        parent = weapon.parent
+
+        if weapon.parent_id is not None and parent is None:
             db.delete(weapon)
             cleaned = True
             continue
 
-        if not weapon.parent:
+        if not parent:
             continue
-
-        parent = weapon.parent
 
         if weapon.name is not None and weapon.name == parent.effective_name:
             weapon.name = None
