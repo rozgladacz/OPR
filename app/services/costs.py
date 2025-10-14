@@ -1023,19 +1023,17 @@ def roster_unit_role_totals(
     if unit is None:
         return {"wojownik": 0.0, "strzelec": 0.0}
 
-    extra_data = payload if isinstance(payload, dict) else _ensure_extra_data(
-        getattr(roster_unit, "extra_weapons_json", None)
-    )
-    has_structured_loadout = isinstance(extra_data, dict)
-    raw_data: dict[str, Any] = extra_data if has_structured_loadout else {}
+    extra_data = (
+        payload
+        if isinstance(payload, dict)
+        else _ensure_extra_data(getattr(roster_unit, "extra_weapons_json", None))
+    ) or {}
+    raw_data: dict[str, Any] = extra_data if isinstance(extra_data, dict) else {}
 
-    loadout_mode: str | None = None
-    if has_structured_loadout:
-        mode_value = raw_data.get("mode")
-        if isinstance(mode_value, str):
-            loadout_mode = mode_value
+    mode_value = raw_data.get("mode")
+    loadout_mode: str | None = mode_value if isinstance(mode_value, str) else None
 
-    passive_state = compute_passive_state(unit, extra_data if has_structured_loadout else None)
+    passive_state = compute_passive_state(unit, raw_data)
     base_traits = _strip_role_traits(passive_state.traits)
     default_weapons = unit_default_weapons(unit)
 
@@ -1084,9 +1082,9 @@ def roster_unit_role_totals(
             result[parsed_id] = parsed_value
         return result
 
-    weapons_counts = _parse_counts("weapons") if has_structured_loadout else {}
-    active_counts = _parse_counts("active") if has_structured_loadout else {}
-    aura_counts = _parse_counts("aura") if has_structured_loadout else {}
+    weapons_counts = _parse_counts("weapons")
+    active_counts = _parse_counts("active")
+    aura_counts = _parse_counts("aura")
     passive_counts = passive_state.counts
 
     total_mode = loadout_mode == "total"
@@ -1116,14 +1114,6 @@ def roster_unit_role_totals(
             if weapon_id not in results:
                 results[weapon_id] = weapon_cost(
                     unit.default_weapon,
-                    unit.quality,
-                    current_traits,
-                )
-        if roster_unit.selected_weapon and roster_unit.selected_weapon.id is not None:
-            weapon_id = roster_unit.selected_weapon.id
-            if weapon_id not in results:
-                results[weapon_id] = weapon_cost(
-                    roster_unit.selected_weapon,
                     unit.quality,
                     current_traits,
                 )
@@ -1192,7 +1182,7 @@ def roster_unit_role_totals(
         return ability_map, passive_total, active_total
 
     def _compute_total(current_traits: Sequence[str]) -> float:
-        ability_map, passive_total, active_total = _ability_cost_map(current_traits)
+        ability_map, passive_total, _ = _ability_cost_map(current_traits)
         base_value = base_model_cost(
             unit.quality,
             unit.defense,
@@ -1203,52 +1193,34 @@ def roster_unit_role_totals(
         passive_entries = _passive_entries(current_traits)
         weapon_costs = _weapon_cost_map(current_traits)
 
-        if has_structured_loadout:
-            total = base_per_model * model_count
-            for weapon_id, stored_count in weapons_counts.items():
-                cost_value = weapon_costs.get(weapon_id)
-                if cost_value is None:
-                    continue
-                total += cost_value * _to_total(stored_count)
-            for ability_id, stored_count in {**active_counts, **aura_counts}.items():
-                cost_value = ability_map.get(ability_id)
-                if cost_value is None:
-                    continue
-                total += cost_value * _to_total(stored_count)
-            passive_diff = 0.0
-            for entry in passive_entries:
-                slug = entry.get("slug")
-                if not slug:
-                    continue
-                default_value = 1 if entry.get("default_count") else 0
-                selected_value = passive_counts.get(str(slug), default_value)
-                selected_flag = 1 if selected_value else 0
-                diff = selected_flag - default_value
-                if diff == 0:
-                    continue
-                cost_value = float(entry.get("cost") or 0.0)
-                if cost_value == 0.0:
-                    continue
-                passive_diff += cost_value * diff
-            if passive_diff:
-                total += passive_diff * model_multiplier
-            return round(total, 2)
-
-        legacy_unit_cost = base_per_model + active_total
-        if roster_unit.selected_weapon:
-            legacy_unit_cost += weapon_cost(
-                roster_unit.selected_weapon,
-                unit.quality,
-                current_traits,
-            )
-        else:
-            for weapon in default_weapons:
-                legacy_unit_cost += weapon_cost(
-                    weapon,
-                    unit.quality,
-                    current_traits,
-                )
-        total = legacy_unit_cost * model_count
+        total = base_per_model * model_count
+        for weapon_id, stored_count in weapons_counts.items():
+            cost_value = weapon_costs.get(weapon_id)
+            if cost_value is None:
+                continue
+            total += cost_value * _to_total(stored_count)
+        for ability_id, stored_count in {**active_counts, **aura_counts}.items():
+            cost_value = ability_map.get(ability_id)
+            if cost_value is None:
+                continue
+            total += cost_value * _to_total(stored_count)
+        passive_diff = 0.0
+        for entry in passive_entries:
+            slug = entry.get("slug")
+            if not slug:
+                continue
+            default_value = 1 if entry.get("default_count") else 0
+            selected_value = passive_counts.get(str(slug), default_value)
+            selected_flag = 1 if selected_value else 0
+            diff = selected_flag - default_value
+            if diff == 0:
+                continue
+            cost_value = float(entry.get("cost") or 0.0)
+            if cost_value == 0.0:
+                continue
+            passive_diff += cost_value * diff
+        if passive_diff:
+            total += passive_diff * model_multiplier
         return round(total, 2)
 
     warrior_total = _compute_total(_with_role_trait(base_traits, "wojownik"))

@@ -224,7 +224,6 @@
                 data-default-summary="{{ item.default_summary }}"
                 data-unit-flags='{{ ru.unit.flags | default('', true) | e }}'
                 data-weapon-options='{{ item.weapon_options | tojson | e }}'
-                data-selected-weapon-id="{{ ru.selected_weapon_id or '' }}"
                 data-passives='{{ item.passive_items | tojson | e }}'
                 data-actives='{{ item.active_items | tojson | e }}'
                 data-auras='{{ item.aura_items | tojson | e }}'

@@ -4,7 +4,7 @@ ruleset: default
 rosters:
   - name: 'Lista 1000'
     limit: 1000
-    expected_total: 998
+    expected_total: 1032.5
     expected_warnings_contains:
       - "[LIMIT]"
     units:
