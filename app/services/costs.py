@@ -655,6 +655,8 @@ def ability_cost_from_name(
             total_with += weapon_cost(weapon, int(quality), traits_with)
             total_without += weapon_cost(weapon, int(quality), traits_without)
         weapon_delta = total_with - total_without
+        if slug == "przygotowanie":
+            weapon_delta = 0.0
 
     if desc.startswith("transport"):
         capacity = extract_number(value or name)
@@ -684,7 +686,9 @@ def ability_cost_from_name(
     else:
         tou_value = float(toughness) if toughness is not None else 1.0
         definition = ability_catalog.find_definition(slug) if slug else None
-        if definition and definition.type == "passive":
+        if slug == "przygotowanie":
+            base_result = 0.0
+        elif definition and definition.type == "passive":
             base_result = passive_cost(name, tou_value)
         elif slug and not definition:
             base_result = passive_cost(name, tou_value)
