@@ -922,6 +922,25 @@ def list_armies(
     )
 
 
+@router.post("/{army_id}/takeover")
+def takeover_army(
+    army_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Brak uprawnień do przejęcia armii",
+        )
+    army.owner_id = None
+    db.commit()
+    return RedirectResponse(url="/armies", status_code=303)
+
+
 @router.get("/new", response_class=HTMLResponse)
 def new_army_form(
     request: Request,

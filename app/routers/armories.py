@@ -319,6 +319,23 @@ def list_armories(
     )
 
 
+@router.post("/{armory_id}/takeover")
+def takeover_armory(
+    armory_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    armory = _get_armory(db, armory_id)
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Brak uprawnień do przejęcia zbrojowni",
+        )
+    armory.owner_id = None
+    db.commit()
+    return RedirectResponse(url="/armories", status_code=303)
+
+
 @router.get("/new", response_class=HTMLResponse)
 def new_armory_form(
     request: Request,

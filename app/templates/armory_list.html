@@ -83,6 +83,9 @@
           <td>{% if armory.parent %}{{ armory.parent.name }}{% else %}-{% endif %}</td>
           <td class="text-end">
             <a class="btn btn-sm btn-outline-primary" href="/armories/{{ armory.id }}">Otwórz</a>
+            <form method="post" action="/armories/{{ armory.id }}/takeover" class="d-inline ms-2">
+              <button class="btn btn-sm btn-outline-secondary" type="submit">Przejmij</button>
+            </form>
           </td>
         </tr>
         {% else %}

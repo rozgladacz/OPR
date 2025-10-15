@@ -38,10 +38,15 @@
     <h4>Pozostałe armie użytkowników</h4>
     <div class="list-group">
       {% for army in others %}
-      <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="/armies/{{ army.id }}">
-        <span>{{ army.name }}{% if army.owner %} – {{ army.owner.username }}{% endif %}</span>
-        <span class="badge bg-secondary">Jednostek: {{ army.units|length }}</span>
-      </a>
+      <div class="list-group-item d-flex justify-content-between align-items-center">
+        <a class="text-decoration-none flex-grow-1 me-3 d-flex justify-content-between align-items-center" href="/armies/{{ army.id }}">
+          <span>{{ army.name }}{% if army.owner %} – {{ army.owner.username }}{% endif %}</span>
+          <span class="badge bg-secondary">Jednostek: {{ army.units|length }}</span>
+        </a>
+        <form method="post" action="/armies/{{ army.id }}/takeover" class="ms-2">
+          <button class="btn btn-sm btn-outline-secondary" type="submit">Przejmij</button>
+        </form>
+      </div>
       {% else %}
       <div class="list-group-item text-muted">Brak armii innych użytkowników</div>
       {% endfor %}
