@@ -86,13 +86,6 @@ def _ordered_roster_units(db: Session, roster: models.Roster) -> list[models.Ros
         .scalars()
         .all()
     )
-
-
-def _resequence_roster_units(units: list[models.RosterUnit]) -> None:
-    for index, item in enumerate(units):
-        item.position = index
-
-
 @router.get("", response_class=HTMLResponse)
 def list_rosters(
     request: Request,
@@ -480,27 +473,72 @@ def move_roster_unit(
     if normalized_direction not in {"up", "down"}:
         raise HTTPException(status_code=400, detail="Nieprawidłowy kierunek")
 
-    units = _ordered_roster_units(db, roster)
-    try:
-        index = next(i for i, item in enumerate(units) if item.id == roster_unit.id)
-    except StopIteration:
-        raise HTTPException(status_code=404) from None
+    current_position = roster_unit.position or 0
+    base_neighbor_query = select(models.RosterUnit.position).where(
+        models.RosterUnit.roster_id == roster.id,
+        models.RosterUnit.id != roster_unit.id,
+    )
+    if normalized_direction == "up":
+        neighbor_position = (
+            db.execute(
+                base_neighbor_query.where(
+                    models.RosterUnit.position < current_position,
+                )
+                .order_by(models.RosterUnit.position.desc())
+                .limit(1)
+            )
+            .scalars()
+            .first()
+        )
+    else:
+        neighbor_position = (
+            db.execute(
+                base_neighbor_query.where(
+                    models.RosterUnit.position > current_position,
+                )
+                .order_by(models.RosterUnit.position)
+                .limit(1)
+            )
+            .scalars()
+            .first()
+        )
 
-    target_index = index
-    if normalized_direction == "up" and index > 0:
-        target_index = index - 1
-    elif normalized_direction == "down" and index < len(units) - 1:
-        target_index = index + 1
-
-    if target_index == index:
+    if neighbor_position is None:
         return RedirectResponse(
             url=f"/rosters/{roster.id}?selected={roster_unit.id}",
             status_code=303,
         )
 
-    item = units.pop(index)
-    units.insert(target_index, item)
-    _resequence_roster_units(units)
+    target_position = neighbor_position
+    if target_position < current_position:
+        db.execute(
+            update(models.RosterUnit)
+            .where(
+                models.RosterUnit.roster_id == roster.id,
+                models.RosterUnit.position >= target_position,
+                models.RosterUnit.position < current_position,
+            )
+            .values(position=models.RosterUnit.position + 1)
+            .execution_options(synchronize_session=False)
+        )
+    elif target_position > current_position:
+        db.execute(
+            update(models.RosterUnit)
+            .where(
+                models.RosterUnit.roster_id == roster.id,
+                models.RosterUnit.position <= target_position,
+                models.RosterUnit.position > current_position,
+            )
+            .values(position=models.RosterUnit.position - 1)
+            .execution_options(synchronize_session=False)
+        )
+    else:
+        return RedirectResponse(
+            url=f"/rosters/{roster.id}?selected={roster_unit.id}",
+            status_code=303,
+        )
+
+    roster_unit.position = target_position
     db.commit()
     return RedirectResponse(
         url=f"/rosters/{roster.id}?selected={roster_unit.id}",
@@ -615,18 +653,18 @@ def duplicate_roster_unit(
         custom_name=roster_unit.custom_name,
     )
     clone.cached_cost = costs.roster_unit_cost(clone)
-    clone.position = (roster_unit.position or 0) + 1
+    insert_position = (roster_unit.position or 0) + 1
+    db.execute(
+        update(models.RosterUnit)
+        .where(
+            models.RosterUnit.roster_id == roster.id,
+            models.RosterUnit.position >= insert_position,
+        )
+        .values(position=models.RosterUnit.position + 1)
+        .execution_options(synchronize_session=False)
+    )
+    clone.position = insert_position
     db.add(clone)
-    db.flush()
-    units = _ordered_roster_units(db, roster)
-    units = [item for item in units if item.id != clone.id]
-    insert_index = 0
-    for idx, item in enumerate(units):
-        if item.id == roster_unit.id:
-            insert_index = idx + 1
-            break
-    units.insert(insert_index, clone)
-    _resequence_roster_units(units)
     db.commit()
     return RedirectResponse(
         url=f"/rosters/{roster.id}?selected={clone.id}",
