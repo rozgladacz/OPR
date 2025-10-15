@@ -1234,6 +1234,26 @@ def _base_cost_per_model(
         base_traits,
     )
     passive_cost = 0.0
+    trait_tokens: set[str] = set()
+
+    def _add_tokens(value: str | None) -> set[str]:
+        tokens: set[str] = set()
+        if not value:
+            return tokens
+        raw_text = str(value).strip()
+        if not raw_text:
+            return tokens
+        tokens.add(raw_text.casefold())
+        identifier = costs.ability_identifier(raw_text)
+        if identifier:
+            tokens.add(identifier)
+        normalized = costs.normalize_name(raw_text)
+        if normalized:
+            tokens.add(normalized)
+        return tokens
+
+    for trait in base_traits:
+        trait_tokens.update(_add_tokens(trait))
     default_weapons = costs.unit_default_weapons(unit)
     for entry in passive_state.payload:
         slug_value = str(entry.get("slug") or "").strip()
@@ -1247,6 +1267,10 @@ def _base_cost_per_model(
             default_count = 0
         if default_count <= 0:
             continue
+        entry_tokens = _add_tokens(slug_value)
+        entry_tokens.update(_add_tokens(entry.get("label")))
+        if trait_tokens.intersection(entry_tokens):
+            continue
         label = entry.get("label") or slug_value
         value = entry.get("value")
         passive_cost += costs.ability_cost_from_name(
@@ -1258,6 +1282,7 @@ def _base_cost_per_model(
             defense=unit.defense,
             weapons=default_weapons,
         )
+        trait_tokens.update(entry_tokens)
     return round(base_value + passive_cost, 2)
 
 

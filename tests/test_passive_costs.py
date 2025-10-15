@@ -49,6 +49,19 @@ def test_disabling_default_passive_reduces_cost() -> None:
     assert totals_disabled["strzelec"] <= totals_default["strzelec"]
 
 
+def test_base_cost_per_model_matches_base_model_cost() -> None:
+    unit = _make_unit_with_default_passive()
+    passive_state = costs.compute_passive_state(unit)
+    expected = costs.base_model_cost(
+        unit.quality,
+        unit.defense,
+        unit.toughness,
+        passive_state.traits,
+    )
+
+    assert rosters._base_cost_per_model(unit) == round(expected, 2)
+
+
 def test_base_cost_per_model_respects_classification() -> None:
     unit = models.Unit(
         name="Infantry",
@@ -239,11 +252,13 @@ def test_przygotowanie_only_modifies_weapon_cost() -> None:
     assert with_przygotowanie - base_cost == pytest.approx(expected_delta, rel=1e-6)
 
     roster_unit = models.RosterUnit(unit=unit, count=1)
-    totals_default = costs.roster_unit_role_totals(roster_unit)
-    totals_without = costs.roster_unit_role_totals(
-        roster_unit,
-        {"passive": {"Przygotowanie": 0}},
-    )
+    loadout = rosters._default_loadout_payload(unit)
+    totals_default = costs.roster_unit_role_totals(roster_unit, loadout)
+    disabled_loadout = dict(loadout)
+    disabled_passive = dict(loadout.get("passive", {}))
+    disabled_passive["Przygotowanie"] = 0
+    disabled_loadout["passive"] = disabled_passive
+    totals_without = costs.roster_unit_role_totals(roster_unit, disabled_loadout)
 
     assert totals_default["strzelec"] > totals_without["strzelec"]
     assert totals_default["strzelec"] - totals_without["strzelec"] >= expected_delta - 1e-6
