@@ -2273,7 +2273,15 @@ function toggleSectionVisibility(container, isVisible) {
   }
 }
 
-function renderWeaponEditor(container, options, stateMap, modelCount, editable, onChange) {
+function renderWeaponEditor(
+  container,
+  options,
+  stateMap,
+  modelCount,
+  editable,
+  onChange,
+  stateMode = 'total',
+) {
   if (!container) {
     return false;
   }
@@ -2282,8 +2290,34 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
   if (!safeOptions.length) {
     return false;
   }
+  const normalizedMode = stateMode === 'per_model' ? 'per_model' : 'total';
+  const numericModelCount = Math.max(Number(modelCount) || 0, 0);
+  const weaponInfoMap = new Map();
+  const classInfoMap = new Map();
+  const inputRefs = new Map();
   const wrapper = document.createElement('div');
   wrapper.className = 'd-flex flex-column gap-2';
+  const parseSafeNumber = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      return 0;
+    }
+    return numeric;
+  };
+  const getStoredCount = (key, fallback = 0) => {
+    if (!(stateMap instanceof Map) || !key) {
+      return 0;
+    }
+    const stored = Number(stateMap.get(key));
+    if (Number.isFinite(stored) && stored >= 0) {
+      return stored;
+    }
+    const fallbackNumeric = Number(fallback);
+    if (Number.isFinite(fallbackNumeric) && fallbackNumeric >= 0) {
+      return fallbackNumeric;
+    }
+    return 0;
+  };
   safeOptions.forEach((option) => {
     if (!option || option.id === undefined || option.id === null) {
       return;
@@ -2296,6 +2330,30 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
     if (!weaponKey) {
       return;
     }
+    const normalizedRange = normalizeRangeValue(option.range);
+    const weaponClass = normalizedRange > 0 ? 'ranged' : 'melee';
+    const defaultPerModel = parseSafeNumber(option.default_count ?? (option.is_default ? 1 : 0));
+    const isDefaultWeapon = Boolean(option.is_default) || defaultPerModel > 0;
+    const weaponMeta = {
+      option,
+      weaponKey,
+      weaponClass,
+      defaultPerModel,
+      isDefaultWeapon,
+      currentValue: 0,
+    };
+    weaponInfoMap.set(weaponKey, weaponMeta);
+    let classInfo = classInfoMap.get(weaponClass);
+    if (!classInfo) {
+      classInfo = {
+        classKey: weaponClass,
+        weapons: [],
+        defaultWeapon: null,
+        capacity: 0,
+        total: 0,
+      };
+      classInfoMap.set(weaponClass, classInfo);
+    }
     let totalCount = Number(stateMap.get(weaponKey));
     if (!Number.isFinite(totalCount) || totalCount < 0) {
       totalCount = Number(option.default_count ?? 0);
@@ -2304,6 +2362,21 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
       }
     }
     stateMap.set(weaponKey, totalCount);
+    weaponMeta.currentValue = totalCount;
+    classInfo.weapons.push(weaponMeta);
+    classInfo.total += totalCount;
+    if (!classInfo.defaultWeapon && isDefaultWeapon) {
+      classInfo.defaultWeapon = weaponMeta;
+      let capacity = defaultPerModel;
+      if (normalizedMode === 'total') {
+        const multiplier = numericModelCount > 0 ? numericModelCount : 1;
+        capacity *= multiplier;
+      }
+      if (!Number.isFinite(capacity) || capacity <= 0) {
+        capacity = totalCount;
+      }
+      classInfo.capacity = capacity;
+    }
 
     const row = document.createElement('div');
     row.className = 'roster-ability-item';
@@ -2342,14 +2415,90 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
       input.className = 'form-control form-control-sm roster-count-input';
       input.min = '0';
       input.value = String(totalCount);
+      inputRefs.set(weaponKey, input);
       input.addEventListener('change', () => {
         let nextValue = Number(input.value);
         if (!Number.isFinite(nextValue) || nextValue < 0) {
           nextValue = 0;
         }
         input.value = String(nextValue);
+        const weaponInfo = weaponInfoMap.get(weaponKey);
+        const classInfo = weaponInfo ? classInfoMap.get(weaponInfo.weaponClass) : null;
+        const previousValue = getStoredCount(weaponKey);
+        let delta = nextValue - previousValue;
+        let defaultPrevious = null;
+        let defaultNext = null;
+        if (
+          weaponInfo
+          && classInfo
+          && !weaponInfo.isDefaultWeapon
+          && classInfo.defaultWeapon
+          && classInfo.defaultWeapon.weaponKey !== weaponKey
+          && delta !== 0
+        ) {
+          const defaultWeapon = classInfo.defaultWeapon;
+          const defaultKey = defaultWeapon.weaponKey;
+          defaultPrevious = getStoredCount(defaultKey);
+          const otherTotal = classInfo.weapons.reduce((sum, entry) => {
+            if (!entry || entry.weaponKey === weaponKey || entry.weaponKey === defaultKey) {
+              return sum;
+            }
+            return sum + getStoredCount(entry.weaponKey);
+          }, 0);
+          if (delta > 0) {
+            const available = Math.max(defaultPrevious, 0);
+            if (delta > available) {
+              nextValue = previousValue + available;
+              delta = nextValue - previousValue;
+              input.value = String(nextValue);
+            }
+            defaultNext = Math.max(defaultPrevious - delta, 0);
+          } else {
+            const baselineTotal = defaultPrevious + previousValue + otherTotal;
+            const effectiveCapacity = Math.max(classInfo.capacity, baselineTotal);
+            const desiredDefault = defaultPrevious - delta;
+            const maxDefault = Math.max(effectiveCapacity - (otherTotal + nextValue), 0);
+            if (desiredDefault > maxDefault) {
+              defaultNext = maxDefault;
+              const recalculatedOptional = Math.max(
+                effectiveCapacity - (otherTotal + defaultNext),
+                0,
+              );
+              if (recalculatedOptional !== nextValue) {
+                nextValue = recalculatedOptional;
+                delta = nextValue - previousValue;
+                input.value = String(nextValue);
+              }
+            } else {
+              defaultNext = desiredDefault;
+            }
+          }
+          if (defaultNext !== null && defaultNext !== defaultPrevious) {
+            stateMap.set(defaultKey, defaultNext);
+            defaultWeapon.currentValue = defaultNext;
+            const defaultInput = inputRefs.get(defaultKey);
+            if (defaultInput && defaultInput !== input) {
+              defaultInput.value = String(defaultNext);
+            }
+          }
+        }
         stateMap.set(weaponKey, nextValue);
-        if (typeof onChange === 'function') {
+        if (weaponInfo) {
+          weaponInfo.currentValue = nextValue;
+        }
+        if (classInfo) {
+          classInfo.total = classInfo.weapons.reduce((sum, entry) => {
+            if (!entry) {
+              return sum;
+            }
+            return sum + getStoredCount(entry.weaponKey);
+          }, 0);
+        }
+        if (
+          typeof onChange === 'function'
+          && (delta !== 0
+            || (defaultPrevious !== null && defaultNext !== null && defaultNext !== defaultPrevious))
+        ) {
           onChange();
         }
       });
@@ -2363,6 +2512,14 @@ function renderWeaponEditor(container, options, stateMap, modelCount, editable, 
 
     row.appendChild(controls);
     wrapper.appendChild(row);
+  });
+  classInfoMap.forEach((classInfo) => {
+    if (!classInfo) {
+      return;
+    }
+    if (!Number.isFinite(classInfo.capacity) || classInfo.capacity <= 0) {
+      classInfo.capacity = classInfo.total;
+    }
   });
   if (!wrapper.childElementCount) {
     return false;
@@ -3438,6 +3595,7 @@ function renderEditors(precomputedWeaponMap = null) {
       currentCount,
       isEditable,
       handleStateChange,
+      loadoutState ? loadoutState.mode : 'total',
     );
     toggleSectionVisibility(loadoutContainer, hasWeapons);
   }
