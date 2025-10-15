@@ -308,6 +308,7 @@ def edit_roster(
         if roster_unit.id is not None:
             sanitized_loadouts[roster_unit.id] = loadout
         classification = _roster_unit_classification(roster_unit, loadout)
+        is_hero = unit_is_hero(unit, roster_unit, loadout)
         selected_passives = _selected_passive_entries(
             roster_unit, loadout, passive_items, classification
         )
@@ -328,16 +329,15 @@ def edit_roster(
                 "loadout_summary": _loadout_display_summary(roster_unit, loadout, weapon_options),
                 "base_cost_per_model": _base_cost_per_model(unit, classification),
                 "classification": classification,
+                "is_hero": is_hero,
             }
         )
-    non_hero_unit_count = 0
-    for item in roster_items:
-        roster_unit = item.get("instance")
-        unit = getattr(roster_unit, "unit", None)
-        if roster_unit is None or unit is None:
-            continue
-        if not unit_is_hero(unit, roster_unit):
-            non_hero_unit_count += 1
+    non_hero_unit_count = sum(
+        1
+        for item in roster_items
+        if getattr(item.get("instance"), "unit", None) is not None
+        and not item.get("is_hero", False)
+    )
     total_cost = costs.roster_total(roster)
     warnings = collect_roster_warnings(
         roster, total_cost=total_cost, loadouts=sanitized_loadouts

@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import json
 from dataclasses import dataclass
-from typing import Iterable, List, Mapping
+from typing import Any, Iterable, List, Mapping
 
 from .. import models
 from ..data import abilities as ability_catalog
@@ -23,7 +23,9 @@ class UnitSummary:
 
 
 def unit_is_hero(
-    unit: models.Unit, roster_unit: models.RosterUnit | None = None
+    unit: models.Unit,
+    roster_unit: models.RosterUnit | None = None,
+    loadout: dict[str, Any] | None = None,
 ) -> bool:
     for link in _sorted_ability_links(unit):
         ability = getattr(link, "ability", None)
@@ -34,9 +36,10 @@ def unit_is_hero(
             slug = ability_catalog.slug_for_name(ability.name)
         if slug == "bohater":
             return True
-    passive_state = costs.compute_passive_state(
-        unit, getattr(roster_unit, "extra_weapons_json", None)
-    )
+    extra = loadout
+    if extra is None and roster_unit is not None:
+        extra = getattr(roster_unit, "extra_weapons_json", None)
+    passive_state = costs.compute_passive_state(unit, extra)
     for trait in passive_state.traits:
         if costs.ability_identifier(trait) == "bohater":
             return True
@@ -130,12 +133,19 @@ def _has_aura(unit: models.Unit) -> bool:
 
 
 def _summaries(
-    roster: models.Roster, loadouts: Mapping[int, dict] | None = None
+    roster: models.Roster, loadouts: Mapping[int, dict[str, Any]] | None = None
 ) -> Iterable[UnitSummary]:
     for roster_unit in getattr(roster, "roster_units", []):
         unit = getattr(roster_unit, "unit", None)
         if unit is None:
             continue
+        sanitized_loadout: dict[str, Any] | None = None
+        if loadouts is not None:
+            roster_unit_id = getattr(roster_unit, "id", None)
+            if roster_unit_id is not None:
+                mapped_loadout = loadouts.get(roster_unit_id)
+                if isinstance(mapped_loadout, dict):
+                    sanitized_loadout = mapped_loadout
         models_count = getattr(roster_unit, "models", None)
         if models_count is None:
             try:
@@ -154,7 +164,11 @@ def _summaries(
             total_cost=total_cost,
             active_count=active_cnt,
             has_aura=_has_aura(unit),
-            hero_models=models_count if unit_is_hero(unit, roster_unit) else 0,
+            hero_models=(
+                models_count
+                if unit_is_hero(unit, roster_unit, sanitized_loadout)
+                else 0
+            ),
         )
         yield summary
 
