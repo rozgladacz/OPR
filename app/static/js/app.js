@@ -2446,12 +2446,6 @@ function renderWeaponEditor(
             return sum + getStoredCount(entry.weaponKey);
           }, 0);
           if (delta > 0) {
-            const available = Math.max(defaultPrevious, 0);
-            if (delta > available) {
-              nextValue = previousValue + available;
-              delta = nextValue - previousValue;
-              input.value = String(nextValue);
-            }
             defaultNext = Math.max(defaultPrevious - delta, 0);
           } else {
             const baselineTotal = defaultPrevious + previousValue + otherTotal;
