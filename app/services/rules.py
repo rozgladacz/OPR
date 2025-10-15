@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import json
 from dataclasses import dataclass
-from typing import Iterable, List
+from typing import Iterable, List, Mapping
 
 from .. import models
 from ..data import abilities as ability_catalog
@@ -43,14 +43,28 @@ def unit_is_hero(
     return False
 
 
-def _parse_ability_counts(roster_unit: models.RosterUnit, section: str) -> dict[int, int]:
-    raw_payload = getattr(roster_unit, "extra_weapons_json", None)
-    if not raw_payload:
-        return {}
-    try:
-        data = json.loads(raw_payload)
-    except json.JSONDecodeError:
-        return {}
+def _parse_ability_counts(
+    roster_unit: models.RosterUnit,
+    section: str,
+    loadouts: Mapping[int, dict] | None = None,
+) -> dict[int, int]:
+    data: dict | None = None
+    if loadouts is not None:
+        roster_unit_id = getattr(roster_unit, "id", None)
+        if roster_unit_id is not None:
+            loadout = loadouts.get(roster_unit_id)
+            if isinstance(loadout, dict):
+                data = loadout
+    if data is None:
+        raw_payload = getattr(roster_unit, "extra_weapons_json", None)
+        if not raw_payload:
+            return {}
+        try:
+            data = json.loads(raw_payload)
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(data, dict):
+            return {}
     if not isinstance(data, dict):
         return {}
     raw_section = data.get(section)
@@ -95,8 +109,10 @@ def _parse_ability_counts(roster_unit: models.RosterUnit, section: str) -> dict[
     return counts
 
 
-def _active_count(roster_unit: models.RosterUnit) -> int:
-    counts = _parse_ability_counts(roster_unit, "active")
+def _active_count(
+    roster_unit: models.RosterUnit, loadouts: Mapping[int, dict] | None = None
+) -> int:
+    counts = _parse_ability_counts(roster_unit, "active", loadouts)
     if counts:
         return sum(1 for value in counts.values() if value > 0)
     unit = getattr(roster_unit, "unit", None)
@@ -113,7 +129,9 @@ def _has_aura(unit: models.Unit) -> bool:
     )
 
 
-def _summaries(roster: models.Roster) -> Iterable[UnitSummary]:
+def _summaries(
+    roster: models.Roster, loadouts: Mapping[int, dict] | None = None
+) -> Iterable[UnitSummary]:
     for roster_unit in getattr(roster, "roster_units", []):
         unit = getattr(roster_unit, "unit", None)
         if unit is None:
@@ -129,7 +147,7 @@ def _summaries(roster: models.Roster) -> Iterable[UnitSummary]:
         if cost_value is None:
             cost_value = costs.roster_unit_cost(roster_unit)
         total_cost = float(cost_value)
-        active_cnt = _active_count(roster_unit)
+        active_cnt = _active_count(roster_unit, loadouts)
         summary = UnitSummary(
             name=getattr(unit, "name", "Jednostka"),
             models=models_count,
@@ -142,7 +160,9 @@ def _summaries(roster: models.Roster) -> Iterable[UnitSummary]:
 
 
 def collect_roster_warnings(
-    roster: models.Roster, total_cost: float | None = None
+    roster: models.Roster,
+    total_cost: float | None = None,
+    loadouts: Mapping[int, dict] | None = None,
 ) -> List[str]:
     config = costs.default_ruleset_config()
     warnings_cfg = config.get("warnings", {}) if isinstance(config, dict) else {}
@@ -166,7 +186,7 @@ def collect_roster_warnings(
     effective_total = total_cost
     if points_limit and points_limit > effective_total:
         effective_total = points_limit
-    summaries = list(_summaries(roster))
+    summaries = list(_summaries(roster, loadouts))
 
     warnings: List[str] = []
 
