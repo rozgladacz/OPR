@@ -441,7 +441,12 @@ def add_roster_unit(
     )
     roster_unit.position = max_position + 1
 
-    classification = _roster_unit_classification(roster_unit, loadout)
+    totals = costs.roster_unit_role_totals(roster_unit, loadout)
+    warrior_total = float(totals.get("wojownik") or 0.0)
+    shooter_total = float(totals.get("strzelec") or 0.0)
+    classification = _roster_unit_classification(
+        roster_unit, loadout, totals=totals
+    )
     loadout = (
         _apply_classification_to_loadout(
             loadout, classification, role_slug_map=role_slug_map
@@ -450,7 +455,7 @@ def add_roster_unit(
     )
 
     roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
-    roster_unit.cached_cost = costs.roster_unit_cost(roster_unit)
+    roster_unit.cached_cost = max(warrior_total, shooter_total)
     db.add(roster_unit)
     db.commit()
     db.refresh(roster_unit)
@@ -586,7 +591,12 @@ def update_roster_unit(
         passive_items=passive_items,
     )
 
-    classification = _roster_unit_classification(roster_unit, loadout)
+    totals = costs.roster_unit_role_totals(roster_unit, loadout)
+    warrior_total = float(totals.get("wojownik") or 0.0)
+    shooter_total = float(totals.get("strzelec") or 0.0)
+    classification = _roster_unit_classification(
+        roster_unit, loadout, totals=totals
+    )
     loadout = (
         _apply_classification_to_loadout(
             loadout, classification, role_slug_map=role_slug_map
@@ -595,7 +605,7 @@ def update_roster_unit(
     )
     roster_unit.custom_name = custom_name.strip() if custom_name else None
     roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
-    roster_unit.cached_cost = costs.roster_unit_cost(roster_unit)
+    roster_unit.cached_cost = max(warrior_total, shooter_total)
     db.commit()
     accept_header = (request.headers.get("accept") or "").lower()
     if "application/json" in accept_header:
@@ -1843,10 +1853,16 @@ def _classification_from_totals(
 def _roster_unit_classification(
     roster_unit: models.RosterUnit,
     loadout: dict[str, dict[str, int]] | None,
+    *,
+    totals: Mapping[str, float] | None = None,
 ) -> dict[str, Any] | None:
-    totals = costs.roster_unit_role_totals(roster_unit, loadout)
-    warrior_total = totals.get("wojownik", 0.0)
-    shooter_total = totals.get("strzelec", 0.0)
+    totals_map: Mapping[str, float]
+    if isinstance(totals, Mapping):
+        totals_map = totals
+    else:
+        totals_map = costs.roster_unit_role_totals(roster_unit, loadout)
+    warrior_total = float(totals_map.get("wojownik") or 0.0)
+    shooter_total = float(totals_map.get("strzelec") or 0.0)
     available_slugs: set[str] = set()
     unit = getattr(roster_unit, "unit", None)
     if unit is not None:
