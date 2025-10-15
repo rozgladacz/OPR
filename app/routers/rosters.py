@@ -227,7 +227,13 @@ def edit_roster(
 
     selected_id = request.query_params.get("selected")
 
-    costs.update_cached_costs(roster.roster_units)
+    uncached_units = [
+        roster_unit
+        for roster_unit in roster.roster_units
+        if getattr(roster_unit, "cached_cost", None) is None
+    ]
+    if uncached_units:
+        costs.update_cached_costs(uncached_units)
     available_units_stmt = (
         select(models.Unit)
         .where(models.Unit.army_id == roster.army_id)
