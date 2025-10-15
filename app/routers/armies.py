@@ -170,12 +170,24 @@ def _clone_army_contents(
             )
 
         for weapon_link in getattr(unit, "weapon_links", []) or []:
+            count_raw = getattr(weapon_link, "default_count", None)
+            is_default = bool(getattr(weapon_link, "is_default", False))
+            try:
+                default_count = int(count_raw)
+            except (TypeError, ValueError):
+                default_count = 1 if is_default else 0
+            if default_count < 0:
+                default_count = 0
+            if not is_default and default_count > 0:
+                is_default = True
+
             db.add(
                 models.UnitWeapon(
                     unit=cloned_unit,
                     weapon_id=weapon_link.weapon_id,
-                    is_default=weapon_link.is_default,
-                    default_count=weapon_link.default_count,
+                    is_default=is_default,
+                    default_count=default_count,
+                    position=getattr(weapon_link, "position", 0) or 0,
                 )
             )
 
