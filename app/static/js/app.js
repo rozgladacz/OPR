@@ -2569,7 +2569,7 @@ function initRosterEditor() {
   const saveStateEl = root.querySelector('[data-roster-editor-save-state]');
   const totalContainer = root.querySelector('[data-roster-total-container]');
   const totalValueEl = root.querySelector('[data-roster-total]');
-  const warningsContainer = root.querySelector('[data-roster-warnings]');
+  const warningsContainer = document.querySelector('[data-roster-warnings]');
   const isEditable = Boolean(form && countInput && loadoutInput);
 
   if (warningsContainer) {
