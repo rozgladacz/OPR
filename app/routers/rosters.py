@@ -283,6 +283,7 @@ def edit_roster(
         )
 
     roster_items = []
+    sanitized_loadouts: dict[int, dict[str, Any]] = {}
     for roster_unit in roster.roster_units:
         unit = roster_unit.unit
         weapon_options = _unit_cache_value(
@@ -304,6 +305,8 @@ def edit_roster(
             aura_items=aura_items,
             passive_items=passive_items,
         )
+        if roster_unit.id is not None:
+            sanitized_loadouts[roster_unit.id] = loadout
         classification = _roster_unit_classification(roster_unit, loadout)
         selected_passives = _selected_passive_entries(
             roster_unit, loadout, passive_items, classification
@@ -336,7 +339,9 @@ def edit_roster(
         if not unit_is_hero(unit, roster_unit):
             non_hero_unit_count += 1
     total_cost = costs.roster_total(roster)
-    warnings = collect_roster_warnings(roster, total_cost=total_cost)
+    warnings = collect_roster_warnings(
+        roster, total_cost=total_cost, loadouts=sanitized_loadouts
+    )
     can_edit = current_user.is_admin or roster.owner_id == current_user.id
     can_delete = can_edit
 
@@ -600,7 +605,12 @@ def update_roster_unit(
         )
         selected_actives = _selected_ability_entries(loadout, active_items, "active")
         selected_auras = _selected_ability_entries(loadout, aura_items, "aura")
-        warnings = collect_roster_warnings(roster, total_cost=total_cost)
+        loadout_mapping = (
+            {roster_unit.id: loadout} if roster_unit.id is not None else None
+        )
+        warnings = collect_roster_warnings(
+            roster, total_cost=total_cost, loadouts=loadout_mapping
+        )
         payload = {
             "unit": {
                 "id": roster_unit.id,
