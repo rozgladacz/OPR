@@ -1443,6 +1443,7 @@ function initWeaponPicker(root) {
         name: entry.name,
         is_default: entry.default_count > 0,
         count: entry.default_count,
+        default_count: entry.default_count,
       }));
       hiddenInput.value = JSON.stringify(payload);
     }
@@ -1499,9 +1500,19 @@ function initWeaponPicker(root) {
       const row = document.createElement('div');
       row.className = 'border rounded p-2 d-flex flex-wrap align-items-center gap-2';
 
-      const nameSpan = document.createElement('div');
-      nameSpan.className = 'flex-grow-1 fw-semibold';
-      nameSpan.textContent = item.name || weaponMap.get(String(item.weapon_id))?.name || `Broń #${item.weapon_id}`;
+      const nameWrapper = document.createElement('div');
+      nameWrapper.className = 'flex-grow-1 d-flex align-items-center gap-2';
+      const nameLabel = document.createElement('span');
+      nameLabel.className = 'fw-semibold';
+      nameLabel.textContent = item.name || weaponMap.get(String(item.weapon_id))?.name || `Broń #${item.weapon_id}`;
+      nameWrapper.appendChild(nameLabel);
+
+      if (Number(item.default_count) > 0) {
+        const defaultBadge = document.createElement('span');
+        defaultBadge.className = 'badge text-bg-primary';
+        defaultBadge.textContent = 'podstawowa';
+        nameWrapper.appendChild(defaultBadge);
+      }
 
       const defaultGroup = document.createElement('div');
       defaultGroup.className = 'd-flex align-items-center gap-2';
@@ -1524,7 +1535,7 @@ function initWeaponPicker(root) {
       defaultGroup.appendChild(defaultLabel);
       defaultGroup.appendChild(defaultField);
 
-      row.appendChild(nameSpan);
+      row.appendChild(nameWrapper);
       row.appendChild(defaultGroup);
 
       const actionsWrapper = document.createElement('div');
