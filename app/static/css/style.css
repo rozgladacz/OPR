@@ -136,6 +136,12 @@ body {
   max-height: 60vh;
 }
 
+@media (min-width: 1200px) {
+  .roster-army-unit-list {
+    max-height: none;
+  }
+}
+
 [data-roster-add-trigger] {
   cursor: pointer;
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
