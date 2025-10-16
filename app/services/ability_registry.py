@@ -48,6 +48,7 @@ def _ability_config(definition: ability_catalog.AbilityDefinition) -> dict:
 
 _SYNC_CACHE_KEY = "_definitions_synced"
 _PAYLOAD_CACHE_KEY = "_definition_payload_cache"
+_ABILITY_LOOKUP_CACHE_KEY = "_ability_lookup_cache"
 
 
 def _session_info(session: Session) -> dict:
@@ -105,6 +106,7 @@ def sync_definitions(session: Session) -> None:
     session.flush()
     info = _session_info(session)
     info.pop(_PAYLOAD_CACHE_KEY, None)
+    info.pop(_ABILITY_LOOKUP_CACHE_KEY, None)
     _mark_definitions_synced(session)
 
 
@@ -188,6 +190,36 @@ def clear_definition_payload_cache(session: Session) -> None:
     info = _session_info(session)
     info[_SYNC_CACHE_KEY] = False
     info.pop(_PAYLOAD_CACHE_KEY, None)
+    info.pop(_ABILITY_LOOKUP_CACHE_KEY, None)
+
+
+def _get_ability_lookup_maps(
+    session: Session, ability_type: str
+) -> tuple[dict[int, models.Ability], dict[str, models.Ability]]:
+    info = _session_info(session)
+    cache = info.setdefault(_ABILITY_LOOKUP_CACHE_KEY, {})
+    cached = cache.get(ability_type)
+    if cached is None:
+        records = (
+            session.execute(
+                select(models.Ability)
+                .where(models.Ability.type == ability_type)
+                .where(models.Ability.owner_id.is_(None))
+            )
+            .scalars()
+            .all()
+        )
+        by_id = {
+            ability.id: ability for ability in records if ability.id is not None
+        }
+        by_slug = {
+            slug: ability
+            for ability in records
+            if (slug := ability_slug(ability))
+        }
+        cached = (by_id, by_slug)
+        cache[ability_type] = cached
+    return cached
 
 
 def unit_ability_payload(unit: models.Unit, ability_type: str) -> list[dict]:
@@ -258,17 +290,7 @@ def build_unit_abilities(
 ) -> list[models.UnitAbility]:
     if not payload:
         return []
-    records = (
-        session.execute(
-            select(models.Ability)
-            .where(models.Ability.type == ability_type)
-            .where(models.Ability.owner_id.is_(None))
-        )
-        .scalars()
-        .all()
-    )
-    by_id = {ability.id: ability for ability in records if ability.id is not None}
-    by_slug = {ability_slug(ability): ability for ability in records}
+    by_id, by_slug = _get_ability_lookup_maps(session, ability_type)
     result: list[models.UnitAbility] = []
     for item in payload:
         ability = None
