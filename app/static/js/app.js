@@ -2617,7 +2617,6 @@ function renderWeaponEditor(
         if (
           weaponInfo
           && classInfo
-          && !weaponInfo.isDefaultWeapon
           && classInfo.defaultWeapon
           && classInfo.defaultWeapon.weaponKey !== weaponKey
           && delta !== 0
