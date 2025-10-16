@@ -988,7 +988,14 @@ def list_armies(
     if not current_user:
         return RedirectResponse(url="/auth/login", status_code=303)
 
-    query = select(models.Army).order_by(models.Army.name)
+    query = (
+        select(models.Army)
+        .options(
+            selectinload(models.Army.units),
+            selectinload(models.Army.owner),
+        )
+        .order_by(models.Army.name)
+    )
     if not current_user.is_admin:
         query = query.where(
             or_(
