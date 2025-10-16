@@ -26,8 +26,13 @@ ABILITY_NAME_MAX_LENGTH = 60
 
 def _unit_eager_options() -> tuple:
     return (
-        selectinload(models.Unit.weapon_links).selectinload(models.UnitWeapon.weapon),
-        selectinload(models.Unit.default_weapon),
+        selectinload(models.Unit.weapon_links)
+        .selectinload(models.UnitWeapon.weapon)
+        .selectinload(models.Weapon.parent)
+        .selectinload(models.Weapon.parent),
+        selectinload(models.Unit.default_weapon)
+        .selectinload(models.Weapon.parent)
+        .selectinload(models.Weapon.parent),
         selectinload(models.Unit.abilities).selectinload(models.UnitAbility.ability),
     )
 
@@ -203,15 +208,7 @@ def edit_roster(
         select(models.Roster)
         .options(
             selectinload(models.Roster.roster_units).options(
-                selectinload(models.RosterUnit.unit).options(
-                    selectinload(models.Unit.weapon_links).selectinload(
-                        models.UnitWeapon.weapon
-                    ),
-                    selectinload(models.Unit.default_weapon),
-                    selectinload(models.Unit.abilities).selectinload(
-                        models.UnitAbility.ability
-                    ),
-                ),
+                selectinload(models.RosterUnit.unit).options(*_unit_eager_options())
             )
         )
         .where(models.Roster.id == roster_id)
@@ -238,15 +235,7 @@ def edit_roster(
     available_units_stmt = (
         select(models.Unit)
         .where(models.Unit.army_id == roster.army_id)
-        .options(
-            selectinload(models.Unit.weapon_links).selectinload(
-                models.UnitWeapon.weapon
-            ),
-            selectinload(models.Unit.default_weapon),
-            selectinload(models.Unit.abilities).selectinload(
-                models.UnitAbility.ability
-            ),
-        )
+        .options(*_unit_eager_options())
         .order_by(models.Unit.name)
     )
     available_units = (
