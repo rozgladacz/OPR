@@ -157,7 +157,7 @@ def export_xlsx(
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
 
-    costs.update_cached_costs(roster.roster_units)
+    costs.ensure_cached_costs(roster.roster_units)
     workbook = Workbook()
     entries = [_roster_unit_export_data(ru) for ru in roster.roster_units]
     spell_entries = _army_spell_entries(roster, entries)
