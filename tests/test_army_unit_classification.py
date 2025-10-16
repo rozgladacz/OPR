@@ -120,6 +120,51 @@ def test_apply_unit_form_data_preserves_existing_role_classification() -> None:
     assert _role_slugs_from_flags(unit.flags) == {"strzelec"}
 
 
+def test_apply_unit_form_data_respects_manual_primary_weapon_selection() -> None:
+    melee_weapon = models.Weapon(
+        id=5,
+        name="Swords",
+        range="",
+        attacks=2.0,
+        ap=1,
+        tags=None,
+        armory_id=1,
+    )
+    ranged_weapon = models.Weapon(
+        id=6,
+        name="Bows",
+        range='24"',
+        attacks=1.0,
+        ap=0,
+        tags=None,
+        armory_id=1,
+    )
+    unit = models.Unit(
+        name="Skirmishers",
+        quality=4,
+        defense=4,
+        toughness=6,
+        army_id=1,
+    )
+
+    armies._apply_unit_form_data(
+        unit,
+        name=unit.name,
+        quality=unit.quality,
+        defense=unit.defense,
+        toughness=unit.toughness,
+        passive_items=[],
+        active_items=[],
+        aura_items=[],
+        weapon_entries=[(melee_weapon, False, 1), (ranged_weapon, True, 1)],
+        db=None,  # type: ignore[arg-type]
+    )
+
+    assert unit.default_weapon is ranged_weapon
+    assert any(link.weapon_id == melee_weapon.id for link in unit.weapon_links)
+    assert any(link.weapon_id == ranged_weapon.id for link in unit.weapon_links)
+
+
 def test_passive_payload_handles_mandatory_flag() -> None:
     flags = utils.passive_payload_to_flags(
         [

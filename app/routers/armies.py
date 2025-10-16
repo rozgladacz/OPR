@@ -684,6 +684,12 @@ def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
         return []
     payload: list[dict] = []
     seen: set[int] = set()
+    primary_id: int | None = None
+    if getattr(unit, "default_weapon_id", None):
+        primary_id = unit.default_weapon_id
+    elif getattr(unit, "default_weapon", None) and getattr(unit.default_weapon, "id", None):
+        primary_id = unit.default_weapon.id
+    primary_assigned = False
     for link in getattr(unit, "weapon_links", []):
         if link.weapon_id is None:
             continue
@@ -700,11 +706,16 @@ def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
             is_default_flag = True
         if not is_default_flag:
             count_value = 0
+        is_primary = False
+        if count_value > 0 and primary_id and link.weapon_id == primary_id:
+            is_primary = True
+            primary_assigned = True
         payload.append(
             {
                 "weapon_id": link.weapon_id,
                 "name": name,
                 "is_default": is_default_flag,
+                "is_primary": is_primary,
                 "count": count_value,
             }
         )
@@ -719,6 +730,7 @@ def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
                 "weapon_id": unit.default_weapon_id,
                 "name": unit.default_weapon.effective_name,
                 "is_default": True,
+                "is_primary": not primary_assigned,
                 "count": 1,
             }
         )
@@ -736,8 +748,20 @@ def _parse_weapon_payload(
         return []
     if not isinstance(data, list):
         return []
-    results: list[tuple[models.Weapon, bool, int]] = []
+
+    def _parse_primary_flag(value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "on", "yes"}
+        return False
+
+    records: list[dict[str, object]] = []
     seen: set[int] = set()
+    primary_assigned = False
+    fallback_index: int | None = None
     for entry in data:
         if not isinstance(entry, dict):
             continue
@@ -764,18 +788,39 @@ def _parse_weapon_payload(
             count_value = 1 if entry.get("is_default") else 0
         if count_value < 0:
             count_value = 0
-        is_default_raw = entry.get("is_default")
-        is_default = bool(is_default_raw) if is_default_raw is not None else count_value > 0
-        if not is_default:
-            count_value = 0
-        results.append(
-            (
-                weapon,
-                is_default,
-                count_value,
-            )
+
+        primary_raw = entry.get("is_primary")
+        if primary_raw is None:
+            primary_raw = entry.get("primary")
+        if primary_raw is None:
+            primary_raw = entry.get("is_primary_weapon")
+        is_primary = _parse_primary_flag(primary_raw) if count_value > 0 else False
+        if is_primary and primary_assigned:
+            is_primary = False
+        if is_primary:
+            primary_assigned = True
+        elif fallback_index is None and count_value > 0:
+            fallback_index = len(records)
+
+        records.append(
+            {
+                "weapon": weapon,
+                "is_primary": is_primary,
+                "count": count_value,
+            }
         )
         seen.add(weapon_id)
+
+    if not primary_assigned and fallback_index is not None:
+        records[fallback_index]["is_primary"] = True
+        primary_assigned = True
+
+    results: list[tuple[models.Weapon, bool, int]] = []
+    for record in records:
+        weapon = record["weapon"]
+        count_value = int(record["count"])
+        is_primary = bool(record.get("is_primary")) and count_value > 0
+        results.append((weapon, is_primary, count_value))
     return results
 
 
@@ -817,6 +862,15 @@ def _infer_unit_role_slug(unit: models.Unit) -> str | None:
         return "strzelec"
     if warrior > shooter:
         return "wojownik"
+    for weapon, count in unit.default_weapon_loadout:
+        if not weapon or count <= 0:
+            continue
+        try:
+            range_value = costs.normalize_range_value(weapon.effective_range)
+        except Exception:  # pragma: no cover - fallback for unexpected data
+            range_value = 0
+        if range_value > 0:
+            return "strzelec"
     return "wojownik"
 
 
@@ -863,16 +917,19 @@ def _apply_unit_form_data(
     weapon_links: list[models.UnitWeapon] = []
     default_assigned = False
     fallback_weapon = None
-    for weapon, is_default, count in weapon_entries:
+    # weapon_entries contain (weapon, is_primary, default_count) tuples
+    for weapon, is_primary, count in weapon_entries:
+        weapon_id = getattr(weapon, "id", None)
         link = models.UnitWeapon(
             weapon=weapon,
-            is_default=is_default,
+            weapon_id=weapon_id,
+            is_default=count > 0,
             default_count=count,
         )
         weapon_links.append(link)
         if fallback_weapon is None and count > 0:
             fallback_weapon = weapon
-        if is_default and count > 0 and not default_assigned:
+        if is_primary and count > 0 and not default_assigned:
             unit.default_weapon = weapon
             default_assigned = True
     for index, link in enumerate(weapon_links):

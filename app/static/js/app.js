@@ -187,6 +187,7 @@ function initAbilityPicker(root) {
     }
     const [entry] = items.splice(fromIndex, 1);
     items.splice(toIndex, 0, entry);
+    ensurePrimary();
     updateHidden();
     renderList();
   }
@@ -1393,7 +1394,22 @@ function initWeaponPicker(root) {
   const defaultCountInput = root.querySelector('.weapon-picker-default-count');
   const addButton = root.querySelector('.weapon-picker-add');
   const listEl = root.querySelector('.weapon-picker-list');
+  const pickerId = Math.random().toString(16).slice(2);
+  const primaryGroupName = `weapon-primary-${pickerId}`;
   let items = [];
+
+  function parsePrimaryFlag(value) {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value !== 0 : false;
+    }
+    if (typeof value === 'string') {
+      return ['1', 'true', 'on', 'yes'].includes(value.trim().toLowerCase());
+    }
+    return false;
+  }
 
   function parseInitial() {
     if (!hiddenInput || !hiddenInput.value) {
@@ -1422,10 +1438,14 @@ function initWeaponPicker(root) {
             if (!entry.is_default && entry.is_default !== undefined && defaultCount <= 0) {
               defaultCount = 0;
             }
+            const primaryFlag = parsePrimaryFlag(
+              entry.is_primary ?? entry.primary ?? entry.is_primary_weapon,
+            );
             return {
               weapon_id: weaponId,
               name: name || weaponMap.get(String(weaponId))?.name || `Broń #${weaponId}`,
               default_count: defaultCount,
+              is_primary: primaryFlag && defaultCount > 0,
             };
           })
           .filter((entry) => entry && entry.weapon_id);
@@ -1442,6 +1462,7 @@ function initWeaponPicker(root) {
         weapon_id: entry.weapon_id,
         name: entry.name,
         is_default: entry.default_count > 0,
+        is_primary: Boolean(entry.is_primary && Number(entry.default_count) > 0),
         count: entry.default_count,
         default_count: entry.default_count,
       }));
@@ -1473,13 +1494,71 @@ function initWeaponPicker(root) {
     return !items.some((entry) => String(entry.weapon_id) === String(weaponId));
   }
 
-  function updateItem(index, changes) {
-    const item = items[index];
-    if (!item) {
-      return;
+  function ensurePrimary() {
+    if (!Array.isArray(items) || !items.length) {
+      let changed = false;
+      items = Array.isArray(items) ? items : [];
+      items.forEach((entry) => {
+        if (entry && entry.is_primary) {
+          entry.is_primary = false;
+          changed = true;
+        }
+      });
+      return changed;
     }
-    items[index] = { ...item, ...changes };
-    updateHidden();
+    let changed = false;
+    let primaryIndex = -1;
+    items.forEach((entry, idx) => {
+      if (!entry) {
+        return;
+      }
+      const countValue = Number(entry.default_count);
+      const safeCount = Number.isFinite(countValue) ? countValue : 0;
+      if (safeCount <= 0 && entry.is_primary) {
+        entry.is_primary = false;
+        changed = true;
+        return;
+      }
+      if (entry.is_primary && safeCount > 0) {
+        if (primaryIndex === -1) {
+          primaryIndex = idx;
+        } else {
+          entry.is_primary = false;
+          changed = true;
+        }
+      }
+    });
+    if (primaryIndex !== -1) {
+      return changed;
+    }
+    const fallbackIndex = items.findIndex((entry) => {
+      if (!entry) {
+        return false;
+      }
+      const countValue = Number(entry.default_count);
+      const safeCount = Number.isFinite(countValue) ? countValue : 0;
+      return safeCount > 0;
+    });
+    if (fallbackIndex !== -1) {
+      items.forEach((entry, idx) => {
+        if (!entry) {
+          return;
+        }
+        const shouldBePrimary = idx === fallbackIndex;
+        if (entry.is_primary !== shouldBePrimary) {
+          entry.is_primary = shouldBePrimary;
+          changed = true;
+        }
+      });
+      return changed;
+    }
+    items.forEach((entry) => {
+      if (entry && entry.is_primary) {
+        entry.is_primary = false;
+        changed = true;
+      }
+    });
+    return changed;
   }
 
   function renderList() {
@@ -1509,8 +1588,10 @@ function initWeaponPicker(root) {
 
       if (Number(item.default_count) > 0) {
         const defaultBadge = document.createElement('span');
-        defaultBadge.className = 'badge text-bg-primary';
-        defaultBadge.textContent = 'podstawowa';
+        defaultBadge.className = item.is_primary
+          ? 'badge text-bg-primary'
+          : 'badge text-bg-light text-dark';
+        defaultBadge.textContent = item.is_primary ? 'Broń podstawowa' : 'W wyposażeniu';
         nameWrapper.appendChild(defaultBadge);
       }
 
@@ -1530,13 +1611,52 @@ function initWeaponPicker(root) {
         const parsed = Number.parseInt(defaultField.value, 10);
         const safeValue = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
         defaultField.value = safeValue;
-        updateItem(index, { default_count: safeValue });
+        if (items[index]) {
+          items[index].default_count = safeValue;
+        }
+        ensurePrimary();
+        updateHidden();
+        renderList();
       });
       defaultGroup.appendChild(defaultLabel);
       defaultGroup.appendChild(defaultField);
 
+      const primaryWrapper = document.createElement('div');
+      primaryWrapper.className = 'form-check mb-0 d-flex align-items-center gap-2';
+      const primaryInput = document.createElement('input');
+      primaryInput.type = 'radio';
+      primaryInput.className = 'form-check-input';
+      primaryInput.name = primaryGroupName;
+      const primaryId = `weapon-primary-${pickerId}-${item.weapon_id}-${index}`;
+      primaryInput.id = primaryId;
+      const hasDefault = Number(item.default_count) > 0;
+      primaryInput.checked = Boolean(item.is_primary) && hasDefault;
+      primaryInput.disabled = !hasDefault;
+      primaryInput.addEventListener('change', () => {
+        if (!primaryInput.checked) {
+          return;
+        }
+        items.forEach((entry, entryIndex) => {
+          if (!entry) {
+            return;
+          }
+          const entryHasDefault = Number(entry.default_count) > 0;
+          entry.is_primary = entryIndex === index && entryHasDefault;
+        });
+        ensurePrimary();
+        updateHidden();
+        renderList();
+      });
+      const primaryLabel = document.createElement('label');
+      primaryLabel.className = 'form-check-label small';
+      primaryLabel.setAttribute('for', primaryId);
+      primaryLabel.textContent = 'Broń podstawowa';
+      primaryWrapper.appendChild(primaryInput);
+      primaryWrapper.appendChild(primaryLabel);
+
       row.appendChild(nameWrapper);
       row.appendChild(defaultGroup);
+      row.appendChild(primaryWrapper);
 
       const actionsWrapper = document.createElement('div');
       actionsWrapper.className = 'd-flex flex-column flex-sm-row gap-2';
@@ -1603,7 +1723,9 @@ function initWeaponPicker(root) {
       weapon_id: Number.parseInt(weaponId, 10),
       name: weapon?.name || selectEl.selectedOptions[0]?.textContent || `Broń #${weaponId}`,
       default_count: safeCount,
+      is_primary: false,
     });
+    ensurePrimary();
     updateHidden();
     renderList();
     selectEl.value = '';
@@ -1617,6 +1739,8 @@ function initWeaponPicker(root) {
   }
 
   parseInitial();
+  ensurePrimary();
+  updateHidden();
   renderList();
 }
 
@@ -2334,11 +2458,13 @@ function renderWeaponEditor(
     const weaponClass = normalizedRange > 0 ? 'ranged' : 'melee';
     const defaultPerModel = parseSafeNumber(option.default_count ?? (option.is_default ? 1 : 0));
     const isDefaultWeapon = Boolean(option.is_default) || defaultPerModel > 0;
+    const isPrimaryWeapon = Boolean(option.is_primary) && defaultPerModel >= 0;
     const weaponMeta = {
       option,
       weaponKey,
       weaponClass,
       defaultPerModel,
+      isPrimaryWeapon,
       isDefaultWeapon,
       currentValue: 0,
     };
@@ -2365,7 +2491,7 @@ function renderWeaponEditor(
     weaponMeta.currentValue = totalCount;
     classInfo.weapons.push(weaponMeta);
     classInfo.total += totalCount;
-    if (!classInfo.defaultWeapon && isDefaultWeapon) {
+    const assignDefaultWeapon = () => {
       classInfo.defaultWeapon = weaponMeta;
       let capacity = defaultPerModel;
       if (normalizedMode === 'total') {
@@ -2376,6 +2502,11 @@ function renderWeaponEditor(
         capacity = totalCount;
       }
       classInfo.capacity = capacity;
+    };
+    if (isPrimaryWeapon) {
+      assignDefaultWeapon();
+    } else if (!classInfo.defaultWeapon && isDefaultWeapon) {
+      assignDefaultWeapon();
     }
 
     const row = document.createElement('div');
