@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import models
@@ -51,7 +51,15 @@ def index(
             )
         )
     armies = db.execute(army_query).scalars().all()
-    roster_query = select(models.Roster).order_by(models.Roster.created_at.desc()).limit(5)
+    roster_query = (
+        select(models.Roster)
+        .options(
+            selectinload(models.Roster.roster_units),
+            selectinload(models.Roster.army),
+        )
+        .order_by(models.Roster.created_at.desc())
+        .limit(5)
+    )
     if not current_user.is_admin:
         roster_query = roster_query.where(
             or_(
@@ -61,7 +69,7 @@ def index(
         )
     rosters_list = db.execute(roster_query).scalars().all()
     for roster in rosters_list:
-        costs.update_cached_costs(roster.roster_units)
+        costs.ensure_cached_costs(roster.roster_units)
 
     return templates.TemplateResponse(
         "index.html",
