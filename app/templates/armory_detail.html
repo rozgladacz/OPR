@@ -113,8 +113,9 @@
     <div class="form-text">Kliknij nagłówek tabeli, aby posortować.</div>
   </div>
 </div>
-<table class="table table-striped align-middle" id="armory-weapons-table">
-  <thead>
+<div class="table-responsive">
+  <table class="table table-striped align-middle" id="armory-weapons-table">
+    <thead>
     <tr>
       <th scope="col" data-sortable data-sort-type="text">
         <button class="table-sort-btn" type="button">
@@ -240,6 +241,7 @@
       <td class="text-muted" colspan="7">Brak uzbrojenia</td>
     </tr>
     {% endif %}
-  </tbody>
-</table>
+    </tbody>
+  </table>
+</div>
 {% endblock %}

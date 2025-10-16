@@ -9,90 +9,96 @@
 <div class="row g-4">
   <div class="col-lg-6">
     <h4>Moje zbrojownie</h4>
-    <table class="table table-striped align-middle">
-      <thead>
-        <tr>
-          <th>Nazwa</th>
-          <th>Typ</th>
-          <th>Bazowa</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for armory in mine %}
-        <tr>
-          <td>{{ armory.name }}</td>
-          <td>{% if armory.parent %}Wariant{% else %}Podstawowa{% endif %}</td>
-          <td>{% if armory.parent %}{{ armory.parent.name }}{% else %}-{% endif %}</td>
-          <td class="text-end">
-            <a class="btn btn-sm btn-outline-primary" href="/armories/{{ armory.id }}">Otwórz</a>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="4" class="text-muted">Brak własnych zbrojowni</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>Nazwa</th>
+            <th>Typ</th>
+            <th>Bazowa</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for armory in mine %}
+          <tr>
+            <td>{{ armory.name }}</td>
+            <td>{% if armory.parent %}Wariant{% else %}Podstawowa{% endif %}</td>
+            <td>{% if armory.parent %}{{ armory.parent.name }}{% else %}-{% endif %}</td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-primary" href="/armories/{{ armory.id }}">Otwórz</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-muted">Brak własnych zbrojowni</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
   <div class="col-lg-6">
     <h4>Zbrojownie globalne</h4>
-    <table class="table table-striped align-middle">
-      <thead>
-        <tr>
-          <th>Nazwa</th>
-          <th>Typ</th>
-          <th>Bazowa</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for armory in global_items %}
-        <tr>
-          <td>{{ armory.name }}</td>
-          <td>{% if armory.parent %}Wariant{% else %}Podstawowa{% endif %}</td>
-          <td>{% if armory.parent %}{{ armory.parent.name }}{% else %}-{% endif %}</td>
-          <td class="text-end">
-            <a class="btn btn-sm btn-outline-primary" href="/armories/{{ armory.id }}">Otwórz</a>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="4" class="text-muted">Brak zbrojowni globalnych</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>Nazwa</th>
+            <th>Typ</th>
+            <th>Bazowa</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for armory in global_items %}
+          <tr>
+            <td>{{ armory.name }}</td>
+            <td>{% if armory.parent %}Wariant{% else %}Podstawowa{% endif %}</td>
+            <td>{% if armory.parent %}{{ armory.parent.name }}{% else %}-{% endif %}</td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-primary" href="/armories/{{ armory.id }}">Otwórz</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-muted">Brak zbrojowni globalnych</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
   {% if user and user.is_admin %}
   <div class="col-12">
     <h4>Zbrojownie użytkowników</h4>
-    <table class="table table-striped align-middle">
-      <thead>
-        <tr>
-          <th>Nazwa</th>
-          <th>Właściciel</th>
-          <th>Typ</th>
-          <th>Bazowa</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for armory in others %}
-        <tr>
-          <td>{{ armory.name }}</td>
-          <td>{{ armory.owner.username if armory.owner else '-' }}</td>
-          <td>{% if armory.parent %}Wariant{% else %}Podstawowa{% endif %}</td>
-          <td>{% if armory.parent %}{{ armory.parent.name }}{% else %}-{% endif %}</td>
-          <td class="text-end">
-            <a class="btn btn-sm btn-outline-primary" href="/armories/{{ armory.id }}">Otwórz</a>
-            <form method="post" action="/armories/{{ armory.id }}/takeover" class="d-inline ms-2">
-              <button class="btn btn-sm btn-outline-secondary" type="submit">Przejmij</button>
-            </form>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="5" class="text-muted">Brak zbrojowni innych użytkowników</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>Nazwa</th>
+            <th>Właściciel</th>
+            <th>Typ</th>
+            <th>Bazowa</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for armory in others %}
+          <tr>
+            <td>{{ armory.name }}</td>
+            <td>{{ armory.owner.username if armory.owner else '-' }}</td>
+            <td>{% if armory.parent %}Wariant{% else %}Podstawowa{% endif %}</td>
+            <td>{% if armory.parent %}{{ armory.parent.name }}{% else %}-{% endif %}</td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-primary" href="/armories/{{ armory.id }}">Otwórz</a>
+              <form method="post" action="/armories/{{ armory.id }}/takeover" class="d-inline ms-2">
+                <button class="btn btn-sm btn-outline-secondary" type="submit">Przejmij</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-muted">Brak zbrojowni innych użytkowników</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
   {% endif %}
 </div>

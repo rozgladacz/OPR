@@ -104,8 +104,9 @@
 </div>
 
 <h4>Jednostki</h4>
-<table class="table table-striped align-middle">
-  <thead>
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
     <tr>
       <th class="text-center" style="width: 1%;">Kolejność</th>
       <th>Nazwa</th>
@@ -339,8 +340,9 @@
     {% else %}
     <tr><td colspan="8" class="text-muted">Brak jednostek</td></tr>
     {% endfor %}
-  </tbody>
-</table>
+    </tbody>
+  </table>
+</div>
 
 {% if can_edit %}
 <div class="card mt-4">
