@@ -730,6 +730,12 @@ def _unit_weapon_options(unit: models.Unit) -> list[dict]:
     options: list[dict] = []
     seen: set[int] = set()
     flags = utils.parse_flags(unit.flags)
+    primary_id: int | None = None
+    if getattr(unit, "default_weapon_id", None):
+        primary_id = unit.default_weapon_id
+    elif getattr(unit, "default_weapon", None) and getattr(unit.default_weapon, "id", None):
+        primary_id = unit.default_weapon.id
+    primary_assigned = False
     for link in getattr(unit, "weapon_links", []):
         if link.weapon_id is None or link.weapon is None:
             continue
@@ -741,11 +747,20 @@ def _unit_weapon_options(unit: models.Unit) -> list[dict]:
             default_count = int(default_count) if default_count is not None else None
         except (TypeError, ValueError):
             default_count = None
+        is_primary = False
+        if (
+            primary_id is not None
+            and link.weapon_id == primary_id
+            and (default_count or 0) > 0
+        ):
+            is_primary = True
+            primary_assigned = True
         options.append(
             {
                 "id": link.weapon_id,
                 "name": link.weapon.effective_name,
                 "is_default": bool(getattr(link, "is_default", False)),
+                "is_primary": is_primary,
                 "cost": cost_value,
                 "default_count": default_count,
                 "range": link.weapon.effective_range or link.weapon.range or "-",
@@ -763,6 +778,7 @@ def _unit_weapon_options(unit: models.Unit) -> list[dict]:
                 "id": unit.default_weapon_id,
                 "name": unit.default_weapon.effective_name,
                 "is_default": True,
+                "is_primary": not primary_assigned,
                 "cost": cost_value,
                 "default_count": 1,
                 "range": unit.default_weapon.effective_range
