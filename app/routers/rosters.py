@@ -473,8 +473,8 @@ def add_roster_unit(
     roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
     roster_unit.cached_cost = max(warrior_total, shooter_total)
     db.add(roster_unit)
+    db.flush()
     db.commit()
-    db.refresh(roster_unit)
     return RedirectResponse(
         url=f"/rosters/{roster.id}?selected={roster_unit.id}",
         status_code=303,
