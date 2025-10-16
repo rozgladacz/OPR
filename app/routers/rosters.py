@@ -698,7 +698,9 @@ def duplicate_roster_unit(
         extra_weapons_json=roster_unit.extra_weapons_json,
         custom_name=roster_unit.custom_name,
     )
-    clone.cached_cost = costs.roster_unit_cost(clone)
+    clone.cached_cost = roster_unit.cached_cost
+    if clone.cached_cost is None:
+        clone.cached_cost = costs.roster_unit_cost(clone)
     insert_position = (roster_unit.position or 0) + 1
     db.execute(
         update(models.RosterUnit)
