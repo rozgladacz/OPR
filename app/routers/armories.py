@@ -232,7 +232,9 @@ def _update_weapon_cost(weapon: models.Weapon) -> bool:
 def _refresh_costs(db: Session, weapons: Iterable[models.Weapon]) -> None:
     updated = False
     for weapon in weapons:
-        if _update_weapon_cost(weapon):
+        cached = weapon.cached_cost
+        needs_refresh = cached is None or not math.isfinite(float(cached))
+        if needs_refresh and _update_weapon_cost(weapon):
             updated = True
     if updated:
         db.flush()
@@ -404,11 +406,14 @@ def view_armory(
     weapon_rows = []
     for weapon in weapons:
         overrides = {field: getattr(weapon, field) is not None for field in OVERRIDABLE_FIELDS}
+        cached_cost = weapon.effective_cached_cost
+        if cached_cost is None:
+            cached_cost = costs.weapon_cost(weapon)
         weapon_rows.append(
             {
                 "instance": weapon,
                 "overrides": overrides,
-                "cost": costs.weapon_cost(weapon),
+                "cost": cached_cost,
                 "abilities": _weapon_tags_payload(weapon.effective_tags),
             }
         )
