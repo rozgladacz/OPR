@@ -1642,21 +1642,14 @@ function initWeaponPicker(root) {
       nameWrapper.appendChild(nameLabel);
 
       const category = getItemCategory(item);
-      if (Number(item.default_count) > 0 && item.is_primary) {
-        const defaultBadge = document.createElement('span');
-        defaultBadge.className = 'badge text-bg-primary';
-        defaultBadge.textContent = 'Broń podstawowa';
-        nameWrapper.appendChild(defaultBadge);
-      }
-
       const defaultGroup = document.createElement('div');
-      defaultGroup.className = 'd-flex align-items-center gap-2';
+      defaultGroup.className = 'd-flex align-items-center gap-2 weapon-default-group';
       const defaultLabel = document.createElement('label');
-      defaultLabel.className = 'form-label mb-0 small';
-      defaultLabel.textContent = 'Domyślna ilość';
+      defaultLabel.className = 'form-label mb-0 small text-nowrap';
+      defaultLabel.textContent = 'Domyślnie:';
       defaultLabel.setAttribute('for', `weapon-default-count-${item.weapon_id}-${index}`);
       const defaultField = document.createElement('input');
-      defaultField.className = 'form-control form-control-sm';
+      defaultField.className = 'form-control form-control-sm weapon-default-count-input';
       defaultField.type = 'number';
       defaultField.min = '0';
       defaultField.value = Number.isFinite(item.default_count) ? item.default_count : 0;
@@ -1709,7 +1702,7 @@ function initWeaponPicker(root) {
       primaryLabel.className = 'form-check-label small';
       primaryLabel.setAttribute('for', primaryId);
       primaryLabel.textContent =
-        category === 'ranged' ? 'Broń podstawowa (dystansowa)' : 'Broń podstawowa (wręcz)';
+        category === 'ranged' ? 'Podstawowa (dystansowa)' : 'Podstawowa (wręcz)';
       primaryWrapper.appendChild(primaryInput);
       primaryWrapper.appendChild(primaryLabel);
 
