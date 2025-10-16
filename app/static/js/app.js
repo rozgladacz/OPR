@@ -195,7 +195,6 @@ function initAbilityPicker(root) {
     }
     const [entry] = items.splice(fromIndex, 1);
     items.splice(toIndex, 0, entry);
-    ensurePrimary();
     updateHidden();
     renderList();
   }
