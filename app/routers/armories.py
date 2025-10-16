@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .. import models
 from ..data import abilities as ability_catalog
@@ -202,13 +202,23 @@ def _parse_ability_payload(text: str | None) -> list[dict]:
     return result
 
 def _armory_weapons(db: Session, armory: models.Armory) -> list[models.Weapon]:
+    parent_loader = selectinload(models.Weapon.parent)
+    current_loader = parent_loader
+    # Preload several generations of parents to cover nested weapon variants.
+    for _ in range(5):
+        current_loader = current_loader.selectinload(models.Weapon.parent)
+
     weapons = (
         db.execute(
-            select(models.Weapon).where(
+            select(models.Weapon)
+            .where(
                 models.Weapon.armory_id == armory.id,
                 models.Weapon.army_id.is_(None),
             )
-        ).scalars().all()
+            .options(parent_loader)
+        )
+        .scalars()
+        .all()
     )
     weapons.sort(key=lambda weapon: weapon.effective_name.casefold())
     return weapons

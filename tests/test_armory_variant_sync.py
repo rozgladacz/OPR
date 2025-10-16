@@ -140,9 +140,14 @@ def test_army_view_variant_sync_cached_in_session():
             if statement.lstrip().upper().startswith("SELECT")
         ]
 
-        assert len(select_statements) == 1
-        assert "FROM weapons" in select_statements[0]
-        assert "armory_id" in select_statements[0]
+        assert len(select_statements) in {1, 2}
+        armory_select = select_statements[0]
+        assert "FROM weapons" in armory_select
+        assert "armory_id" in armory_select
+        if len(select_statements) == 2:
+            parent_select = select_statements[1]
+            assert "FROM weapons" in parent_select
+            assert "WHERE weapons.id IN" in parent_select
     finally:
         session.close()
 
@@ -182,8 +187,11 @@ def test_armory_view_variant_sync_cached_in_session():
             if statement.lstrip().upper().startswith("SELECT")
         ]
 
-        assert len(select_statements) == 1
-        assert "FROM weapons" in select_statements[0]
-        assert "armory_id" in select_statements[0]
+        assert len(select_statements) == 2
+        armory_select, parent_select = select_statements
+        assert "FROM weapons" in armory_select
+        assert "armory_id" in armory_select
+        assert "FROM weapons" in parent_select
+        assert "WHERE weapons.id IN" in parent_select
     finally:
         session.close()
