@@ -171,9 +171,23 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
     }
 
     missing_ids = parent_weapon_ids - existing_parent_ids
+
+    parent_weapons_map: dict[int, models.Weapon] = {}
+    if missing_ids:
+        parent_weapons = (
+            db.execute(
+                select(models.Weapon)
+                .where(models.Weapon.id.in_(missing_ids))
+                .options(selectinload(models.Weapon.parent))
+            )
+            .scalars()
+            .all()
+        )
+        parent_weapons_map = {weapon.id: weapon for weapon in parent_weapons}
+
     created_new_clones = False
     for parent_weapon_id in missing_ids:
-        parent_weapon = db.get(models.Weapon, parent_weapon_id)
+        parent_weapon = parent_weapons_map.get(parent_weapon_id)
         if not parent_weapon:
             continue
         clone = models.Weapon(
