@@ -1701,8 +1701,7 @@ function initWeaponPicker(root) {
       const primaryLabel = document.createElement('label');
       primaryLabel.className = 'form-check-label small';
       primaryLabel.setAttribute('for', primaryId);
-      primaryLabel.textContent =
-        category === 'ranged' ? 'Podstawowa (dystansowa)' : 'Podstawowa (wręcz)';
+      primaryLabel.textContent = 'Podstawowa';
       primaryWrapper.appendChild(primaryInput);
       primaryWrapper.appendChild(primaryLabel);
 
