@@ -710,6 +710,10 @@ def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
         if count_value > 0 and primary_id and link.weapon_id == primary_id:
             is_primary = True
             primary_assigned = True
+        range_value = costs.normalize_range_value(
+            link.weapon.effective_range if link.weapon else None
+        )
+        category = "ranged" if range_value > 0 else "melee"
         payload.append(
             {
                 "weapon_id": link.weapon_id,
@@ -717,6 +721,8 @@ def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
                 "is_default": is_default_flag,
                 "is_primary": is_primary,
                 "count": count_value,
+                "range_value": range_value,
+                "category": category,
             }
         )
         seen.add(link.weapon_id)
@@ -725,6 +731,8 @@ def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
         and unit.default_weapon_id
         and unit.default_weapon_id not in seen
     ):
+        range_value = costs.normalize_range_value(unit.default_weapon.effective_range)
+        category = "ranged" if range_value > 0 else "melee"
         payload.append(
             {
                 "weapon_id": unit.default_weapon_id,
@@ -732,6 +740,8 @@ def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
                 "is_default": True,
                 "is_primary": not primary_assigned,
                 "count": 1,
+                "range_value": range_value,
+                "category": category,
             }
         )
     return payload
@@ -760,8 +770,8 @@ def _parse_weapon_payload(
 
     records: list[dict[str, object]] = []
     seen: set[int] = set()
-    primary_assigned = False
-    fallback_index: int | None = None
+    primary_assigned: dict[str, bool] = {}
+    fallback_index: dict[str, int | None] = {}
     for entry in data:
         if not isinstance(entry, dict):
             continue
@@ -789,31 +799,40 @@ def _parse_weapon_payload(
         if count_value < 0:
             count_value = 0
 
+        range_value = costs.normalize_range_value(weapon.effective_range)
+        category = "ranged" if range_value > 0 else "melee"
+        if category not in primary_assigned:
+            primary_assigned[category] = False
+        if category not in fallback_index:
+            fallback_index[category] = None
+
         primary_raw = entry.get("is_primary")
         if primary_raw is None:
             primary_raw = entry.get("primary")
         if primary_raw is None:
             primary_raw = entry.get("is_primary_weapon")
         is_primary = _parse_primary_flag(primary_raw) if count_value > 0 else False
-        if is_primary and primary_assigned:
+        if is_primary and primary_assigned.get(category):
             is_primary = False
         if is_primary:
-            primary_assigned = True
-        elif fallback_index is None and count_value > 0:
-            fallback_index = len(records)
+            primary_assigned[category] = True
+        elif fallback_index.get(category) is None and count_value > 0:
+            fallback_index[category] = len(records)
 
         records.append(
             {
                 "weapon": weapon,
                 "is_primary": is_primary,
                 "count": count_value,
+                "category": category,
             }
         )
         seen.add(weapon_id)
 
-    if not primary_assigned and fallback_index is not None:
-        records[fallback_index]["is_primary"] = True
-        primary_assigned = True
+    for category, index in fallback_index.items():
+        if not primary_assigned.get(category) and index is not None:
+            records[index]["is_primary"] = True
+            primary_assigned[category] = True
 
     results: list[tuple[models.Weapon, bool, int]] = []
     for record in records:
@@ -1167,10 +1186,18 @@ def view_army(
         can_delete = not bool(has_rosters)
     weapons = _armory_weapons(db, army.armory)
 
-    weapon_choices = [
-        {"id": weapon.id, "name": weapon.effective_name}
-        for weapon in weapons
-    ]
+    weapon_choices = []
+    for weapon in weapons:
+        range_value = costs.normalize_range_value(weapon.effective_range)
+        category = "ranged" if range_value > 0 else "melee"
+        weapon_choices.append(
+            {
+                "id": weapon.id,
+                "name": weapon.effective_name,
+                "range_value": range_value,
+                "category": category,
+            }
+        )
     available_armories = _available_armories(db, current_user) if can_edit else []
     active_definitions = ability_registry.definition_payload(db, "active")
     aura_definitions = ability_registry.definition_payload(db, "aura")
@@ -1982,10 +2009,18 @@ def edit_unit_form(
     _ensure_army_edit_access(army, current_user)
     weapons = _armory_weapons(db, army.armory)
 
-    weapon_choices = [
-        {"id": weapon.id, "name": weapon.effective_name}
-        for weapon in weapons
-    ]
+    weapon_choices = []
+    for weapon in weapons:
+        range_value = costs.normalize_range_value(weapon.effective_range)
+        category = "ranged" if range_value > 0 else "melee"
+        weapon_choices.append(
+            {
+                "id": weapon.id,
+                "name": weapon.effective_name,
+                "range_value": range_value,
+                "category": category,
+            }
+        )
     active_definitions = ability_registry.definition_payload(db, "active")
     aura_definitions = ability_registry.definition_payload(db, "aura")
 

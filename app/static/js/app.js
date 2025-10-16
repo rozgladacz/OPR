@@ -1398,6 +1398,54 @@ function initWeaponPicker(root) {
   const primaryGroupName = `weapon-primary-${pickerId}`;
   let items = [];
 
+  function normalizeCategory(value) {
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const lowered = value.trim().toLowerCase();
+    if (['ranged', 'dystansowa', 'dystansowe', 'dystansowy'].includes(lowered)) {
+      return 'ranged';
+    }
+    if (['melee', 'wręcz', 'wrecz'].includes(lowered)) {
+      return 'melee';
+    }
+    return null;
+  }
+
+  function getWeaponMeta(weaponId, entry) {
+    const id = weaponId ?? (entry ? entry.weapon_id : undefined);
+    const weapon = id !== undefined && id !== null ? weaponMap.get(String(id)) || {} : {};
+    const rawRange =
+      entry && entry.range_value !== undefined
+        ? entry.range_value
+        : weapon.range_value ?? weapon.range;
+    const rangeValue = normalizeRangeValue(rawRange);
+    const rawCategory =
+      (entry && entry.category !== undefined && entry.category !== null ? entry.category : undefined) ??
+      weapon.category ??
+      weapon.range_category ??
+      weapon.type;
+    const normalizedCategory = normalizeCategory(rawCategory);
+    const category = normalizedCategory !== null ? normalizedCategory : rangeValue > 0 ? 'ranged' : 'melee';
+    return {
+      category,
+      rangeValue: Number.isFinite(rangeValue) ? rangeValue : 0,
+    };
+  }
+
+  function getItemCategory(entry) {
+    if (!entry) {
+      return 'melee';
+    }
+    if (typeof entry.category === 'string') {
+      const normalized = normalizeCategory(entry.category);
+      if (normalized) {
+        return normalized;
+      }
+    }
+    return getWeaponMeta(entry.weapon_id, entry).category;
+  }
+
   function parsePrimaryFlag(value) {
     if (typeof value === 'boolean') {
       return value;
@@ -1441,11 +1489,14 @@ function initWeaponPicker(root) {
             const primaryFlag = parsePrimaryFlag(
               entry.is_primary ?? entry.primary ?? entry.is_primary_weapon,
             );
+            const meta = getWeaponMeta(weaponId, entry);
             return {
               weapon_id: weaponId,
               name: name || weaponMap.get(String(weaponId))?.name || `Broń #${weaponId}`,
               default_count: defaultCount,
               is_primary: primaryFlag && defaultCount > 0,
+              category: meta.category,
+              range_value: meta.rangeValue,
             };
           })
           .filter((entry) => entry && entry.weapon_id);
@@ -1465,6 +1516,8 @@ function initWeaponPicker(root) {
         is_primary: Boolean(entry.is_primary && Number(entry.default_count) > 0),
         count: entry.default_count,
         default_count: entry.default_count,
+        category: entry.category,
+        range_value: entry.range_value,
       }));
       hiddenInput.value = JSON.stringify(payload);
     }
@@ -1495,69 +1548,63 @@ function initWeaponPicker(root) {
   }
 
   function ensurePrimary() {
-    if (!Array.isArray(items) || !items.length) {
-      let changed = false;
-      items = Array.isArray(items) ? items : [];
-      items.forEach((entry) => {
-        if (entry && entry.is_primary) {
-          entry.is_primary = false;
-          changed = true;
-        }
-      });
-      return changed;
+    if (!Array.isArray(items)) {
+      items = [];
+      return false;
+    }
+    if (!items.length) {
+      return false;
     }
     let changed = false;
-    let primaryIndex = -1;
+    const categoryState = new Map();
     items.forEach((entry, idx) => {
       if (!entry) {
         return;
       }
       const countValue = Number(entry.default_count);
       const safeCount = Number.isFinite(countValue) ? countValue : 0;
-      if (safeCount <= 0 && entry.is_primary) {
-        entry.is_primary = false;
-        changed = true;
-        return;
+      const category = getItemCategory(entry);
+      let state = categoryState.get(category);
+      if (!state) {
+        state = { primaryIndex: -1, fallbackIndex: -1 };
       }
-      if (entry.is_primary && safeCount > 0) {
-        if (primaryIndex === -1) {
-          primaryIndex = idx;
-        } else {
+      if (safeCount <= 0) {
+        if (entry.is_primary) {
           entry.is_primary = false;
           changed = true;
         }
+      } else {
+        if (state.fallbackIndex === -1) {
+          state.fallbackIndex = idx;
+        }
+        if (entry.is_primary) {
+          if (state.primaryIndex === -1) {
+            state.primaryIndex = idx;
+          } else if (state.primaryIndex !== idx) {
+            entry.is_primary = false;
+            changed = true;
+          }
+        }
       }
+      categoryState.set(category, state);
     });
-    if (primaryIndex !== -1) {
-      return changed;
-    }
-    const fallbackIndex = items.findIndex((entry) => {
-      if (!entry) {
-        return false;
+
+    categoryState.forEach((state, category) => {
+      if (state.primaryIndex !== -1 || state.fallbackIndex === -1) {
+        return;
       }
-      const countValue = Number(entry.default_count);
-      const safeCount = Number.isFinite(countValue) ? countValue : 0;
-      return safeCount > 0;
-    });
-    if (fallbackIndex !== -1) {
       items.forEach((entry, idx) => {
-        if (!entry) {
+        if (!entry || getItemCategory(entry) !== category) {
           return;
         }
-        const shouldBePrimary = idx === fallbackIndex;
+        const shouldBePrimary = idx === state.fallbackIndex;
         if (entry.is_primary !== shouldBePrimary) {
           entry.is_primary = shouldBePrimary;
           changed = true;
         }
       });
-      return changed;
-    }
-    items.forEach((entry) => {
-      if (entry && entry.is_primary) {
-        entry.is_primary = false;
-        changed = true;
-      }
     });
+
     return changed;
   }
 
@@ -1586,12 +1633,11 @@ function initWeaponPicker(root) {
       nameLabel.textContent = item.name || weaponMap.get(String(item.weapon_id))?.name || `Broń #${item.weapon_id}`;
       nameWrapper.appendChild(nameLabel);
 
-      if (Number(item.default_count) > 0) {
+      const category = getItemCategory(item);
+      if (Number(item.default_count) > 0 && item.is_primary) {
         const defaultBadge = document.createElement('span');
-        defaultBadge.className = item.is_primary
-          ? 'badge text-bg-primary'
-          : 'badge text-bg-light text-dark';
-        defaultBadge.textContent = item.is_primary ? 'Broń podstawowa' : 'W wyposażeniu';
+        defaultBadge.className = 'badge text-bg-primary';
+        defaultBadge.textContent = 'Broń podstawowa';
         nameWrapper.appendChild(defaultBadge);
       }
 
@@ -1626,7 +1672,7 @@ function initWeaponPicker(root) {
       const primaryInput = document.createElement('input');
       primaryInput.type = 'radio';
       primaryInput.className = 'form-check-input';
-      primaryInput.name = primaryGroupName;
+      primaryInput.name = `${primaryGroupName}-${category}`;
       const primaryId = `weapon-primary-${pickerId}-${item.weapon_id}-${index}`;
       primaryInput.id = primaryId;
       const hasDefault = Number(item.default_count) > 0;
@@ -1636,11 +1682,15 @@ function initWeaponPicker(root) {
         if (!primaryInput.checked) {
           return;
         }
+        const currentCategory = getItemCategory(item);
         items.forEach((entry, entryIndex) => {
           if (!entry) {
             return;
           }
           const entryHasDefault = Number(entry.default_count) > 0;
+          if (getItemCategory(entry) !== currentCategory) {
+            return;
+          }
           entry.is_primary = entryIndex === index && entryHasDefault;
         });
         ensurePrimary();
@@ -1650,7 +1700,8 @@ function initWeaponPicker(root) {
       const primaryLabel = document.createElement('label');
       primaryLabel.className = 'form-check-label small';
       primaryLabel.setAttribute('for', primaryId);
-      primaryLabel.textContent = 'Broń podstawowa';
+      primaryLabel.textContent =
+        category === 'ranged' ? 'Broń podstawowa (dystansowa)' : 'Broń podstawowa (wręcz)';
       primaryWrapper.appendChild(primaryInput);
       primaryWrapper.appendChild(primaryLabel);
 
@@ -1719,11 +1770,14 @@ function initWeaponPicker(root) {
     const weapon = weaponMap.get(String(weaponId));
     const rawCount = defaultCountInput ? Number.parseInt(defaultCountInput.value, 10) : 0;
     const safeCount = Number.isFinite(rawCount) && rawCount >= 0 ? rawCount : 0;
+    const meta = getWeaponMeta(weaponId);
     items.push({
       weapon_id: Number.parseInt(weaponId, 10),
       name: weapon?.name || selectEl.selectedOptions[0]?.textContent || `Broń #${weaponId}`,
       default_count: safeCount,
       is_primary: false,
+      category: meta.category,
+      range_value: meta.rangeValue,
     });
     ensurePrimary();
     updateHidden();
