@@ -24,6 +24,14 @@ templates = Jinja2Templates(directory="app/templates")
 ABILITY_NAME_MAX_LENGTH = 60
 
 
+def _unit_eager_options() -> tuple:
+    return (
+        selectinload(models.Unit.weapon_links).selectinload(models.UnitWeapon.weapon),
+        selectinload(models.Unit.default_weapon),
+        selectinload(models.Unit.abilities).selectinload(models.UnitAbility.ability),
+    )
+
+
 def _normalized_trait_identifier(slug: str | None) -> str | None:
     if slug is None:
         return None
@@ -407,8 +415,16 @@ def add_roster_unit(
     current_user: models.User = Depends(get_current_user()),
 ):
     roster = db.get(models.Roster, roster_id)
-    unit = db.get(models.Unit, unit_id)
-    if not roster or not unit or unit.army_id != roster.army_id:
+    unit = (
+        db.execute(
+            select(models.Unit)
+            .options(*_unit_eager_options())
+            .where(models.Unit.id == unit_id)
+        )
+        .scalars()
+        .first()
+    )
+    if not roster or unit is None or unit.army_id != roster.army_id:
         raise HTTPException(status_code=404)
     _ensure_roster_edit_access(roster, current_user)
 
@@ -568,8 +584,18 @@ def update_roster_unit(
     current_user: models.User = Depends(get_current_user()),
 ):
     roster = db.get(models.Roster, roster_id)
-    roster_unit = db.get(models.RosterUnit, roster_unit_id)
-    if not roster or not roster_unit or roster_unit.roster_id != roster.id:
+    roster_unit = (
+        db.execute(
+            select(models.RosterUnit)
+            .options(
+                selectinload(models.RosterUnit.unit).options(*_unit_eager_options())
+            )
+            .where(models.RosterUnit.id == roster_unit_id)
+        )
+        .scalars()
+        .first()
+    )
+    if not roster or roster_unit is None or roster_unit.roster_id != roster.id:
         raise HTTPException(status_code=404)
     _ensure_roster_edit_access(roster, current_user)
 
