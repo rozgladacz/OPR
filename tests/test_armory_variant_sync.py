@@ -1,9 +1,27 @@
-from sqlalchemy import create_engine, select
+from contextlib import contextmanager
+
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 
 from app import models
 from app.db import Base
 from app.services import utils
+from app.routers import armies as armies_router
+from app.routers import armories as armories_router
+
+
+@contextmanager
+def _track_statements(session):
+    statements: list[str] = []
+
+    def before_execute(_, __, statement, ___, ____, _____):
+        statements.append(statement)
+
+    event.listen(session.bind, "before_cursor_execute", before_execute)
+    try:
+        yield statements
+    finally:
+        event.remove(session.bind, "before_cursor_execute", before_execute)
 
 
 def _session():
@@ -85,5 +103,87 @@ def test_nested_variant_keeps_parent_defaults():
         assert second_clone.parent_id == first_clone.id
         assert second_clone.effective_attacks == parent_weapon.attacks
         assert second_clone.effective_ap == parent_weapon.ap
+    finally:
+        session.close()
+
+
+def test_army_view_variant_sync_cached_in_session():
+    session = _session()
+    try:
+        base_armory = models.Armory(name="Base")
+        variant_armory = models.Armory(name="Variant", parent=base_armory)
+
+        session.add_all([base_armory, variant_armory])
+        session.flush()
+
+        parent_weapon = models.Weapon(
+            armory=base_armory,
+            name="Sword",
+            range="Melee",
+            attacks=3,
+            ap=2,
+        )
+        session.add(parent_weapon)
+        session.flush()
+
+        utils.ensure_armory_variant_sync(session, variant_armory)
+        session.flush()
+
+        armies_router._armory_weapons(session, variant_armory)
+
+        with _track_statements(session) as statements:
+            armies_router._armory_weapons(session, variant_armory)
+
+        select_statements = [
+            statement
+            for statement in statements
+            if statement.lstrip().upper().startswith("SELECT")
+        ]
+
+        assert len(select_statements) == 1
+        assert "FROM weapons" in select_statements[0]
+        assert "armory_id" in select_statements[0]
+    finally:
+        session.close()
+
+
+def test_armory_view_variant_sync_cached_in_session():
+    session = _session()
+    try:
+        base_armory = models.Armory(name="Base")
+        variant_armory = models.Armory(name="Variant", parent=base_armory)
+
+        session.add_all([base_armory, variant_armory])
+        session.flush()
+
+        parent_weapon = models.Weapon(
+            armory=base_armory,
+            name="Axe",
+            range="Melee",
+            attacks=5,
+            ap=-1,
+        )
+        session.add(parent_weapon)
+        session.flush()
+
+        utils.ensure_armory_variant_sync(session, variant_armory)
+        session.flush()
+
+        utils.ensure_armory_variant_sync(session, variant_armory)
+        armories_router._armory_weapons(session, variant_armory)
+
+        with _track_statements(session) as statements:
+            utils.ensure_armory_variant_sync(session, variant_armory)
+            armories_router._armory_weapons(session, variant_armory)
+
+        select_statements = [
+            statement
+            for statement in statements
+            if statement.lstrip().upper().startswith("SELECT")
+        ]
+
+        assert len(select_statements) == 1
+        assert "FROM weapons" in select_statements[0]
+        assert "armory_id" in select_statements[0]
     finally:
         session.close()

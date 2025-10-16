@@ -148,8 +148,14 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
     if armory.parent_id is None:
         return
 
+    synced_variants: set[int] = db.info.setdefault("_armory_variant_synced", set())
+    if armory.id in synced_variants:
+        return
+
     if armory.parent is not None:
         ensure_armory_variant_sync(db, armory.parent)
+
+    synced_variants.add(armory.id)
 
     parent_weapon_ids = {
         weapon_id
@@ -279,3 +285,6 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
 
     if cleaned:
         db.flush()
+
+    if created_new_clones or cleaned:
+        synced_variants.discard(armory.id)
