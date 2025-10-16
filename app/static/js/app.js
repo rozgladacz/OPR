@@ -1,6 +1,14 @@
+const abilityDefinitionsCache = new Map();
+
 function initAbilityPicker(root) {
-  const definitionsData = root.dataset.definitions;
-  const definitions = definitionsData ? JSON.parse(definitionsData) : [];
+  const definitionsData = root.dataset.definitions || '';
+  let definitions;
+  if (abilityDefinitionsCache.has(definitionsData)) {
+    definitions = abilityDefinitionsCache.get(definitionsData);
+  } else {
+    definitions = definitionsData ? JSON.parse(definitionsData) : [];
+    abilityDefinitionsCache.set(definitionsData, definitions);
+  }
   const definitionMap = new Map(definitions.map((item) => [item.slug, item]));
   const targetId = root.dataset.targetInput;
   const hiddenInput = targetId ? document.getElementById(targetId) : root.querySelector('input[type="hidden"]');
