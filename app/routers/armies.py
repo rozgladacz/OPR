@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import math
+from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
+
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import and_, func, or_, select, update
@@ -892,7 +894,7 @@ def _existing_role_entry(unit: models.Unit) -> dict[str, object] | None:
 
 
 def _infer_unit_role_slug(unit: models.Unit) -> str | None:
-    roster_unit = models.RosterUnit(unit=unit, count=1)
+    roster_unit = SimpleNamespace(unit=unit, count=1, extra_weapons_json=None)
     totals = costs.roster_unit_role_totals(roster_unit)
     warrior = float(totals.get("wojownik") or 0.0)
     shooter = float(totals.get("strzelec") or 0.0)
