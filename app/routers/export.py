@@ -14,7 +14,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
 
 from .. import models
 from ..db import get_db
@@ -112,6 +113,28 @@ def _ensure_pdf_fonts() -> None:
     _PDF_FONTS_REGISTERED = True
 
 
+def _load_roster_for_export(db: Session, roster_id: int) -> models.Roster | None:
+    stmt = (
+        select(models.Roster)
+        .where(models.Roster.id == roster_id)
+        .options(
+            selectinload(models.Roster.roster_units).options(
+                selectinload(models.RosterUnit.unit).options(
+                    selectinload(models.Unit.weapon_links).selectinload(
+                        models.UnitWeapon.weapon
+                    ),
+                    selectinload(models.Unit.default_weapon),
+                    selectinload(models.Unit.abilities).selectinload(
+                        models.UnitAbility.ability
+                    ),
+                )
+            ),
+            selectinload(models.Roster.army).selectinload(models.Army.spells),
+        )
+    )
+    return db.scalars(stmt).one_or_none()
+
+
 @router.get("/{roster_id}/print", response_class=HTMLResponse)
 def roster_print(
     roster_id: int,
@@ -121,7 +144,7 @@ def roster_print(
 ):
     if not current_user:
         return RedirectResponse(url="/auth/login", status_code=303)
-    roster = db.get(models.Roster, roster_id)
+    roster = _load_roster_for_export(db, roster_id)
     if not roster:
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
@@ -155,7 +178,7 @@ def roster_export_list(
 ):
     if not current_user:
         return RedirectResponse(url="/auth/login", status_code=303)
-    roster = db.get(models.Roster, roster_id)
+    roster = _load_roster_for_export(db, roster_id)
     if not roster:
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
@@ -190,7 +213,7 @@ def roster_pdf(
 ):
     if not current_user:
         return RedirectResponse(url="/auth/login", status_code=303)
-    roster = db.get(models.Roster, roster_id)
+    roster = _load_roster_for_export(db, roster_id)
     if not roster:
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
@@ -200,6 +223,7 @@ def roster_pdf(
     total_cost = costs.roster_total(roster)
     total_cost_rounded = utils.round_points(total_cost)
     roster_items = [_roster_unit_export_data(ru) for ru in roster.roster_units]
+    spell_entries = _army_spell_entries(roster, roster_items)
 
     _ensure_pdf_fonts()
 

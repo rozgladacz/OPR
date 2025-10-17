@@ -12,7 +12,7 @@ from .. import models
 from ..db import get_db
 from ..security import get_current_user
 from ..services import costs, utils
-from .export import _army_spell_entries
+from .export import _army_spell_entries, _load_roster_for_export
 from .rosters import _ensure_roster_view_access, _roster_unit_export_data
 
 
@@ -170,7 +170,7 @@ def export_xlsx(
 ):
     if current_user is None:
         return RedirectResponse(url="/auth/login", status_code=303)
-    roster = db.get(models.Roster, roster_id)
+    roster = _load_roster_for_export(db, roster_id)
     if not roster:
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
