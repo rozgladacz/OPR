@@ -3355,6 +3355,128 @@ function initRosterEditor() {
     }
   }
 
+  function syncEditorFromItem(item, options = {}) {
+    const {
+      preserveAutoSave = false,
+      updateFormActions = false,
+      ensureEditorVisible = false,
+    } = options;
+    if (!item || !editor || !emptyState) {
+      return;
+    }
+    if (!preserveAutoSave) {
+      autoSaveEnabled = false;
+      setSaveStatus('idle');
+    } else if (!isEditable) {
+      autoSaveEnabled = false;
+    }
+    if (customEditInput) {
+      customEditInput.remove();
+      customEditInput = null;
+    }
+
+    currentPassives = getParsedList(item, 'data-passives');
+    currentActives = getParsedList(item, 'data-actives');
+    currentAuras = getParsedList(item, 'data-auras');
+    currentWeapons = getParsedList(item, 'data-weapon-options');
+    currentBaseFlags = parseFlagString(item.getAttribute('data-unit-flags'));
+
+    const unitName = item.getAttribute('data-unit-name') || 'Jednostka';
+    const quality = item.getAttribute('data-unit-quality') || '-';
+    const qualityNumeric = Number(quality);
+    currentQuality = Number.isFinite(qualityNumeric) ? qualityNumeric : 4;
+    const defense = item.getAttribute('data-unit-defense') || '-';
+    const toughness = item.getAttribute('data-unit-toughness') || '-';
+    const countValue = Number(item.getAttribute('data-unit-count') || '1');
+    const baseCostValue = Number(item.getAttribute('data-base-cost-per-model') || '0');
+    const rosterUnitId = item.getAttribute('data-roster-unit-id');
+    const loadoutData = getParsedObject(item, 'data-loadout', parseLoadout);
+    const customName = item.getAttribute('data-unit-custom-name') || '';
+    const classificationData = getParsedObject(item, 'data-unit-classification', parseJsonValue);
+
+    currentClassification =
+      classificationData && typeof classificationData === 'object' ? classificationData : null;
+
+    if (nameEl) {
+      nameEl.textContent = unitName;
+    }
+    if (statsEl) {
+      statsEl.textContent = `Jakość ${quality} / Obrona ${defense} / Wytrzymałość ${toughness}`;
+    }
+
+    setCustomName(customName, {
+      triggerSave: false,
+      updateActiveItem: false,
+      updateList: false,
+    });
+    renderClassificationDisplay();
+
+    currentCount = Number.isFinite(countValue) && countValue >= 1 ? countValue : 1;
+    if (countInput) {
+      countInput.value = String(currentCount);
+    }
+
+    loadoutState = createLoadoutState(loadoutData);
+    ensureStateEntries(loadoutState.weapons, currentWeapons, 'id', 'default_count', {
+      fallbackIdKeys: ['weapon_id'],
+    });
+    ensureStateEntries(loadoutState.active, currentActives, 'ability_id', 'default_count', {
+      fallbackIdKeys: ['id'],
+    });
+    ensureStateEntries(loadoutState.aura, currentAuras, 'ability_id', 'default_count', {
+      fallbackIdKeys: ['id'],
+    });
+    ensurePassiveStateEntries(loadoutState.passive, currentPassives);
+    if (loadoutState.mode !== 'total') {
+      const convertToTotal = (map) => {
+        if (!(map instanceof Map)) {
+          return;
+        }
+        map.forEach((value, key) => {
+          const numeric = Number(value);
+          if (!Number.isFinite(numeric) || numeric <= 0) {
+            map.set(key, 0);
+            return;
+          }
+          map.set(key, numeric * currentCount);
+        });
+      };
+      convertToTotal(loadoutState.weapons);
+      convertToTotal(loadoutState.active);
+      convertToTotal(loadoutState.aura);
+      loadoutState.mode = 'total';
+    }
+
+    abilityCostMap = buildAbilityCostMap(currentActives, currentAuras, currentPassives);
+    baseCostPerModel = Number.isFinite(baseCostValue) && baseCostValue >= 0 ? baseCostValue : 0;
+
+    ignoreNextSave = true;
+    handleStateChange();
+
+    if (updateFormActions && rosterUnitId) {
+      if (form) {
+        form.setAttribute('action', `/rosters/${rosterId}/units/${rosterUnitId}/update`);
+      }
+      if (duplicateForm) {
+        duplicateForm.setAttribute(
+          'action',
+          `/rosters/${rosterId}/units/${rosterUnitId}/duplicate`,
+        );
+      }
+      if (deleteForm) {
+        deleteForm.setAttribute('action', `/rosters/${rosterId}/units/${rosterUnitId}/delete`);
+      }
+    }
+
+    if (ensureEditorVisible) {
+      editor.classList.remove('d-none');
+      emptyState.classList.add('d-none');
+    }
+
+    autoSaveEnabled = isEditable;
+    setSaveStatus(currentSaveStatus);
+  }
+
   function applyServerUpdate(payload) {
     if (!payload || typeof payload !== 'object') {
       return;
@@ -3434,8 +3556,7 @@ function initRosterEditor() {
         auras: unitData.selected_aura_items || [],
       });
       if (isActiveMatch) {
-        ignoreNextSave = true;
-        selectItem(targetItem, { preserveAutoSave: true });
+        syncEditorFromItem(targetItem, { preserveAutoSave: true });
       }
     }
     if (payload.roster && typeof payload.roster.total_cost === 'number') {
@@ -3837,107 +3958,11 @@ function renderEditors(precomputedWeaponMap = null) {
       return;
     }
 
-    if (!preserveAutoSave) {
-      autoSaveEnabled = false;
-      setSaveStatus('idle');
-    } else if (!isEditable) {
-      autoSaveEnabled = false;
-    }
-
-    if (customEditInput) {
-      customEditInput.remove();
-      customEditInput = null;
-    }
-
-    currentPassives = getParsedList(item, 'data-passives');
-    currentActives = getParsedList(item, 'data-actives');
-    currentAuras = getParsedList(item, 'data-auras');
-    currentWeapons = getParsedList(item, 'data-weapon-options');
-    currentBaseFlags = parseFlagString(item.getAttribute('data-unit-flags'));
-
-    const unitName = item.getAttribute('data-unit-name') || 'Jednostka';
-    const quality = item.getAttribute('data-unit-quality') || '-';
-    const qualityNumeric = Number(quality);
-    currentQuality = Number.isFinite(qualityNumeric) ? qualityNumeric : 4;
-    const defense = item.getAttribute('data-unit-defense') || '-';
-    const toughness = item.getAttribute('data-unit-toughness') || '-';
-    const countValue = Number(item.getAttribute('data-unit-count') || '1');
-    const baseCostValue = Number(item.getAttribute('data-base-cost-per-model') || '0');
-    const rosterUnitId = item.getAttribute('data-roster-unit-id');
-    const loadoutData = getParsedObject(item, 'data-loadout', parseLoadout);
-    const customName = item.getAttribute('data-unit-custom-name') || '';
-    const classificationData = getParsedObject(item, 'data-unit-classification', parseJsonValue);
-    currentClassification =
-      classificationData && typeof classificationData === 'object' ? classificationData : null;
-
-    if (nameEl) {
-      nameEl.textContent = unitName;
-    }
-    if (statsEl) {
-      statsEl.textContent = `Jakość ${quality} / Obrona ${defense} / Wytrzymałość ${toughness}`;
-    }
-    setCustomName(customName, {
-      triggerSave: false,
-      updateActiveItem: false,
-      updateList: false,
+    syncEditorFromItem(item, {
+      preserveAutoSave,
+      updateFormActions: true,
+      ensureEditorVisible: true,
     });
-    renderClassificationDisplay();
-
-    currentCount = Number.isFinite(countValue) && countValue >= 1 ? countValue : 1;
-    if (countInput) {
-      countInput.value = String(currentCount);
-    }
-
-    loadoutState = createLoadoutState(loadoutData);
-    ensureStateEntries(loadoutState.weapons, currentWeapons, 'id', 'default_count', {
-      fallbackIdKeys: ['weapon_id'],
-    });
-    ensureStateEntries(loadoutState.active, currentActives, 'ability_id', 'default_count', {
-      fallbackIdKeys: ['id'],
-    });
-    ensureStateEntries(loadoutState.aura, currentAuras, 'ability_id', 'default_count', {
-      fallbackIdKeys: ['id'],
-    });
-    ensurePassiveStateEntries(loadoutState.passive, currentPassives);
-    if (loadoutState.mode !== 'total') {
-      const convertToTotal = (map) => {
-        if (!(map instanceof Map)) {
-          return;
-        }
-        map.forEach((value, key) => {
-          const numeric = Number(value);
-          if (!Number.isFinite(numeric) || numeric <= 0) {
-            map.set(key, 0);
-            return;
-          }
-          map.set(key, numeric * currentCount);
-        });
-      };
-      convertToTotal(loadoutState.weapons);
-      convertToTotal(loadoutState.active);
-      convertToTotal(loadoutState.aura);
-      loadoutState.mode = 'total';
-    }
-
-    abilityCostMap = buildAbilityCostMap(currentActives, currentAuras, currentPassives);
-    baseCostPerModel = Number.isFinite(baseCostValue) && baseCostValue >= 0 ? baseCostValue : 0;
-
-    ignoreNextSave = true;
-    handleStateChange();
-
-    if (form && rosterUnitId) {
-      form.setAttribute('action', `/rosters/${rosterId}/units/${rosterUnitId}/update`);
-    }
-    if (duplicateForm && rosterUnitId) {
-      duplicateForm.setAttribute('action', `/rosters/${rosterId}/units/${rosterUnitId}/duplicate`);
-    }
-    if (deleteForm && rosterUnitId) {
-      deleteForm.setAttribute('action', `/rosters/${rosterId}/units/${rosterUnitId}/delete`);
-    }
-    editor.classList.remove('d-none');
-    emptyState.classList.add('d-none');
-    autoSaveEnabled = isEditable;
-    setSaveStatus(currentSaveStatus);
   }
 
   items.forEach((item) => {
