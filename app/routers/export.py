@@ -120,10 +120,13 @@ def _load_roster_for_export(db: Session, roster_id: int) -> models.Roster | None
         .options(
             selectinload(models.Roster.roster_units).options(
                 selectinload(models.RosterUnit.unit).options(
-                    selectinload(models.Unit.weapon_links).selectinload(
-                        models.UnitWeapon.weapon
-                    ),
-                    selectinload(models.Unit.default_weapon),
+                    selectinload(models.Unit.weapon_links)
+                    .selectinload(models.UnitWeapon.weapon)
+                    .selectinload(models.Weapon.parent)
+                    .selectinload(models.Weapon.parent),
+                    selectinload(models.Unit.default_weapon)
+                    .selectinload(models.Weapon.parent)
+                    .selectinload(models.Weapon.parent),
                     selectinload(models.Unit.abilities).selectinload(
                         models.UnitAbility.ability
                     ),
