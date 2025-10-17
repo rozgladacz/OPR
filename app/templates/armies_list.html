@@ -13,7 +13,7 @@
       {% for army in mine %}
       <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="/armies/{{ army.id }}">
         <span>{{ army.name }}</span>
-        <span class="badge bg-secondary">Jednostek: {{ army.units|length }}</span>
+        <span class="badge bg-secondary">Jednostek: {{ army.unit_count | default(0) }}</span>
       </a>
       {% else %}
       <div class="list-group-item text-muted">Brak własnych armii</div>
@@ -26,7 +26,7 @@
       {% for army in global_items %}
       <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="/armies/{{ army.id }}">
         <span>{{ army.name }}</span>
-        <span class="badge bg-secondary">Jednostek: {{ army.units|length }}</span>
+        <span class="badge bg-secondary">Jednostek: {{ army.unit_count | default(0) }}</span>
       </a>
       {% else %}
       <div class="list-group-item text-muted">Brak globalnych armii</div>
@@ -41,7 +41,7 @@
       <div class="list-group-item d-flex justify-content-between align-items-center">
         <a class="text-decoration-none flex-grow-1 me-3 d-flex justify-content-between align-items-center" href="/armies/{{ army.id }}">
           <span>{{ army.name }}{% if army.owner %} – {{ army.owner.username }}{% endif %}</span>
-          <span class="badge bg-secondary">Jednostek: {{ army.units|length }}</span>
+          <span class="badge bg-secondary">Jednostek: {{ army.unit_count | default(0) }}</span>
         </a>
         <form method="post" action="/armies/{{ army.id }}/takeover" class="ms-2">
           <button class="btn btn-sm btn-outline-secondary" type="submit">Przejmij</button>

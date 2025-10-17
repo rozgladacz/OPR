@@ -1034,11 +1034,13 @@ def list_armies(
         return RedirectResponse(url="/auth/login", status_code=303)
 
     query = (
-        select(models.Army)
-        .options(
-            selectinload(models.Army.units),
-            selectinload(models.Army.owner),
+        select(
+            models.Army,
+            func.count(models.Unit.id).label("unit_count"),
         )
+        .outerjoin(models.Unit)
+        .options(selectinload(models.Army.owner))
+        .group_by(models.Army.id)
         .order_by(models.Army.name)
     )
     if not current_user.is_admin:
@@ -1048,7 +1050,12 @@ def list_armies(
                 models.Army.owner_id.is_(None),
             )
         )
-    armies = db.execute(query).scalars().all()
+    rows = db.execute(query).all()
+    armies: list[models.Army] = []
+    for row in rows:
+        army, unit_count = row
+        army.unit_count = unit_count or 0
+        armies.append(army)
     mine, global_items, others = utils.split_owned(armies, current_user)
     return templates.TemplateResponse(
         "armies_list.html",
