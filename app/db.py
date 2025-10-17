@@ -118,7 +118,9 @@ def _rebuild_armies_table(connection, default_armory_id: int) -> None:
 def _rebuild_unit_weapons_table(connection) -> None:
     from . import models
 
-    logger.info("Migrating unit_weapons table to include default counts and positions")
+    logger.info(
+        "Migrating unit_weapons table to include default counts, positions, and primary flags"
+    )
     connection.execute(text("PRAGMA foreign_keys=OFF"))
     try:
         connection.execute(text("DROP TABLE IF EXISTS unit_weapons_old"))
@@ -307,7 +309,8 @@ def _migrate_schema() -> None:
         if "unit_weapons" in table_names:
             columns = inspector.get_columns("unit_weapons")
             column_names = {column["name"] for column in columns}
-            if not {"default_count", "position"}.issubset(column_names):
+            required_columns = {"default_count", "position", "is_primary"}
+            if not required_columns.issubset(column_names):
                 _rebuild_unit_weapons_table(connection)
 
         if "units" in table_names:
