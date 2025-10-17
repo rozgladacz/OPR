@@ -247,7 +247,11 @@ def _get_default_ruleset(db: Session) -> models.RuleSet | None:
 
 
 def _available_armories(db: Session, user: models.User) -> list[models.Armory]:
-    query = select(models.Armory).order_by(models.Armory.name)
+    query = (
+        select(models.Armory)
+        .options(selectinload(models.Armory.parent))
+        .order_by(models.Armory.name)
+    )
     if not user.is_admin:
         query = query.where(
             or_(
