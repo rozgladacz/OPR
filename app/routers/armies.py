@@ -269,6 +269,37 @@ def _ensure_armory_access(armory: models.Armory, user: models.User) -> None:
         raise HTTPException(status_code=403, detail="Brak dostępu do zbrojowni")
 
 
+def _load_army_detail(db: Session, army_id: int) -> models.Army | None:
+    return (
+        db.execute(
+            select(models.Army)
+            .options(
+                selectinload(models.Army.armory),
+                selectinload(models.Army.units).options(
+                    selectinload(models.Unit.weapon_links).selectinload(
+                        models.UnitWeapon.weapon
+                    ),
+                    selectinload(models.Unit.default_weapon),
+                    selectinload(models.Unit.abilities).selectinload(
+                        models.UnitAbility.ability
+                    ),
+                ),
+                selectinload(models.Army.weapons),
+                selectinload(models.Army.spells).selectinload(models.ArmySpell.weapon),
+            )
+            .where(models.Army.id == army_id)
+        )
+        .scalars()
+        .first()
+    )
+
+
+def _normalized_weapon_name(value: str | None) -> str:
+    if not value:
+        return ""
+    return value.strip().casefold()
+
+
 def _armory_weapons(db: Session, armory: models.Armory) -> list[models.Weapon]:
     utils.ensure_armory_variant_sync(db, armory)
     weapons = (
@@ -1158,126 +1189,6 @@ def create_army(
     return RedirectResponse(url=f"/armies/{army.id}", status_code=303)
 
 
-@router.get("/{army_id}", response_class=HTMLResponse)
-def view_army(
-    army_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: models.User | None = Depends(get_current_user(optional=True)),
-):
-    if not current_user:
-        return RedirectResponse(url="/auth/login", status_code=303)
-    army = (
-        db.execute(
-            select(models.Army)
-            .options(
-                selectinload(models.Army.armory),
-                selectinload(models.Army.units).options(
-                    selectinload(models.Unit.weapon_links)
-                    .selectinload(models.UnitWeapon.weapon),
-                    selectinload(models.Unit.default_weapon),
-                    selectinload(models.Unit.abilities)
-                    .selectinload(models.UnitAbility.ability),
-                ),
-            )
-            .where(models.Army.id == army_id)
-        )
-        .scalars()
-        .first()
-    )
-    if army is None:
-        raise HTTPException(status_code=404)
-    _ensure_army_view_access(army, current_user)
-
-    can_edit = current_user.is_admin or army.owner_id == current_user.id
-    can_delete = False
-    if can_edit:
-        has_rosters = db.execute(
-            select(models.Roster.id).where(models.Roster.army_id == army.id)
-        ).first()
-        can_delete = not bool(has_rosters)
-    weapons = _armory_weapons(db, army.armory)
-
-    weapon_choices = []
-    for weapon in weapons:
-        range_value = costs.normalize_range_value(weapon.effective_range)
-        category = "ranged" if range_value > 0 else "melee"
-        weapon_choices.append(
-            {
-                "id": weapon.id,
-                "name": weapon.effective_name,
-                "range_value": range_value,
-                "category": category,
-            }
-        )
-    available_armories = _available_armories(db, current_user) if can_edit else []
-    active_definitions = ability_registry.definition_payload(db, "active")
-    aura_definitions = ability_registry.definition_payload(db, "aura")
-
-    units = []
-    for unit in army.units:
-        passive_items = [item for item in _passive_payload(unit) if item]
-        active_items = ability_registry.unit_ability_payload(unit, "active")
-        aura_items = ability_registry.unit_ability_payload(unit, "aura")
-        loadout = unit.default_weapon_loadout
-        weapon_summary = ", ".join(
-            f"{weapon.effective_name} x{count}" if count > 1 else weapon.effective_name
-            for weapon, count in loadout
-        )
-        if not weapon_summary:
-            weapon_summary = "-"
-        cost_per_model = costs.unit_total_cost(unit)
-        typical_models = unit.typical_model_count
-        units.append(
-            {
-                "instance": unit,
-                "cost": costs.unit_typical_total_cost(unit, typical_models),
-                "cost_per_model": cost_per_model,
-                "typical_models": typical_models,
-                "passive_items": passive_items,
-                "active_items": active_items,
-                "aura_items": aura_items,
-                "weapon_summary": weapon_summary,
-
-            }
-        )
-    return templates.TemplateResponse(
-        "army_edit.html",
-        {
-            "request": request,
-            "user": current_user,
-            "army": army,
-            "units": units,
-            "weapons": weapons,
-
-            "weapon_choices": weapon_choices,
-
-            "armories": available_armories,
-            "selected_armory_id": army.armory_id,
-            "error": None,
-            "can_edit": can_edit,
-            "can_delete": can_delete,
-            "passive_definitions": PASSIVE_DEFINITIONS,
-            "active_definitions": active_definitions,
-            "aura_definitions": aura_definitions,
-        },
-    )
-
-
-@router.post("/{army_id}/update")
-def update_army(
-    army_id: int,
-    name: str = Form(...),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user()),
-):
-    army = db.get(models.Army, army_id)
-    if not army:
-        raise HTTPException(status_code=404)
-    _ensure_army_edit_access(army, current_user)
-    army.name = name
-    db.commit()
-    return RedirectResponse(url=f"/armies/{army.id}", status_code=303)
 
 
 @router.post("/{army_id}/delete")
@@ -2210,3 +2121,413 @@ def delete_unit(
     _resequence_army_units(remaining_units)
     db.commit()
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
+def _switch_army_armory(
+    db: Session, army: models.Army, new_armory: models.Armory
+) -> None:
+    if army.armory_id == new_armory.id:
+        army.armory = new_armory
+        return
+
+    detailed_army = _load_army_detail(db, army.id)
+    if detailed_army is None:
+        raise HTTPException(status_code=404)
+
+    old_armory = detailed_army.armory
+    if old_armory.id == new_armory.id:
+        detailed_army.armory = new_armory
+        return
+
+    utils.ensure_armory_variant_sync(db, old_armory)
+    utils.ensure_armory_variant_sync(db, new_armory)
+
+    old_weapons = (
+        db.execute(
+            select(models.Weapon)
+            .where(
+                models.Weapon.armory_id == old_armory.id,
+                models.Weapon.army_id.is_(None),
+            )
+            .options(selectinload(models.Weapon.parent))
+        )
+        .scalars()
+        .all()
+    )
+    new_weapons = (
+        db.execute(
+            select(models.Weapon)
+            .where(
+                models.Weapon.armory_id == new_armory.id,
+                models.Weapon.army_id.is_(None),
+            )
+            .options(selectinload(models.Weapon.parent))
+        )
+        .scalars()
+        .all()
+    )
+
+    old_global_weapon_ids = {weapon.id for weapon in old_weapons}
+
+    new_by_parent: dict[int, models.Weapon] = {}
+    new_by_name: dict[str, models.Weapon] = {}
+    for weapon in new_weapons:
+        if weapon.parent_id and weapon.parent_id not in new_by_parent:
+            new_by_parent[weapon.parent_id] = weapon
+        name_key = _normalized_weapon_name(weapon.effective_name)
+        if name_key and name_key not in new_by_name:
+            new_by_name[name_key] = weapon
+
+    weapon_map: dict[int, models.Weapon] = {}
+    for weapon in old_weapons:
+        mapped: models.Weapon | None = None
+        if weapon.parent_id and weapon.parent_id in new_by_parent:
+            mapped = new_by_parent[weapon.parent_id]
+        if mapped is None:
+            name_key = _normalized_weapon_name(weapon.effective_name)
+            if name_key and name_key in new_by_name:
+                mapped = new_by_name[name_key]
+        if mapped:
+            weapon_map[weapon.id] = mapped
+
+    def _coerce_int(value: object) -> int:
+        try:
+            return int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            try:
+                return int(float(value))  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return 0
+
+    for unit in list(getattr(detailed_army, "units", []) or []):
+        default_id = getattr(unit, "default_weapon_id", None)
+        if default_id and default_id in weapon_map:
+            mapped_weapon = weapon_map[default_id]
+            unit.default_weapon = mapped_weapon
+            unit.default_weapon_id = mapped_weapon.id
+        elif default_id in old_global_weapon_ids:
+            unit.default_weapon = None
+            unit.default_weapon_id = None
+
+        if unit.default_weapon and unit.default_weapon.army_id == detailed_army.id:
+            unit.default_weapon.armory = new_armory
+        elif unit.default_weapon and unit.default_weapon.armory_id == old_armory.id:
+            mapped_weapon = weapon_map.get(unit.default_weapon.id)
+            if mapped_weapon:
+                unit.default_weapon = mapped_weapon
+                unit.default_weapon_id = mapped_weapon.id
+            elif unit.default_weapon.id in old_global_weapon_ids:
+                unit.default_weapon = None
+                unit.default_weapon_id = None
+
+        updated_links: list[models.UnitWeapon] = []
+        for link in list(getattr(unit, "weapon_links", []) or []):
+            weapon = link.weapon
+            if weapon is None:
+                db.delete(link)
+                continue
+            if weapon.army_id == detailed_army.id:
+                weapon.armory = new_armory
+                link.weapon_id = weapon.id
+                updated_links.append(link)
+                continue
+            if weapon.armory_id == new_armory.id:
+                link.weapon_id = weapon.id
+                updated_links.append(link)
+                continue
+            if weapon.armory_id == old_armory.id:
+                mapped_weapon = weapon_map.get(weapon.id)
+                if mapped_weapon:
+                    if mapped_weapon.id != weapon.id:
+                        link.weapon = mapped_weapon
+                    link.weapon_id = mapped_weapon.id
+                    updated_links.append(link)
+                else:
+                    db.delete(link)
+                continue
+            link.weapon_id = weapon.id
+            updated_links.append(link)
+
+        unit.weapon_links = updated_links
+
+        default_links: list[models.UnitWeapon] = []
+        primary_link: models.UnitWeapon | None = None
+        for link in unit.weapon_links:
+            count_value = getattr(link, "default_count", 0)
+            try:
+                count_value = int(count_value)
+            except (TypeError, ValueError):
+                count_value = 0
+            if count_value < 0:
+                count_value = 0
+            link.default_count = count_value
+            if not link.is_default and count_value > 0:
+                link.is_default = True
+            if not link.is_default or count_value <= 0:
+                link.is_primary = False
+                continue
+            default_links.append(link)
+            if link.is_primary and primary_link is None:
+                primary_link = link
+
+        if primary_link is None and default_links:
+            primary_link = default_links[0]
+
+        for index, link in enumerate(unit.weapon_links):
+            link.position = index
+            if link in default_links:
+                link.is_primary = link is primary_link
+            else:
+                link.is_primary = False
+
+        if primary_link and primary_link.weapon is not None:
+            unit.default_weapon = primary_link.weapon
+            unit.default_weapon_id = getattr(primary_link.weapon, "id", None)
+        elif unit.default_weapon and unit.default_weapon.id in old_global_weapon_ids:
+            unit.default_weapon = None
+            unit.default_weapon_id = None
+
+    for weapon in list(getattr(detailed_army, "weapons", []) or []):
+        weapon.armory = new_armory
+
+    for spell in list(getattr(detailed_army, "spells", []) or []):
+        weapon = spell.weapon
+        if weapon is None:
+            continue
+        if weapon.army_id == detailed_army.id:
+            weapon.armory = new_armory
+            continue
+        if weapon.armory_id == new_armory.id:
+            continue
+        if weapon.armory_id == old_armory.id:
+            mapped_weapon = weapon_map.get(weapon.id)
+            if mapped_weapon:
+                spell.weapon = mapped_weapon
+                spell.weapon_id = mapped_weapon.id
+            elif weapon.id in old_global_weapon_ids:
+                spell.weapon = None
+                spell.weapon_id = None
+
+    roster_units = (
+        db.execute(
+            select(models.RosterUnit)
+            .join(models.Roster)
+            .where(models.Roster.army_id == detailed_army.id)
+        )
+        .scalars()
+        .all()
+    )
+
+    for roster_unit in roster_units:
+        payload_text = roster_unit.extra_weapons_json
+        if not payload_text:
+            continue
+        try:
+            payload = json.loads(payload_text)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        weapons_section = payload.get("weapons")
+        if not isinstance(weapons_section, dict):
+            continue
+        updated_section: dict[str, object] = {}
+        changed = False
+        for key, value in weapons_section.items():
+            key_str = str(key)
+            try:
+                weapon_id = int(key_str)
+            except (TypeError, ValueError):
+                updated_section[key_str] = value
+                continue
+            if weapon_id in weapon_map:
+                mapped_weapon = weapon_map[weapon_id]
+                mapped_key = str(mapped_weapon.id)
+                if mapped_key in updated_section:
+                    merged_value = _coerce_int(updated_section[mapped_key]) + _coerce_int(value)
+                    if merged_value != updated_section[mapped_key]:
+                        changed = True
+                    updated_section[mapped_key] = merged_value
+                else:
+                    updated_section[mapped_key] = value
+                    if mapped_key != key_str:
+                        changed = True
+                continue
+            if weapon_id in old_global_weapon_ids:
+                if _coerce_int(value) != 0:
+                    changed = True
+                continue
+            updated_section[key_str] = value
+        if changed or len(updated_section) != len(weapons_section):
+            payload["weapons"] = updated_section
+            roster_unit.extra_weapons_json = json.dumps(payload, ensure_ascii=False)
+
+    detailed_army.armory = new_armory
+
+
+def _render_army_edit(
+    request: Request,
+    db: Session,
+    army: models.Army,
+    current_user: models.User,
+    *,
+    error: str | None = None,
+    selected_armory_id: int | None = None,
+) -> HTMLResponse:
+    can_edit = current_user.is_admin or army.owner_id == current_user.id
+    can_delete = False
+    if can_edit:
+        has_rosters = db.execute(
+            select(models.Roster.id).where(models.Roster.army_id == army.id)
+        ).first()
+        can_delete = not bool(has_rosters)
+
+    weapons = _armory_weapons(db, army.armory)
+    weapon_choices = []
+    for weapon in weapons:
+        range_value = costs.normalize_range_value(weapon.effective_range)
+        category = "ranged" if range_value > 0 else "melee"
+        weapon_choices.append(
+            {
+                "id": weapon.id,
+                "name": weapon.effective_name,
+                "range_value": range_value,
+                "category": category,
+            }
+        )
+
+    available_armories = _available_armories(db, current_user) if can_edit else []
+    active_definitions = ability_registry.definition_payload(db, "active")
+    aura_definitions = ability_registry.definition_payload(db, "aura")
+
+    units = []
+    for unit in army.units:
+        passive_items = [item for item in _passive_payload(unit) if item]
+        active_items = ability_registry.unit_ability_payload(unit, "active")
+        aura_items = ability_registry.unit_ability_payload(unit, "aura")
+        loadout = unit.default_weapon_loadout
+        weapon_summary = ", ".join(
+            f"{weapon.effective_name} x{count}" if count > 1 else weapon.effective_name
+            for weapon, count in loadout
+        )
+        if not weapon_summary:
+            weapon_summary = "-"
+        cost_per_model = costs.unit_total_cost(unit)
+        typical_models = unit.typical_model_count
+        units.append(
+            {
+                "instance": unit,
+                "cost": costs.unit_typical_total_cost(unit, typical_models),
+                "cost_per_model": cost_per_model,
+                "typical_models": typical_models,
+                "passive_items": passive_items,
+                "active_items": active_items,
+                "aura_items": aura_items,
+                "weapon_summary": weapon_summary,
+            }
+        )
+
+    if selected_armory_id is None:
+        selected_armory_id = army.armory_id
+
+    return templates.TemplateResponse(
+        "army_edit.html",
+        {
+            "request": request,
+            "user": current_user,
+            "army": army,
+            "units": units,
+            "weapons": weapons,
+            "weapon_choices": weapon_choices,
+            "armories": available_armories,
+            "selected_armory_id": selected_armory_id,
+            "error": error,
+            "can_edit": can_edit,
+            "can_delete": can_delete,
+            "passive_definitions": PASSIVE_DEFINITIONS,
+            "active_definitions": active_definitions,
+            "aura_definitions": aura_definitions,
+        },
+    )
+
+
+@router.get("/{army_id}", response_class=HTMLResponse)
+def view_army(
+    army_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_current_user(optional=True)),
+):
+    if not current_user:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    army = _load_army_detail(db, army_id)
+    if army is None:
+        raise HTTPException(status_code=404)
+    _ensure_army_view_access(army, current_user)
+    return _render_army_edit(request, db, army, current_user)
+
+
+@router.post("/{army_id}/update")
+def update_army(
+    army_id: int,
+    request: Request,
+    name: str = Form(...),
+    armory_id: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    _ensure_army_edit_access(army, current_user)
+
+    cleaned_name = name.strip()
+    if not cleaned_name:
+        cleaned_name = army.name
+
+    error_message: str | None = None
+    selected_armory_id: int | None = None
+    target_armory: models.Armory | None = None
+
+    armory_value = (armory_id or "").strip()
+    if armory_value:
+        try:
+            parsed_armory_id = int(armory_value)
+        except (TypeError, ValueError):
+            error_message = "Nieprawidłowa zbrojownia."
+        else:
+            target_armory = db.get(models.Armory, parsed_armory_id)
+            if not target_armory:
+                error_message = "Wybrana zbrojownia nie istnieje."
+            else:
+                try:
+                    _ensure_armory_access(target_armory, current_user)
+                except HTTPException as exc:
+                    if exc.status_code == 403:
+                        error_message = exc.detail or "Brak dostępu do zbrojowni."
+                    else:
+                        raise
+            selected_armory_id = parsed_armory_id
+    else:
+        selected_armory_id = army.armory_id
+
+    if target_armory and error_message is None:
+        if army.owner_id is None and target_armory.owner_id is not None:
+            error_message = "Globalna armia wymaga globalnej zbrojowni."
+
+    if error_message:
+        army.name = cleaned_name
+        detailed_army = _load_army_detail(db, army.id) or army
+        return _render_army_edit(
+            request,
+            db,
+            detailed_army,
+            current_user,
+            error=error_message,
+            selected_armory_id=selected_armory_id or army.armory_id,
+        )
+
+    army.name = cleaned_name
+    if target_armory and target_armory.id != army.armory_id:
+        _switch_army_armory(db, army, target_armory)
+
+    db.commit()
+    return RedirectResponse(url=f"/armies/{army.id}", status_code=303)
