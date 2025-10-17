@@ -210,6 +210,7 @@ def edit_roster(
     roster_stmt = (
         select(models.Roster)
         .options(
+            selectinload(models.Roster.army),
             selectinload(models.Roster.roster_units).options(
                 selectinload(models.RosterUnit.unit).options(*_unit_eager_options())
             )
