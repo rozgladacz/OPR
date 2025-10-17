@@ -1979,6 +1979,8 @@ def _loadout_weapon_details(
 
 def _roster_unit_export_data(
     roster_unit: models.RosterUnit,
+    *,
+    unit_cache: dict[int, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     unit = roster_unit.unit
     if unit is None:  # pragma: no cover - defensive fallback
@@ -2003,10 +2005,41 @@ def _roster_unit_export_data(
             "rounded_total_cost": rounded_total,
         }
 
-    weapon_options = _unit_weapon_options(unit)
-    passive_items = _passive_entries(unit)
-    active_items = _ability_entries(unit, "active")
-    aura_items = _ability_entries(unit, "aura")
+    cache_key: int | None = getattr(unit, "id", None)
+    cached_values: dict[str, Any] | None = None
+    if unit_cache is not None and cache_key is not None:
+        cached_values = unit_cache.get(cache_key)
+
+    if cached_values is not None:
+        weapon_options = cached_values.get("weapon_options")
+        passive_items = cached_values.get("passive_items")
+        active_items = cached_values.get("active_items")
+        aura_items = cached_values.get("aura_items")
+        default_summary = cached_values.get("default_summary")
+        if weapon_options is None:
+            weapon_options = _unit_weapon_options(unit)
+        if passive_items is None:
+            passive_items = _passive_entries(unit)
+        if active_items is None:
+            active_items = _ability_entries(unit, "active")
+        if aura_items is None:
+            aura_items = _ability_entries(unit, "aura")
+        if default_summary is None:
+            default_summary = _default_loadout_summary(unit)
+    else:
+        weapon_options = _unit_weapon_options(unit)
+        passive_items = _passive_entries(unit)
+        active_items = _ability_entries(unit, "active")
+        aura_items = _ability_entries(unit, "aura")
+        default_summary = _default_loadout_summary(unit)
+        if unit_cache is not None and cache_key is not None:
+            unit_cache[cache_key] = {
+                "weapon_options": weapon_options,
+                "passive_items": passive_items,
+                "active_items": active_items,
+                "aura_items": aura_items,
+                "default_summary": default_summary,
+            }
     loadout = _roster_unit_loadout(
         roster_unit,
         weapon_options=weapon_options,
@@ -2018,7 +2051,7 @@ def _roster_unit_export_data(
     weapon_details = _loadout_weapon_details(roster_unit, loadout, weapon_options)
     weapon_summary = _loadout_display_summary(roster_unit, loadout, weapon_options)
     if not weapon_summary:
-        weapon_summary = _default_loadout_summary(unit)
+        weapon_summary = default_summary or _default_loadout_summary(unit)
     selected_passives = _selected_passive_entries(
         roster_unit, loadout, passive_items, classification
     )
@@ -2063,7 +2096,7 @@ def _roster_unit_export_data(
         "aura_labels": [label for label in aura_labels if label],
         "weapon_details": weapon_details,
         "weapon_summary": weapon_summary,
-        "default_summary": _default_loadout_summary(unit),
+        "default_summary": default_summary or _default_loadout_summary(unit),
         "total_cost": total_value,
         "rounded_total_cost": rounded_total,
         "classification": classification,
