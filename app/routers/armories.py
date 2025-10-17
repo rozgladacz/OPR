@@ -309,7 +309,14 @@ def list_armories(
     if not current_user:
         return RedirectResponse(url="/auth/login", status_code=303)
 
-    query = select(models.Armory).order_by(models.Armory.name)
+    query = (
+        select(models.Armory)
+        .options(
+            selectinload(models.Armory.parent),
+            selectinload(models.Armory.owner),
+        )
+        .order_by(models.Armory.name)
+    )
     if not current_user.is_admin:
         query = query.where(
             or_(
