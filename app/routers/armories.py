@@ -562,7 +562,11 @@ def copy_armory(
             tags=weapon.effective_tags,
             notes=weapon.effective_notes,
         )
-        clone.cached_cost = costs.weapon_cost(clone)
+        cached_cost = weapon.effective_cached_cost
+        if cached_cost is not None:
+            clone.cached_cost = cached_cost
+        else:
+            clone.cached_cost = costs.weapon_cost(clone)
         db.add(clone)
 
     db.commit()
