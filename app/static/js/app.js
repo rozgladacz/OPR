@@ -2909,6 +2909,7 @@ function initRosterEditor() {
   };
   let currentSaveStatus = 'idle';
   const customPlaceholder = customLabel ? customLabel.dataset.placeholder || '' : '';
+  const rosterDatasetCache = new WeakMap();
 
   function setSaveStatus(status) {
     currentSaveStatus = status;
@@ -2968,6 +2969,72 @@ function initRosterEditor() {
     } catch (err) {
       return null;
     }
+  }
+
+  function getCacheEntry(item, attribute, rawValue) {
+    if (!item || !attribute) {
+      return null;
+    }
+    let cache = rosterDatasetCache.get(item);
+    if (!cache) {
+      cache = new Map();
+      rosterDatasetCache.set(item, cache);
+    }
+    let entry = cache.get(attribute);
+    if (!entry || entry.raw !== rawValue) {
+      entry = { raw: rawValue, list: undefined, objects: new Map() };
+      cache.set(attribute, entry);
+    }
+    return entry;
+  }
+
+  function invalidateCachedAttribute(item, attribute) {
+    if (!item || !attribute) {
+      return;
+    }
+    const cache = rosterDatasetCache.get(item);
+    if (!cache) {
+      return;
+    }
+    cache.delete(attribute);
+    if (cache.size === 0) {
+      rosterDatasetCache.delete(item);
+    }
+  }
+
+  function getParsedList(item, attribute) {
+    if (!item || !attribute) {
+      return [];
+    }
+    const rawValue = item.getAttribute(attribute) || '';
+    const entry = getCacheEntry(item, attribute, rawValue);
+    if (!entry) {
+      return parseList(rawValue);
+    }
+    if (entry.list !== undefined) {
+      return entry.list;
+    }
+    const parsed = parseList(rawValue);
+    entry.list = parsed;
+    return parsed;
+  }
+
+  function getParsedObject(item, attribute, parser = parseJsonValue) {
+    if (!item || !attribute) {
+      return parser ? parser('') : null;
+    }
+    const rawValue = item.getAttribute(attribute) || '';
+    const entry = getCacheEntry(item, attribute, rawValue);
+    if (!entry) {
+      return parser ? parser(rawValue) : null;
+    }
+    const parserKey = parser || '__default__';
+    if (entry.objects.has(parserKey)) {
+      return entry.objects.get(parserKey);
+    }
+    const parsed = parser ? parser(rawValue) : null;
+    entry.objects.set(parserKey, parsed);
+    return parsed;
   }
 
   function updateCustomLabelDisplay(value) {
@@ -3080,6 +3147,7 @@ function initRosterEditor() {
     } catch (err) {
       item.setAttribute('data-unit-classification', 'null');
     }
+    invalidateCachedAttribute(item, 'data-unit-classification');
   }
 
   function syncDefaultEquipment(previousCount, nextCount) {
@@ -3221,6 +3289,7 @@ function initRosterEditor() {
     } catch (error) {
       element.setAttribute(attribute, '[]');
     }
+    invalidateCachedAttribute(element, attribute);
   }
 
   function abilityBadgeLabel(entry) {
@@ -3320,6 +3389,7 @@ function initRosterEditor() {
       }
       if (typeof unitData.loadout_json === 'string') {
         targetItem.setAttribute('data-loadout', unitData.loadout_json);
+        invalidateCachedAttribute(targetItem, 'data-loadout');
       }
       if (Object.prototype.hasOwnProperty.call(unitData, 'selected_passive_items')) {
         setItemListAttribute(
@@ -3460,6 +3530,7 @@ function initRosterEditor() {
     updateCostDisplays();
     if (activeItem && loadoutInput) {
       activeItem.setAttribute('data-loadout', loadoutInput.value || '{}');
+      invalidateCachedAttribute(activeItem, 'data-loadout');
     }
     if (activeItem) {
       updateItemClassification(activeItem, currentClassification);
@@ -3778,10 +3849,10 @@ function renderEditors(precomputedWeaponMap = null) {
       customEditInput = null;
     }
 
-    currentPassives = parseList(item.getAttribute('data-passives'));
-    currentActives = parseList(item.getAttribute('data-actives'));
-    currentAuras = parseList(item.getAttribute('data-auras'));
-    currentWeapons = parseList(item.getAttribute('data-weapon-options'));
+    currentPassives = getParsedList(item, 'data-passives');
+    currentActives = getParsedList(item, 'data-actives');
+    currentAuras = getParsedList(item, 'data-auras');
+    currentWeapons = getParsedList(item, 'data-weapon-options');
     currentBaseFlags = parseFlagString(item.getAttribute('data-unit-flags'));
 
     const unitName = item.getAttribute('data-unit-name') || 'Jednostka';
@@ -3793,9 +3864,9 @@ function renderEditors(precomputedWeaponMap = null) {
     const countValue = Number(item.getAttribute('data-unit-count') || '1');
     const baseCostValue = Number(item.getAttribute('data-base-cost-per-model') || '0');
     const rosterUnitId = item.getAttribute('data-roster-unit-id');
-    const loadoutData = parseLoadout(item.getAttribute('data-loadout'));
+    const loadoutData = getParsedObject(item, 'data-loadout', parseLoadout);
     const customName = item.getAttribute('data-unit-custom-name') || '';
-    const classificationData = parseJsonValue(item.getAttribute('data-unit-classification'));
+    const classificationData = getParsedObject(item, 'data-unit-classification', parseJsonValue);
     currentClassification =
       classificationData && typeof classificationData === 'object' ? classificationData : null;
 
