@@ -20,6 +20,7 @@ class UnitForm(BaseModel):
     quality: int
     defense: int
     toughness: int
+    typical_models: int = Field(1, ge=1)
     default_weapon_id: int | None = None
     flags: str | None = None
 

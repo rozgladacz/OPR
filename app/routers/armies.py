@@ -155,6 +155,7 @@ def _clone_army_contents(
             flags=unit.flags,
             default_weapon_id=unit.default_weapon_id,
             position=unit.position,
+            typical_models=unit.typical_model_count,
         )
         if link_parent_units:
             cloned_unit.parent = unit
@@ -885,6 +886,7 @@ def _apply_unit_form_data(
     quality: int,
     defense: int,
     toughness: int,
+    typical_models: int | None = None,
     passive_items: list[dict],
     active_items: list[dict],
     aura_items: list[dict],
@@ -916,6 +918,18 @@ def _apply_unit_form_data(
     unit.quality = quality
     unit.defense = defense
     unit.toughness = toughness
+    if typical_models is None:
+        try:
+            typical_models = unit.typical_model_count
+        except AttributeError:
+            typical_models = getattr(unit, "typical_models", 1)
+    try:
+        normalized_models = int(typical_models)
+    except (TypeError, ValueError):
+        normalized_models = 1
+    if normalized_models < 1:
+        normalized_models = 1
+    unit.typical_models = normalized_models
     unit.flags = utils.passive_payload_to_flags(sanitized_passives)
 
     weapon_links: list[models.UnitWeapon] = []
@@ -1208,10 +1222,14 @@ def view_army(
         )
         if not weapon_summary:
             weapon_summary = "-"
+        cost_per_model = costs.unit_total_cost(unit)
+        typical_models = unit.typical_model_count
         units.append(
             {
                 "instance": unit,
-                "cost": costs.unit_total_cost(unit),
+                "cost": costs.unit_typical_total_cost(unit, typical_models),
+                "cost_per_model": cost_per_model,
+                "typical_models": typical_models,
                 "passive_items": passive_items,
                 "active_items": active_items,
                 "aura_items": aura_items,
@@ -1901,6 +1919,7 @@ def add_unit(
     quality: int = Form(...),
     defense: int = Form(...),
     toughness: int = Form(...),
+    typical_models: int = Form(1),
     weapons: str | None = Form(None),
     passive_abilities: str | None = Form(None),
     active_abilities: str | None = Form(None),
@@ -1936,6 +1955,7 @@ def add_unit(
         quality=quality,
         defense=defense,
         toughness=toughness,
+        typical_models=typical_models,
         passive_items=passive_items,
         active_items=active_items,
         aura_items=aura_items,
@@ -2047,6 +2067,7 @@ def update_unit(
     quality: int = Form(...),
     defense: int = Form(...),
     toughness: int = Form(...),
+    typical_models: int = Form(1),
     weapons: str | None = Form(None),
     passive_abilities: str | None = Form(None),
     active_abilities: str | None = Form(None),
@@ -2085,6 +2106,7 @@ def update_unit(
             quality=quality,
             defense=defense,
             toughness=toughness,
+            typical_models=typical_models,
             passive_items=passive_items,
             active_items=active_items,
             aura_items=aura_items,
@@ -2099,6 +2121,7 @@ def update_unit(
             quality=quality,
             defense=defense,
             toughness=toughness,
+            typical_models=typical_models,
             passive_items=passive_items,
             active_items=active_items,
             aura_items=aura_items,

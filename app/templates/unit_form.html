@@ -7,9 +7,24 @@
       <div class="card-body">
         <h5 class="card-title">Edycja jednostki</h5>
         <form method="post">
-          <div class="mb-3">
-            <label class="form-label" for="name">Nazwa</label>
-            <input class="form-control" id="name" name="name" value="{{ unit.name }}" required />
+          <div class="row g-3 align-items-end mb-3">
+            <div class="col-12 col-md-6 col-lg-7">
+              <label class="form-label" for="name">Nazwa</label>
+              <input class="form-control" id="name" name="name" value="{{ unit.name }}" required />
+            </div>
+            <div class="col-12 col-md-6 col-lg-5 col-xl-4">
+              <label class="form-label" for="typical-models">Typowa liczebność</label>
+              <input
+                class="form-control"
+                id="typical-models"
+                name="typical_models"
+                type="number"
+                min="1"
+                value="{{ unit.typical_model_count }}"
+                required
+              />
+              <div class="form-text">Wykorzystywana do obliczenia kosztu i jako startowa liczba modeli w rozpisce.</div>
+            </div>
           </div>
           <div class="row g-3">
             <div class="col-12 col-md-4">

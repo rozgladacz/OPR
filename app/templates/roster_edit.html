@@ -98,7 +98,7 @@
         <div class="card-body d-flex flex-column">
           <h5 class="card-title">Jednostki w armii</h5>
           <p class="text-muted small">
-            Wybierz jednostkę, aby dodać ją do rozpiski. Domyślnie dodawany jest jeden model z podstawowym wyposażeniem.
+            Wybierz jednostkę, aby dodać ją do rozpiski. Domyślnie dodawana jest typowa liczebność oddziału z podstawowym wyposażeniem.
           </p>
           <div class="flex-grow-1 overflow-auto roster-army-unit-list">
             {% if available_units %}
@@ -107,7 +107,7 @@
               {% set unit = entry.unit %}
               <form method="post" action="/rosters/{{ roster.id }}/units/add" class="list-group-item p-0 border-0">
                 <input type="hidden" name="unit_id" value="{{ unit.id }}" />
-                <input type="hidden" name="count" value="1" />
+                <input type="hidden" name="count" value="{{ entry.typical_models }}" />
                 <div
                   class="position-relative roster-card p-3 border rounded h-100"
                   data-roster-add-trigger
@@ -116,7 +116,9 @@
                   aria-label="Dodaj jednostkę {{ unit.name }}"
                   data-unit-id="{{ unit.id }}"
                 >
-                  <span class="badge text-bg-light text-dark roster-cost-badge">{{ entry.unit_cost }} pkt/model</span>
+                  <span class="badge text-bg-light text-dark roster-cost-badge">
+                    {{ '{:g}'.format(entry.unit_cost_total) }} pkt ({{ entry.typical_models }}x {{ '{:g}'.format(entry.unit_cost_per_model) }} pkt/model)
+                  </span>
                   <div class="fw-semibold">{{ unit.name }}</div>
                   <div class="text-muted small">
                     Jakość {{ unit.quality }} / Obrona {{ unit.defense }} / Wytrzymałość {{ unit.toughness }}
