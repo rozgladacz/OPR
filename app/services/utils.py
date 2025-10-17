@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import math
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Sequence
@@ -63,10 +64,10 @@ def parse_flags(text: str | None) -> dict:
     return result
 
 
-
-def passive_flags_to_payload(text: str | None) -> list[dict]:
+@functools.lru_cache(maxsize=None)
+def _cached_passive_payload(text: str | None) -> tuple[tuple[Any, ...], ...]:
     flags = parse_flags(text)
-    payload: list[dict] = []
+    entries: list[tuple[Any, ...]] = []
     for slug, value in flags.items():
         raw_slug = str(slug).strip()
         if not raw_slug:
@@ -94,20 +95,41 @@ def passive_flags_to_payload(text: str | None) -> list[dict]:
             value_text = None
         else:
             value_text = str(value)
+        label = (
+            ability_catalog.display_with_value(
+                definition,
+                value_text,
+            )
+            if definition
+            else slug_text
+        )
+        description = ability_catalog.combined_description(
+            definition,
+            value_text,
+        )
+        entries.append(
+            (
+                slug_text,
+                value_text if value_text is not None else None,
+                label,
+                description,
+                is_default,
+                is_mandatory,
+            )
+        )
+    return tuple(entries)
+
+
+def passive_flags_to_payload(text: str | None) -> list[dict]:
+    cached_payload = _cached_passive_payload(text)
+    payload: list[dict] = []
+    for slug, value, label, description, is_default, is_mandatory in cached_payload:
         payload.append(
             {
-                "slug": slug_text,
-                "value": value_text if value_text is not None else None,
-                "label": ability_catalog.display_with_value(
-                    definition,
-                    value_text,
-                )
-                if definition
-                else slug_text,
-                "description": ability_catalog.combined_description(
-                    definition,
-                    value_text,
-                ),
+                "slug": slug,
+                "value": value,
+                "label": label,
+                "description": description,
                 "is_default": is_default,
                 "is_mandatory": is_mandatory,
             }
