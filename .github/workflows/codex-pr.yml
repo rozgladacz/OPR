@@ -1,0 +1,32 @@
+name: Codex PR auto-merge
+on:
+  push:
+    branches:
+      - 'codex/**'   # gałęzie, na które pushuje Codex
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr-and-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Utwórz PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "${GITHUB_REF_NAME}" \
+            --title "Codex: ${GITHUB_REF_NAME}" \
+            --body "Auto PR z Codexa"
+
+      - name: Włącz auto-merge (merge commit)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr merge --auto --merge "${GITHUB_REF_NAME}"
