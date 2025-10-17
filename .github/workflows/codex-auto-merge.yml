@@ -2,17 +2,22 @@ name: Codex PR auto-merge
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
-    branches: [main]          # baza
+    branches: [main]
+
 permissions:
   contents: write
   pull-requests: write
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   enable-automerge:
     if: startsWith(github.head_ref, 'codex/')
     runs-on: ubuntu-latest
     steps:
-      - name: Włącz auto-merge dla tego PR
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh pr merge --auto --merge ${{ github.event.pull_request.number }}
+      - name: Włącz auto-merge dla PR
+        run: |
+          gh pr merge --auto --merge \
+            ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }}
