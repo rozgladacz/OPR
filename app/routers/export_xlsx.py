@@ -177,7 +177,11 @@ def export_xlsx(
 
     costs.ensure_cached_costs(roster.roster_units)
     workbook = Workbook()
-    entries = [_roster_unit_export_data(ru) for ru in roster.roster_units]
+    unit_cache: dict[int, dict[str, Any]] = {}
+    entries = [
+        _roster_unit_export_data(ru, unit_cache=unit_cache)
+        for ru in roster.roster_units
+    ]
     spell_entries = _army_spell_entries(roster, entries)
     total_cost = _append_roster_sheet(workbook, entries, spell_entries)
     _append_weapons_sheet(workbook, entries)

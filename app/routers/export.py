@@ -6,6 +6,7 @@ import io
 import textwrap
 from datetime import datetime
 import zlib
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -155,7 +156,11 @@ def roster_print(
     costs.ensure_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
     total_cost_rounded = utils.round_points(total_cost)
-    roster_items = [_roster_unit_export_data(ru) for ru in roster.roster_units]
+    unit_cache: dict[int, dict[str, Any]] = {}
+    roster_items = [
+        _roster_unit_export_data(ru, unit_cache=unit_cache)
+        for ru in roster.roster_units
+    ]
     spell_entries = _army_spell_entries(roster, roster_items)
     return templates.TemplateResponse(
         "roster_print.html",
@@ -190,7 +195,11 @@ def roster_export_list(
     total_cost = costs.roster_total(roster)
     total_cost_rounded = utils.round_points(total_cost)
 
-    entries = [_roster_unit_export_data(ru) for ru in roster.roster_units]
+    unit_cache: dict[int, dict[str, Any]] = {}
+    entries = [
+        _roster_unit_export_data(ru, unit_cache=unit_cache)
+        for ru in roster.roster_units
+    ]
     spell_entries = _army_spell_entries(roster, entries)
 
     return templates.TemplateResponse(
@@ -225,7 +234,11 @@ def roster_pdf(
     costs.ensure_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
     total_cost_rounded = utils.round_points(total_cost)
-    roster_items = [_roster_unit_export_data(ru) for ru in roster.roster_units]
+    unit_cache: dict[int, dict[str, Any]] = {}
+    roster_items = [
+        _roster_unit_export_data(ru, unit_cache=unit_cache)
+        for ru in roster.roster_units
+    ]
     spell_entries = _army_spell_entries(roster, roster_items)
 
     _ensure_pdf_fonts()
