@@ -1016,9 +1016,18 @@ def unit_total_cost(unit: models.Unit) -> float:
 
 
 def unit_typical_total_cost(
-    unit: models.Unit, model_count: int | None = None
+    unit: models.Unit,
+    model_count: int | None = None,
+    *,
+    per_model: float | None = None,
 ) -> float:
-    per_model = unit_total_cost(unit)
+    if per_model is None:
+        per_model_value = unit_total_cost(unit)
+    else:
+        try:
+            per_model_value = float(per_model)
+        except (TypeError, ValueError):
+            per_model_value = unit_total_cost(unit)
     if model_count is None:
         try:
             model_count = unit.typical_model_count
@@ -1030,7 +1039,7 @@ def unit_typical_total_cost(
         count = 1
     if count < 1:
         count = 1
-    return round(per_model * count, 2)
+    return round(per_model_value * count, 2)
 
 
 def roster_unit_role_totals(
