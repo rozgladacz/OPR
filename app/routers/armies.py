@@ -816,8 +816,7 @@ def _parse_weapon_payload(
             return value.strip().lower() in {"1", "true", "on", "yes"}
         return False
 
-    records: list[dict[str, object]] = []
-    seen: set[int] = set()
+    pending_entries: list[tuple[int, dict[str, object]]] = []
     for entry in data:
         if not isinstance(entry, dict):
             continue
@@ -828,9 +827,29 @@ def _parse_weapon_payload(
             weapon_id = int(weapon_id)
         except (TypeError, ValueError):
             continue
+        pending_entries.append((weapon_id, entry))
+
+    if not pending_entries:
+        return []
+
+    weapon_ids = {weapon_id for weapon_id, _ in pending_entries}
+    weapon_stmt = (
+        select(models.Weapon)
+        .where(models.Weapon.id.in_(weapon_ids))
+        .options(selectinload(models.Weapon.parent).selectinload(models.Weapon.parent))
+    )
+    weapon_map = {
+        weapon.id: weapon
+        for weapon in db.execute(weapon_stmt).scalars()
+        if weapon is not None
+    }
+
+    records: list[dict[str, object]] = []
+    seen: set[int] = set()
+    for weapon_id, entry in pending_entries:
         if weapon_id in seen:
             continue
-        weapon = db.get(models.Weapon, weapon_id)
+        weapon = weapon_map.get(weapon_id)
         if not weapon or weapon.armory_id != armory.id:
             continue
         count_raw = entry.get("count")
