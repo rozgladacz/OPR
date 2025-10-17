@@ -128,9 +128,18 @@ def _rebuild_unit_weapons_table(connection) -> None:
             text(
                 """
                 INSERT INTO unit_weapons (
-                    id, unit_id, weapon_id, is_default, default_count, position, created_at, updated_at
+                    id, unit_id, weapon_id, is_default, default_count, is_primary, position, created_at, updated_at
                 )
-                SELECT id, unit_id, weapon_id, is_default, 1, 0, created_at, updated_at
+                SELECT
+                    id,
+                    unit_id,
+                    weapon_id,
+                    is_default,
+                    default_count,
+                    0,
+                    position,
+                    created_at,
+                    updated_at
                 FROM unit_weapons_old
                 """
             )

@@ -385,6 +385,7 @@ class UnitWeapon(TimestampMixin, Base):
     weapon_id: Mapped[int] = mapped_column(ForeignKey("weapons.id"), nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     default_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     unit: Mapped[Unit] = relationship(back_populates="weapon_links")

@@ -689,7 +689,6 @@ def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
         primary_id = unit.default_weapon_id
     elif getattr(unit, "default_weapon", None) and getattr(unit.default_weapon, "id", None):
         primary_id = unit.default_weapon.id
-    primary_assigned = False
     for link in getattr(unit, "weapon_links", []):
         if link.weapon_id is None:
             continue
@@ -706,10 +705,14 @@ def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
             is_default_flag = True
         if not is_default_flag:
             count_value = 0
-        is_primary = False
-        if count_value > 0 and primary_id and link.weapon_id == primary_id:
+        is_primary = bool(getattr(link, "is_primary", False))
+        if (
+            not is_primary
+            and primary_id is not None
+            and link.weapon_id == primary_id
+            and count_value > 0
+        ):
             is_primary = True
-            primary_assigned = True
         range_value = costs.normalize_range_value(
             link.weapon.effective_range if link.weapon else None
         )
@@ -738,7 +741,7 @@ def _unit_weapon_payload(unit: models.Unit | None) -> list[dict]:
                 "weapon_id": unit.default_weapon_id,
                 "name": unit.default_weapon.effective_name,
                 "is_default": True,
-                "is_primary": not primary_assigned,
+                "is_primary": bool(primary_id == unit.default_weapon_id),
                 "count": 1,
                 "range_value": range_value,
                 "category": category,
@@ -770,8 +773,6 @@ def _parse_weapon_payload(
 
     records: list[dict[str, object]] = []
     seen: set[int] = set()
-    primary_assigned: dict[str, bool] = {}
-    fallback_index: dict[str, int | None] = {}
     for entry in data:
         if not isinstance(entry, dict):
             continue
@@ -801,23 +802,12 @@ def _parse_weapon_payload(
 
         range_value = costs.normalize_range_value(weapon.effective_range)
         category = "ranged" if range_value > 0 else "melee"
-        if category not in primary_assigned:
-            primary_assigned[category] = False
-        if category not in fallback_index:
-            fallback_index[category] = None
-
         primary_raw = entry.get("is_primary")
         if primary_raw is None:
             primary_raw = entry.get("primary")
         if primary_raw is None:
             primary_raw = entry.get("is_primary_weapon")
         is_primary = _parse_primary_flag(primary_raw) if count_value > 0 else False
-        if is_primary and primary_assigned.get(category):
-            is_primary = False
-        if is_primary:
-            primary_assigned[category] = True
-        elif fallback_index.get(category) is None and count_value > 0:
-            fallback_index[category] = len(records)
 
         records.append(
             {
@@ -828,11 +818,6 @@ def _parse_weapon_payload(
             }
         )
         seen.add(weapon_id)
-
-    for category, index in fallback_index.items():
-        if not primary_assigned.get(category) and index is not None:
-            records[index]["is_primary"] = True
-            primary_assigned[category] = True
 
     results: list[tuple[models.Weapon, bool, int]] = []
     for record in records:
@@ -934,8 +919,8 @@ def _apply_unit_form_data(
     unit.flags = utils.passive_payload_to_flags(sanitized_passives)
 
     weapon_links: list[models.UnitWeapon] = []
-    default_assigned = False
     fallback_weapon = None
+    primary_candidates: list[models.Weapon] = []
     # weapon_entries contain (weapon, is_primary, default_count) tuples
     for weapon, is_primary, count in weapon_entries:
         weapon_id = getattr(weapon, "id", None)
@@ -945,15 +930,17 @@ def _apply_unit_form_data(
             is_default=count > 0,
             default_count=count,
         )
+        link.is_primary = bool(is_primary and count > 0)
         weapon_links.append(link)
         if fallback_weapon is None and count > 0:
             fallback_weapon = weapon
-        if is_primary and count > 0 and not default_assigned:
-            unit.default_weapon = weapon
-            default_assigned = True
+        if link.is_primary and weapon is not None:
+            primary_candidates.append(weapon)
     for index, link in enumerate(weapon_links):
         link.position = index
-    if not default_assigned:
+    if primary_candidates:
+        unit.default_weapon = primary_candidates[0]
+    else:
         unit.default_weapon = fallback_weapon
     unit.weapon_links = weapon_links
 
