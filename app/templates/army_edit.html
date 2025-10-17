@@ -30,6 +30,9 @@
       <div class="row g-4">
         <div class="col-12 col-xl-4">
           <h5 class="card-title">Informacje o armii</h5>
+          {% if error %}
+          <div class="alert alert-danger" role="alert">{{ error }}</div>
+          {% endif %}
           <form method="post" action="/armies/{{ army.id }}/update" class="row g-3 align-items-end">
             <div class="col-md-4">
               <label class="form-label" for="name">Nazwa</label>
@@ -37,7 +40,21 @@
             </div>
             <div class="col-md-4">
               <label class="form-label">Zbrojownia</label>
+              {% if can_edit and armories %}
+              <select class="form-select" id="armory-id" name="armory_id">
+                {% for armory in armories %}
+                <option value="{{ armory.id }}" {% if armory.id == selected_armory_id %}selected{% endif %}>
+                  {{ armory.name }}
+                </option>
+                {% endfor %}
+              </select>
+              {% elif can_edit %}
+              <select class="form-select" id="armory-id" name="armory_id" disabled>
+                <option value="{{ army.armory.id }}" selected>{{ army.armory.name }}</option>
+              </select>
+              {% else %}
               <input class="form-control" value="{{ army.armory.name }}" disabled />
+              {% endif %}
               <div class="form-text">
                 {% if army.armory.parent %}
                 Wariant z listy {{ army.armory.parent.name }}.
