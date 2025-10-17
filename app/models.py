@@ -287,6 +287,7 @@ class Unit(TimestampMixin, Base):
     army_id: Mapped[int] = mapped_column(ForeignKey("armies.id"), nullable=False)
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    typical_models: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     army: Mapped[Army] = relationship(back_populates="units")
     owner: Mapped[Optional[User]] = relationship()
@@ -303,6 +304,16 @@ class Unit(TimestampMixin, Base):
         order_by=lambda: (UnitAbility.position, UnitAbility.id),
     )
     roster_units: Mapped[List["RosterUnit"]] = relationship(back_populates="unit")
+
+    @property
+    def typical_model_count(self) -> int:
+        try:
+            value = int(getattr(self, "typical_models", 1))
+        except (TypeError, ValueError):
+            value = 1
+        if value < 1:
+            value = 1
+        return value
 
     @property
     def default_weapons(self) -> List[Weapon]:

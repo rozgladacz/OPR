@@ -1015,6 +1015,24 @@ def unit_total_cost(unit: models.Unit) -> float:
     return round(cost, 2)
 
 
+def unit_typical_total_cost(
+    unit: models.Unit, model_count: int | None = None
+) -> float:
+    per_model = unit_total_cost(unit)
+    if model_count is None:
+        try:
+            model_count = unit.typical_model_count
+        except AttributeError:  # pragma: no cover - compatibility
+            model_count = getattr(unit, "typical_models", 1)
+    try:
+        count = int(model_count)
+    except (TypeError, ValueError):
+        count = 1
+    if count < 1:
+        count = 1
+    return round(per_model * count, 2)
+
+
 def roster_unit_role_totals(
     roster_unit: models.RosterUnit,
     payload: dict[str, dict[str, int]] | None = None,

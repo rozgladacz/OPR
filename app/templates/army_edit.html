@@ -323,7 +323,12 @@
         {% endif %}
       </td>
       <td>{{ item.weapon_summary }}</td>
-      <td>{{ item.cost }}</td>
+      <td>
+        <div>{{ '{:g}'.format(item.cost) }} pkt</div>
+        <div class="text-muted small">
+          {{ item.typical_models }}x {{ '{:g}'.format(item.cost_per_model) }} pkt/model
+        </div>
+      </td>
       <td>
         {% if can_edit %}
         <div class="btn-group btn-group-sm">
@@ -350,9 +355,22 @@
     <h5 class="card-title">Dodaj jednostkę</h5>
     <form method="post" action="/armies/{{ army.id }}/units/new">
       <div class="row g-3">
-        <div class="col-md-4">
+        <div class="col-md-4 col-lg-4">
           <label class="form-label" for="unit-name">Nazwa</label>
           <input class="form-control" id="unit-name" name="name" required />
+        </div>
+        <div class="col-md-2 col-lg-2">
+          <label class="form-label" for="unit-typical-models">Typowa liczebność</label>
+          <input
+            class="form-control"
+            id="unit-typical-models"
+            name="typical_models"
+            type="number"
+            min="1"
+            value="1"
+            required
+          />
+          <div class="form-text">Wartość używana w obliczeniach kosztu oraz przy dodawaniu oddziału do rozpiski.</div>
         </div>
         <div class="col-md-2">
           <label class="form-label" for="quality">Jakość</label>

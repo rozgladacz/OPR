@@ -267,6 +267,8 @@ def edit_roster(
         aura_items = _unit_cache_value(
             unit, "ability_aura", lambda: _ability_entries(unit, "aura")
         )
+        typical_models = unit.typical_model_count
+        cost_per_model = costs.unit_total_cost(unit)
         available_unit_options.append(
             {
                 "unit": unit,
@@ -275,7 +277,11 @@ def edit_roster(
                 "passive_items": passive_items,
                 "active_items": active_items,
                 "aura_items": aura_items,
-                "unit_cost": costs.unit_total_cost(unit),
+                "unit_cost_per_model": cost_per_model,
+                "unit_cost_total": costs.unit_typical_total_cost(
+                    unit, typical_models
+                ),
+                "typical_models": typical_models,
             }
         )
 

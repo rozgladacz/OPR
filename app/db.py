@@ -312,6 +312,13 @@ def _migrate_schema() -> None:
                     )
                 )
                 _initialize_unit_positions(connection)
+            if "typical_models" not in column_names:
+                logger.info("Adding typical_models column to units table")
+                connection.execute(
+                    text(
+                        "ALTER TABLE units ADD COLUMN typical_models INTEGER NOT NULL DEFAULT 1"
+                    )
+                )
 
         if "roster_units" in table_names:
             columns = inspector.get_columns("roster_units")
@@ -576,6 +583,7 @@ def init_db() -> None:
                 default_weapon=rifle,
                 army=army,
                 owner_id=None,
+                typical_models=1,
             )
             unit2 = models.Unit(
                 name="Szermierz OPR",
@@ -585,6 +593,7 @@ def init_db() -> None:
                 default_weapon=sword,
                 army=army,
                 owner_id=None,
+                typical_models=1,
             )
             unit1.weapon_links = [models.UnitWeapon(weapon=rifle, position=0)]
             unit2.weapon_links = [models.UnitWeapon(weapon=sword, position=0)]
