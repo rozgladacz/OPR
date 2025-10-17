@@ -2060,8 +2060,24 @@ def edit_unit_form(
     if not current_user:
         return RedirectResponse(url="/auth/login", status_code=303)
     army = db.get(models.Army, army_id)
-    unit = db.get(models.Unit, unit_id)
-    if not army or not unit or unit.army_id != army.id:
+    unit = (
+        db.execute(
+            select(models.Unit)
+            .where(models.Unit.id == unit_id)
+            .options(
+                selectinload(models.Unit.weapon_links).selectinload(
+                    models.UnitWeapon.weapon
+                ),
+                selectinload(models.Unit.default_weapon),
+                selectinload(models.Unit.abilities).selectinload(
+                    models.UnitAbility.ability
+                ),
+            )
+        )
+        .scalars()
+        .one_or_none()
+    )
+    if not army or unit is None or unit.army_id != army.id:
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
     weapons = _armory_weapons(db, army.armory)
