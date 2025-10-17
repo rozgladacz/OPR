@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -875,6 +876,13 @@ def weapon_cost(
         unit_traits = []
     else:
         unit_traits = list(unit_flags)
+
+    # Standard armory views should reuse cached weapon costs when possible.
+    if unit_quality == 4 and not unit_traits:
+        cached = getattr(weapon, "effective_cached_cost", None)
+        if isinstance(cached, (int, float)) and math.isfinite(cached):
+            return round(max(float(cached), 0.0), 2)
+
     range_value = normalize_range_value(weapon.effective_range)
     traits = split_traits(weapon.effective_tags)
     attacks_value = weapon.effective_attacks
