@@ -195,6 +195,7 @@ function initAbilityPicker(root) {
     }
     const [entry] = items.splice(fromIndex, 1);
     items.splice(toIndex, 0, entry);
+    sanitizePrimaryFlags();
     updateHidden();
     renderList();
   }
@@ -1402,7 +1403,6 @@ function initWeaponPicker(root) {
   const addButton = root.querySelector('.weapon-picker-add');
   const listEl = root.querySelector('.weapon-picker-list');
   const pickerId = Math.random().toString(16).slice(2);
-  const primaryGroupName = `weapon-primary-${pickerId}`;
   let items = [];
 
   function normalizeCategory(value) {
@@ -1554,7 +1554,7 @@ function initWeaponPicker(root) {
     return !items.some((entry) => String(entry.weapon_id) === String(weaponId));
   }
 
-  function ensurePrimary() {
+  function sanitizePrimaryFlags() {
     if (!Array.isArray(items)) {
       items = [];
       return false;
@@ -1563,53 +1563,17 @@ function initWeaponPicker(root) {
       return false;
     }
     let changed = false;
-    const categoryState = new Map();
-    items.forEach((entry, idx) => {
+    items.forEach((entry) => {
       if (!entry) {
         return;
       }
       const countValue = Number(entry.default_count);
       const safeCount = Number.isFinite(countValue) ? countValue : 0;
-      const category = getItemCategory(entry);
-      let state = categoryState.get(category);
-      if (!state) {
-        state = { primaryIndex: -1, fallbackIndex: -1 };
+      const shouldBePrimary = safeCount > 0 ? Boolean(entry.is_primary) : false;
+      if (entry.is_primary !== shouldBePrimary) {
+        entry.is_primary = shouldBePrimary;
+        changed = true;
       }
-      if (safeCount <= 0) {
-        if (entry.is_primary) {
-          entry.is_primary = false;
-          changed = true;
-        }
-      } else {
-        if (state.fallbackIndex === -1) {
-          state.fallbackIndex = idx;
-        }
-        if (entry.is_primary) {
-          if (state.primaryIndex === -1) {
-            state.primaryIndex = idx;
-          } else if (state.primaryIndex !== idx) {
-            entry.is_primary = false;
-            changed = true;
-          }
-        }
-      }
-      categoryState.set(category, state);
-    });
-
-    categoryState.forEach((state, category) => {
-      if (state.primaryIndex !== -1 || state.fallbackIndex === -1) {
-        return;
-      }
-      items.forEach((entry, idx) => {
-        if (!entry || getItemCategory(entry) !== category) {
-          return;
-        }
-        const shouldBePrimary = idx === state.fallbackIndex;
-        if (entry.is_primary !== shouldBePrimary) {
-          entry.is_primary = shouldBePrimary;
-          changed = true;
-        }
-      });
     });
 
     return changed;
@@ -1660,7 +1624,7 @@ function initWeaponPicker(root) {
         if (items[index]) {
           items[index].default_count = safeValue;
         }
-        ensurePrimary();
+        sanitizePrimaryFlags();
         updateHidden();
         renderList();
       });
@@ -1670,32 +1634,23 @@ function initWeaponPicker(root) {
       const primaryWrapper = document.createElement('div');
       primaryWrapper.className = 'form-check mb-0 d-flex align-items-center gap-2';
       const primaryInput = document.createElement('input');
-      primaryInput.type = 'radio';
+      primaryInput.type = 'checkbox';
       primaryInput.className = 'form-check-input';
-      primaryInput.name = `${primaryGroupName}-${category}`;
       const primaryId = `weapon-primary-${pickerId}-${item.weapon_id}-${index}`;
       primaryInput.id = primaryId;
       const hasDefault = Number(item.default_count) > 0;
       primaryInput.checked = Boolean(item.is_primary) && hasDefault;
       primaryInput.disabled = !hasDefault;
       primaryInput.addEventListener('change', () => {
-        if (!primaryInput.checked) {
+        if (!items[index]) {
           return;
         }
-        const currentCategory = getItemCategory(item);
-        items.forEach((entry, entryIndex) => {
-          if (!entry) {
-            return;
-          }
-          const entryHasDefault = Number(entry.default_count) > 0;
-          if (getItemCategory(entry) !== currentCategory) {
-            return;
-          }
-          entry.is_primary = entryIndex === index && entryHasDefault;
-        });
-        ensurePrimary();
+        items[index].is_primary = Boolean(primaryInput.checked);
+        const changed = sanitizePrimaryFlags();
         updateHidden();
-        renderList();
+        if (changed) {
+          renderList();
+        }
       });
       const primaryLabel = document.createElement('label');
       primaryLabel.className = 'form-check-label small';
@@ -1778,7 +1733,7 @@ function initWeaponPicker(root) {
       category: meta.category,
       range_value: meta.rangeValue,
     });
-    ensurePrimary();
+    sanitizePrimaryFlags();
     updateHidden();
     renderList();
     selectEl.value = '';
@@ -1792,7 +1747,7 @@ function initWeaponPicker(root) {
   }
 
   parseInitial();
-  ensurePrimary();
+  sanitizePrimaryFlags();
   updateHidden();
   renderList();
 }
@@ -2511,7 +2466,7 @@ function renderWeaponEditor(
     const weaponClass = normalizedRange > 0 ? 'ranged' : 'melee';
     const defaultPerModel = parseSafeNumber(option.default_count ?? (option.is_default ? 1 : 0));
     const isDefaultWeapon = Boolean(option.is_default) || defaultPerModel > 0;
-    const isPrimaryWeapon = Boolean(option.is_primary) && defaultPerModel >= 0;
+    const isPrimaryWeapon = Boolean(option.is_primary) && defaultPerModel > 0;
     const weaponMeta = {
       option,
       weaponKey,
