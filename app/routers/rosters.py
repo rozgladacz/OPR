@@ -275,13 +275,18 @@ def edit_roster(
         aura_items = _unit_cache_value(
             unit, "ability_aura", lambda: _ability_entries(unit, "aura")
         )
+        default_summary = _unit_cache_value(
+            unit,
+            "default_summary",
+            lambda: _default_loadout_summary(unit),
+        )
         typical_models = unit.typical_model_count
         cost_per_model = costs.unit_total_cost(unit)
         available_unit_options.append(
             {
                 "unit": unit,
                 "weapon_options": weapon_options,
-                "default_summary": _default_loadout_summary(unit),
+                "default_summary": default_summary,
                 "passive_items": passive_items,
                 "active_items": active_items,
                 "aura_items": aura_items,
@@ -310,6 +315,11 @@ def edit_roster(
         )
         aura_items = _unit_cache_value(
             unit, "ability_aura", lambda: _ability_entries(unit, "aura")
+        )
+        default_summary = _unit_cache_value(
+            unit,
+            "default_summary",
+            lambda: _default_loadout_summary(unit),
         )
         loadout = _roster_unit_loadout(
             roster_unit,
@@ -341,7 +351,7 @@ def edit_roster(
                 "selected_passive_items": selected_passives,
                 "selected_active_items": selected_actives,
                 "selected_aura_items": selected_auras,
-                "default_summary": _default_loadout_summary(unit),
+                "default_summary": default_summary,
                 "weapon_options": weapon_options,
                 "loadout": loadout,
                 "loadout_summary": _loadout_display_summary(roster_unit, loadout, weapon_options),
@@ -2026,6 +2036,7 @@ def _roster_unit_export_data(
             aura_items = _ability_entries(unit, "aura")
         if default_summary is None:
             default_summary = _default_loadout_summary(unit)
+            cached_values["default_summary"] = default_summary
     else:
         weapon_options = _unit_weapon_options(unit)
         passive_items = _passive_entries(unit)
@@ -2051,7 +2062,15 @@ def _roster_unit_export_data(
     weapon_details = _loadout_weapon_details(roster_unit, loadout, weapon_options)
     weapon_summary = _loadout_display_summary(roster_unit, loadout, weapon_options)
     if not weapon_summary:
-        weapon_summary = default_summary or _default_loadout_summary(unit)
+        if default_summary:
+            weapon_summary = default_summary
+        else:
+            default_summary = _default_loadout_summary(unit)
+            weapon_summary = default_summary
+            if cached_values is not None:
+                cached_values["default_summary"] = default_summary
+            elif unit_cache is not None and cache_key is not None:
+                unit_cache.setdefault(cache_key, {})["default_summary"] = default_summary
     selected_passives = _selected_passive_entries(
         roster_unit, loadout, passive_items, classification
     )
@@ -2082,6 +2101,13 @@ def _roster_unit_export_data(
         if identifier:
             active_slugs.append(identifier)
 
+    if default_summary is None:
+        default_summary = _default_loadout_summary(unit)
+        if cached_values is not None:
+            cached_values["default_summary"] = default_summary
+        elif unit_cache is not None and cache_key is not None:
+            unit_cache.setdefault(cache_key, {})["default_summary"] = default_summary
+
     return {
         "instance": roster_unit,
         "unit": unit,
@@ -2096,7 +2122,7 @@ def _roster_unit_export_data(
         "aura_labels": [label for label in aura_labels if label],
         "weapon_details": weapon_details,
         "weapon_summary": weapon_summary,
-        "default_summary": default_summary or _default_loadout_summary(unit),
+        "default_summary": default_summary,
         "total_cost": total_value,
         "rounded_total_cost": rounded_total,
         "classification": classification,
