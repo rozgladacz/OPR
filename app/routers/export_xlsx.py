@@ -12,7 +12,7 @@ from .. import models
 from ..db import get_db
 from ..security import get_current_user
 from ..services import costs, utils
-from .export import _army_spell_entries
+from .export import _army_spell_entries, _load_roster_for_export
 from .rosters import _ensure_roster_view_access, _roster_unit_export_data
 
 
@@ -54,19 +54,19 @@ def _append_roster_sheet(
 ) -> float:
     sheet = workbook.active
     sheet.title = "Lista"
-    sheet.append(
-        [
-            "Jednostka",
-            "Oddział",
-            "Ilość",
-            "Jakość",
-            "Obrona",
-            "Wytrzymałość",
-            "Zdolności",
-            "Uzbrojenie",
-            "Suma [pkt]",
-        ]
-    )
+    header = [
+        "Jednostka",
+        "Oddział",
+        "Ilość",
+        "Jakość",
+        "Obrona",
+        "Wytrzymałość",
+        "Zdolności",
+        "Uzbrojenie",
+        "Suma [pkt]",
+    ]
+    sheet.append(header)
+    column_widths = [len(str(value)) for value in header]
 
     total_cost = 0.0
     for entry in entries:
@@ -75,25 +75,28 @@ def _append_roster_sheet(
         rounded_value = entry.get("rounded_total_cost")
         if rounded_value is None:
             rounded_value = utils.round_points(total_value)
-        sheet.append(
-            [
-                entry.get("unit_name"),
-                entry.get("custom_name") or "",
-                entry.get("count"),
-                entry.get("quality"),
-                entry.get("defense"),
-                entry.get("toughness"),
-                _abilities_text(
-                    entry.get("passive_labels", []),
-                    entry.get("active_labels", []),
-                    entry.get("aura_labels", []),
-                ),
-                _weapon_details_text(entry.get("weapon_details", [])),
-                rounded_value,
-            ]
-        )
+        row = [
+            entry.get("unit_name"),
+            entry.get("custom_name") or "",
+            entry.get("count"),
+            entry.get("quality"),
+            entry.get("defense"),
+            entry.get("toughness"),
+            _abilities_text(
+                entry.get("passive_labels", []),
+                entry.get("active_labels", []),
+                entry.get("aura_labels", []),
+            ),
+            _weapon_details_text(entry.get("weapon_details", [])),
+            rounded_value,
+        ]
+        for index, value in enumerate(row):
+            if index < len(column_widths):
+                text = "" if value is None else str(value)
+                column_widths[index] = max(column_widths[index], len(text))
+        sheet.append(row)
 
-    sheet.append([
+    total_row = [
         "",
         "",
         "",
@@ -103,26 +106,39 @@ def _append_roster_sheet(
         "Razem",
         "",
         utils.round_points(total_cost),
-    ])
+    ]
+    for index, value in enumerate(total_row):
+        if index < len(column_widths):
+            text = "" if value is None else str(value)
+            column_widths[index] = max(column_widths[index], len(text))
+    sheet.append(total_row)
     if spells:
         sheet.append([])
-        sheet.append(["Koszt mocy", "Zaklęcie"])
+        spell_header = ["Koszt mocy", "Zaklęcie"]
+        for index, value in enumerate(spell_header):
+            text = "" if value is None else str(value)
+            column_widths[index] = max(column_widths[index], len(text))
+        sheet.append(spell_header)
         for spell in spells:
-            sheet.append([
+            row = [
                 spell.get("cost"),
                 spell.get("label"),
-            ])
-    for column_cells in sheet.columns:
-        max_length = max(len(str(cell.value or "")) for cell in column_cells)
-        adjusted = max_length + 2
-        column_letter = column_cells[0].column_letter
-        sheet.column_dimensions[column_letter].width = min(adjusted, 60)
+            ]
+            for index, value in enumerate(row):
+                text = "" if value is None else str(value)
+                column_widths[index] = max(column_widths[index], len(text))
+            sheet.append(row)
+    for index, max_length in enumerate(column_widths, start=1):
+        column_letter = sheet.cell(row=1, column=index).column_letter
+        sheet.column_dimensions[column_letter].width = min(max_length + 2, 60)
     return total_cost
 
 
 def _append_weapons_sheet(workbook: Workbook, entries: list[dict[str, Any]]) -> None:
     sheet = workbook.create_sheet("Zbrojownia")
-    sheet.append(["Nazwa", "Ilość", "Zasięg", "Ataki", "AP", "Cechy"])
+    header = ["Nazwa", "Ilość", "Zasięg", "Ataki", "AP", "Cechy"]
+    sheet.append(header)
+    column_widths = [len(str(value)) for value in header]
     aggregated: dict[tuple[str, str, str, str, str], int] = {}
     for entry in entries:
         for weapon in entry.get("weapon_details", []):
@@ -136,12 +152,14 @@ def _append_weapons_sheet(workbook: Workbook, entries: list[dict[str, Any]]) -> 
             key = (name, str(range_value), attacks, ap_value, traits)
             aggregated[key] = aggregated.get(key, 0) + int(weapon.get("count") or 0)
     for (name, range_value, attacks, ap_value, traits), count in sorted(aggregated.items()):
-        sheet.append([name, count, range_value, attacks, ap_value, traits])
-    for column_cells in sheet.columns:
-        max_length = max(len(str(cell.value or "")) for cell in column_cells)
-        adjusted = max_length + 2
-        column_letter = column_cells[0].column_letter
-        sheet.column_dimensions[column_letter].width = min(adjusted, 50)
+        row = [name, count, range_value, attacks, ap_value, traits]
+        for index, value in enumerate(row):
+            text = "" if value is None else str(value)
+            column_widths[index] = max(column_widths[index], len(text))
+        sheet.append(row)
+    for index, max_length in enumerate(column_widths, start=1):
+        column_letter = sheet.cell(row=1, column=index).column_letter
+        sheet.column_dimensions[column_letter].width = min(max_length + 2, 50)
 
 
 @router.get("/xlsx/{roster_id}")
@@ -152,7 +170,7 @@ def export_xlsx(
 ):
     if current_user is None:
         return RedirectResponse(url="/auth/login", status_code=303)
-    roster = db.get(models.Roster, roster_id)
+    roster = _load_roster_for_export(db, roster_id)
     if not roster:
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
