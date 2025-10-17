@@ -286,7 +286,9 @@ def edit_roster(
                 "aura_items": aura_items,
                 "unit_cost_per_model": cost_per_model,
                 "unit_cost_total": costs.unit_typical_total_cost(
-                    unit, typical_models
+                    unit,
+                    typical_models,
+                    per_model=cost_per_model,
                 ),
                 "typical_models": typical_models,
             }

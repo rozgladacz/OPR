@@ -2417,7 +2417,11 @@ def _render_army_edit(
         units.append(
             {
                 "instance": unit,
-                "cost": costs.unit_typical_total_cost(unit, typical_models),
+                "cost": costs.unit_typical_total_cost(
+                    unit,
+                    typical_models,
+                    per_model=cost_per_model,
+                ),
                 "cost_per_model": cost_per_model,
                 "typical_models": typical_models,
                 "passive_items": passive_items,
