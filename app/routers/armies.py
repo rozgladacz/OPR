@@ -146,7 +146,14 @@ def _clone_army_contents(
     link_parent_units: bool,
 ) -> None:
     unit_owner_id = target.owner_id
-    for unit in _ordered_army_units(db, source):
+    source_units = sorted(
+        list(getattr(source, "units", []) or []),
+        key=lambda item: (
+            (getattr(item, "position", 0) or 0),
+            getattr(item, "id", 0) or 0,
+        ),
+    )
+    for unit in source_units:
         cloned_unit = models.Unit(
             army=target,
             owner_id=unit_owner_id,
@@ -1223,7 +1230,26 @@ def copy_army(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
-    source = db.get(models.Army, army_id)
+    source = (
+        db.execute(
+            select(models.Army)
+            .options(
+                selectinload(models.Army.units).options(
+                    selectinload(models.Unit.weapon_links).selectinload(
+                        models.UnitWeapon.weapon
+                    ),
+                    selectinload(models.Unit.default_weapon),
+                    selectinload(models.Unit.abilities).selectinload(
+                        models.UnitAbility.ability
+                    ),
+                ),
+                selectinload(models.Army.spells).selectinload(models.ArmySpell.weapon),
+            )
+            .where(models.Army.id == army_id)
+        )
+        .scalars()
+        .first()
+    )
     if not source:
         raise HTTPException(status_code=404)
     _ensure_army_view_access(source, current_user)
@@ -1264,7 +1290,26 @@ def create_army_variant(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
-    base_army = db.get(models.Army, army_id)
+    base_army = (
+        db.execute(
+            select(models.Army)
+            .options(
+                selectinload(models.Army.units).options(
+                    selectinload(models.Unit.weapon_links).selectinload(
+                        models.UnitWeapon.weapon
+                    ),
+                    selectinload(models.Unit.default_weapon),
+                    selectinload(models.Unit.abilities).selectinload(
+                        models.UnitAbility.ability
+                    ),
+                ),
+                selectinload(models.Army.spells).selectinload(models.ArmySpell.weapon),
+            )
+            .where(models.Army.id == army_id)
+        )
+        .scalars()
+        .first()
+    )
     if not base_army:
         raise HTTPException(status_code=404)
     _ensure_army_view_access(base_army, current_user)
