@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 from collections.abc import Mapping, Sequence, Set as AbstractSet
 from decimal import Decimal
@@ -17,6 +18,8 @@ from ..db import get_db
 from ..security import get_current_user
 from ..services import ability_registry, costs, utils
 from ..services.rules import collect_roster_warnings, unit_is_hero
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/rosters", tags=["rosters"])
 templates = Jinja2Templates(directory="app/templates")
@@ -249,9 +252,13 @@ def edit_roster(
     def _unit_cache_value(unit: models.Unit, key: str, factory: Callable[[], Any]) -> Any:
         store = unit_data_cache.setdefault(unit.id, {})
         if key in store:
+            logger.debug(
+                "Reusing cached value for unit_id=%s key=%s", unit.id, key
+            )
             return store[key]
         value = factory()
         store[key] = value
+        logger.debug("Caching value for unit_id=%s key=%s", unit.id, key)
         return value
     available_unit_options = []
     for unit in available_units:
@@ -311,6 +318,11 @@ def edit_roster(
         if roster_unit.id is not None:
             sanitized_loadouts[roster_unit.id] = loadout
         classification = _roster_unit_classification(roster_unit, loadout)
+        class_slug = (
+            str(classification.get("slug") or "").strip().casefold()
+            if classification
+            else "none"
+        )
         is_hero = unit_is_hero(unit, roster_unit, loadout)
         selected_passives = _selected_passive_entries(
             roster_unit, loadout, passive_items, classification
@@ -330,7 +342,11 @@ def edit_roster(
                 "weapon_options": weapon_options,
                 "loadout": loadout,
                 "loadout_summary": _loadout_display_summary(roster_unit, loadout, weapon_options),
-                "base_cost_per_model": _base_cost_per_model(unit, classification),
+                "base_cost_per_model": _unit_cache_value(
+                    unit,
+                    f"base_cost::{class_slug}",
+                    lambda: _base_cost_per_model(unit, classification),
+                ),
                 "classification": classification,
                 "is_hero": is_hero,
             }
