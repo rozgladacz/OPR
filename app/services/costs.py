@@ -835,7 +835,7 @@ def _weapon_cost(
             "no regen",
             "no regeneration",
         }:
-            mult *= 1.5
+            mult *= 1.1
         elif norm in {"podkrecenie", "overcharge", "overclock"}:
             overcharge = True
 

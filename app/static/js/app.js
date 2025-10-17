@@ -1000,7 +1000,7 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
         'no regeneration',
       ].includes(norm)
     ) {
-      mult *= 1.5;
+      mult *= 1.1;
     } else if (['podkrecenie', 'overcharge', 'overclock'].includes(norm)) {
       overcharge = true;
     }
