@@ -2162,10 +2162,18 @@ def delete_unit(
     if not army or not unit or unit.army_id != army.id:
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
+    removed_position = unit.position or 0
     db.delete(unit)
     db.flush()
-    remaining_units = _ordered_army_units(db, army)
-    _resequence_army_units(remaining_units)
+    db.execute(
+        update(models.Unit)
+        .where(
+            models.Unit.army_id == army.id,
+            models.Unit.position > removed_position,
+        )
+        .values(position=models.Unit.position - 1)
+        .execution_options(synchronize_session=False)
+    )
     db.commit()
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
 def _switch_army_armory(
