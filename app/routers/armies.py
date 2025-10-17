@@ -6,7 +6,7 @@ import math
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from .. import models
@@ -1985,23 +1985,62 @@ def move_army_unit(
     if normalized_direction not in {"up", "down"}:
         raise HTTPException(status_code=400, detail="Nieprawidłowy kierunek")
 
-    units = _ordered_army_units(db, army)
-    try:
-        index = next(i for i, item in enumerate(units) if item.id == unit.id)
-    except StopIteration:
-        raise HTTPException(status_code=404) from None
+    current_position = unit.position
+    neighbor_stmt = (
+        select(models.Unit)
+        .where(models.Unit.army_id == army.id)
+        .where(models.Unit.id != unit.id)
+    )
 
-    target_index = index
-    if normalized_direction == "up" and index > 0:
-        target_index = index - 1
-    elif normalized_direction == "down" and index < len(units) - 1:
-        target_index = index + 1
+    if normalized_direction == "up":
+        neighbor_stmt = (
+            neighbor_stmt.where(
+                or_(
+                    models.Unit.position < current_position,
+                    and_(
+                        models.Unit.position == current_position,
+                        models.Unit.id < unit.id,
+                    ),
+                )
+            )
+            .order_by(models.Unit.position.desc(), models.Unit.id.desc())
+            .limit(1)
+        )
+    else:  # normalized_direction == "down"
+        neighbor_stmt = (
+            neighbor_stmt.where(
+                or_(
+                    models.Unit.position > current_position,
+                    and_(
+                        models.Unit.position == current_position,
+                        models.Unit.id > unit.id,
+                    ),
+                )
+            )
+            .order_by(models.Unit.position.asc(), models.Unit.id.asc())
+            .limit(1)
+        )
 
-    if target_index != index:
-        item = units.pop(index)
-        units.insert(target_index, item)
-        _resequence_army_units(units)
-        db.commit()
+    neighbor = db.execute(neighbor_stmt).scalars().first()
+
+    if neighbor is None:
+        return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
+
+    neighbor_position = neighbor.position
+
+    db.execute(
+        update(models.Unit)
+        .where(models.Unit.id == neighbor.id)
+        .values(position=current_position)
+        .execution_options(synchronize_session=False)
+    )
+    db.execute(
+        update(models.Unit)
+        .where(models.Unit.id == unit.id)
+        .values(position=neighbor_position)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
 
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
 
