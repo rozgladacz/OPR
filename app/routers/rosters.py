@@ -249,6 +249,7 @@ def edit_roster(
         .all()
     )
     unit_data_cache: dict[int, dict[str, Any]] = {}
+    unit_payloads: dict[int, dict[str, Any]] = {}
 
     def _unit_cache_value(unit: models.Unit, key: str, factory: Callable[[], Any]) -> Any:
         store = unit_data_cache.setdefault(unit.id, {})
@@ -261,8 +262,10 @@ def edit_roster(
         store[key] = value
         logger.debug("Caching value for unit_id=%s key=%s", unit.id, key)
         return value
-    available_unit_options = []
-    for unit in available_units:
+
+    def _unit_payload(unit: models.Unit) -> dict[str, Any]:
+        if unit.id in unit_payloads:
+            return unit_payloads[unit.id]
         weapon_options = _unit_cache_value(
             unit, "weapon_options", lambda: _unit_weapon_options(unit)
         )
@@ -280,6 +283,24 @@ def edit_roster(
             "default_summary",
             lambda: _default_loadout_summary(unit),
         )
+        payload = {
+            "weapon_options": weapon_options,
+            "passive_items": passive_items,
+            "active_items": active_items,
+            "aura_items": aura_items,
+            "default_summary": default_summary,
+        }
+        unit_payloads[unit.id] = payload
+        return payload
+
+    available_unit_options = []
+    for unit in available_units:
+        payload = _unit_payload(unit)
+        weapon_options = payload["weapon_options"]
+        passive_items = payload["passive_items"]
+        active_items = payload["active_items"]
+        aura_items = payload["aura_items"]
+        default_summary = payload["default_summary"]
         typical_models = unit.typical_model_count
         cost_per_model = costs.unit_total_cost(unit)
         available_unit_options.append(
@@ -304,23 +325,12 @@ def edit_roster(
     sanitized_loadouts: dict[int, dict[str, Any]] = {}
     for roster_unit in roster.roster_units:
         unit = roster_unit.unit
-        weapon_options = _unit_cache_value(
-            unit, "weapon_options", lambda: _unit_weapon_options(unit)
-        )
-        passive_items = _unit_cache_value(
-            unit, "passive_entries", lambda: _passive_entries(unit)
-        )
-        active_items = _unit_cache_value(
-            unit, "ability_active", lambda: _ability_entries(unit, "active")
-        )
-        aura_items = _unit_cache_value(
-            unit, "ability_aura", lambda: _ability_entries(unit, "aura")
-        )
-        default_summary = _unit_cache_value(
-            unit,
-            "default_summary",
-            lambda: _default_loadout_summary(unit),
-        )
+        payload = _unit_payload(unit)
+        weapon_options = payload["weapon_options"]
+        passive_items = payload["passive_items"]
+        active_items = payload["active_items"]
+        aura_items = payload["aura_items"]
+        default_summary = payload["default_summary"]
         loadout = _roster_unit_loadout(
             roster_unit,
             weapon_options=weapon_options,
@@ -392,6 +402,7 @@ def edit_roster(
             "can_delete": can_delete,
             "warnings": warnings,
             "selected_id": selected_id,
+            "unit_payloads": unit_payloads,
         },
     )
 
