@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import models
@@ -245,6 +245,37 @@ def _clone_army_contents(
 def _resequence_army_units(units: list[models.Unit]) -> None:
     for index, unit in enumerate(units):
         unit.position = index
+
+
+def _move_unit_in_sequence(
+    units: list[models.Unit],
+    unit_id: int,
+    direction: str,
+) -> bool:
+    """Move a unit within an ordered sequence.
+
+    The ``units`` collection is mutated in place and should already be ordered
+    by ``(position, id)``. Returns ``True`` when the unit order changed.
+    """
+
+    try:
+        index = next(i for i, item in enumerate(units) if item.id == unit_id)
+    except StopIteration:
+        return False
+
+    if direction == "up":
+        if index == 0:
+            return False
+        units[index - 1], units[index] = units[index], units[index - 1]
+        return True
+
+    if direction == "down":
+        if index >= len(units) - 1:
+            return False
+        units[index + 1], units[index] = units[index], units[index + 1]
+        return True
+
+    return False
 
 
 def _get_default_ruleset(db: Session) -> models.RuleSet | None:
@@ -1964,8 +1995,7 @@ def move_army_unit(
     current_user: models.User = Depends(get_current_user()),
 ):
     army = db.get(models.Army, army_id)
-    unit = db.get(models.Unit, unit_id)
-    if not army or not unit or unit.army_id != army.id:
+    if not army:
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
 
@@ -1973,61 +2003,26 @@ def move_army_unit(
     if normalized_direction not in {"up", "down"}:
         raise HTTPException(status_code=400, detail="Nieprawidłowy kierunek")
 
-    current_position = unit.position
-    neighbor_stmt = (
-        select(models.Unit)
-        .where(models.Unit.army_id == army.id)
-        .where(models.Unit.id != unit.id)
+    units = (
+        db.execute(
+            select(models.Unit)
+            .where(models.Unit.army_id == army.id)
+            .order_by(models.Unit.position, models.Unit.id)
+        )
+        .scalars()
+        .all()
     )
 
-    if normalized_direction == "up":
-        neighbor_stmt = (
-            neighbor_stmt.where(
-                or_(
-                    models.Unit.position < current_position,
-                    and_(
-                        models.Unit.position == current_position,
-                        models.Unit.id < unit.id,
-                    ),
-                )
-            )
-            .order_by(models.Unit.position.desc(), models.Unit.id.desc())
-            .limit(1)
-        )
-    else:  # normalized_direction == "down"
-        neighbor_stmt = (
-            neighbor_stmt.where(
-                or_(
-                    models.Unit.position > current_position,
-                    and_(
-                        models.Unit.position == current_position,
-                        models.Unit.id > unit.id,
-                    ),
-                )
-            )
-            .order_by(models.Unit.position.asc(), models.Unit.id.asc())
-            .limit(1)
-        )
+    try:
+        target = next(item for item in units if item.id == unit_id)
+    except StopIteration:
+        raise HTTPException(status_code=404)
 
-    neighbor = db.execute(neighbor_stmt).scalars().first()
-
-    if neighbor is None:
+    moved = _move_unit_in_sequence(units, target.id, normalized_direction)
+    if not moved:
         return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
 
-    neighbor_position = neighbor.position
-
-    db.execute(
-        update(models.Unit)
-        .where(models.Unit.id == neighbor.id)
-        .values(position=current_position)
-        .execution_options(synchronize_session=False)
-    )
-    db.execute(
-        update(models.Unit)
-        .where(models.Unit.id == unit.id)
-        .values(position=neighbor_position)
-        .execution_options(synchronize_session=False)
-    )
+    _resequence_army_units(units)
     db.commit()
 
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)

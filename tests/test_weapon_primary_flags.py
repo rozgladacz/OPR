@@ -18,6 +18,16 @@ class DummyDB:
     def get(self, model, key):
         return self._mapping.get(key)
 
+    def execute(self, _):  # pragma: no cover - helper for parsing tests
+        class DummyResult:
+            def __init__(self, values):
+                self._values = values
+
+            def scalars(self):
+                return iter(self._values)
+
+        return DummyResult(list(self._mapping.values()))
+
 
 class DummySession:
     def __getattr__(self, name):  # pragma: no cover - unused hooks
