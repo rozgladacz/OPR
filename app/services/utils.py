@@ -237,7 +237,8 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
             tags=None,
             notes=None,
         )
-        clone.cached_cost = None
+        parent_cached_cost = parent_weapon.effective_cached_cost
+        clone.cached_cost = parent_cached_cost if parent_cached_cost is not None else None
 
         db.add(clone)
         created_new_clones = True

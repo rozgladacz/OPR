@@ -65,6 +65,39 @@ def test_variant_inherits_new_weapon_without_overrides():
         session.close()
 
 
+def test_variant_inherits_parent_cached_cost():
+    session = _session()
+    try:
+        base_armory = models.Armory(name="Base")
+        variant_armory = models.Armory(name="Variant", parent=base_armory)
+
+        session.add_all([base_armory, variant_armory])
+        session.flush()
+
+        parent_weapon = models.Weapon(
+            armory=base_armory,
+            name="Sword",
+            range="Melee",
+            attacks=3,
+            ap=2,
+            cached_cost=17.5,
+        )
+        session.add(parent_weapon)
+        session.flush()
+
+        utils.ensure_armory_variant_sync(session, variant_armory)
+        session.flush()
+
+        clone = session.execute(
+            select(models.Weapon).where(models.Weapon.armory_id == variant_armory.id)
+        ).scalar_one()
+
+        assert clone.parent_id == parent_weapon.id
+        assert clone.cached_cost == parent_weapon.cached_cost
+    finally:
+        session.close()
+
+
 def test_nested_variant_keeps_parent_defaults():
     session = _session()
     try:
