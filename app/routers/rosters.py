@@ -433,6 +433,7 @@ def delete_roster(
 @router.post("/{roster_id}/units/add")
 def add_roster_unit(
     roster_id: int,
+    request: Request,
     unit_id: int = Form(...),
     count: int = Form(1),
     db: Session = Depends(get_db),
@@ -499,6 +500,71 @@ def add_roster_unit(
     db.add(roster_unit)
     db.flush()
     db.commit()
+
+    accept_header = (request.headers.get("accept") or "").lower()
+    if "application/json" in accept_header:
+        total_cost = costs.roster_total(roster)
+        selected_passives = _selected_passive_entries(
+            roster_unit, loadout, passive_items, classification
+        )
+        selected_actives = _selected_ability_entries(loadout, active_items, "active")
+        selected_auras = _selected_ability_entries(loadout, aura_items, "aura")
+        loadout_mapping = (
+            {roster_unit.id: loadout} if roster_unit.id is not None else None
+        )
+        warnings = collect_roster_warnings(
+            roster, total_cost=total_cost, loadouts=loadout_mapping
+        )
+        loadout_json = json.dumps(loadout, ensure_ascii=False)
+        default_summary = _default_loadout_summary(unit)
+        loadout_summary = _loadout_display_summary(
+            roster_unit,
+            loadout,
+            weapon_options,
+        )
+        base_cost_per_model = _base_cost_per_model(unit, classification)
+        payload = {
+            "unit": {
+                "id": roster_unit.id,
+                "count": roster_unit.count,
+                "custom_name": roster_unit.custom_name or "",
+                "cached_cost": roster_unit.cached_cost,
+                "loadout_json": loadout_json,
+                "loadout_summary": loadout_summary,
+                "default_summary": default_summary,
+                "base_cost_per_model": base_cost_per_model,
+                "classification": classification,
+                "selected_passive_items": selected_passives,
+                "selected_active_items": selected_actives,
+                "selected_aura_items": selected_auras,
+            },
+            "item": {
+                "id": roster_unit.id,
+                "count": roster_unit.count,
+                "cached_cost": roster_unit.cached_cost,
+                "custom_name": roster_unit.custom_name or "",
+                "unit_name": unit.name,
+                "unit_quality": unit.quality,
+                "unit_defense": unit.defense,
+                "unit_toughness": unit.toughness,
+                "unit_flags": unit.flags or "",
+                "default_summary": default_summary,
+                "loadout_summary": loadout_summary,
+                "weapon_options": weapon_options,
+                "passive_items": passive_items,
+                "active_items": active_items,
+                "aura_items": aura_items,
+                "selected_passive_items": selected_passives,
+                "selected_active_items": selected_actives,
+                "selected_aura_items": selected_auras,
+                "loadout": loadout,
+                "classification": classification,
+                "base_cost_per_model": base_cost_per_model,
+            },
+            "roster": {"total_cost": total_cost},
+            "warnings": warnings,
+        }
+        return JSONResponse(_json_safe(payload))
     return RedirectResponse(
         url=f"/rosters/{roster.id}?selected={roster_unit.id}",
         status_code=303,
