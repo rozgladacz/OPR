@@ -149,6 +149,54 @@ def test_view_armory_uses_cached_cost_without_recomputation(monkeypatch):
         session.close()
 
 
+def test_view_variant_armory_uses_parent_cached_cost(monkeypatch):
+    session = _session()
+    try:
+        user = models.User(username="viewer", password_hash="x", is_admin=False)
+        base_armory = models.Armory(name="Base", owner=user)
+        variant_armory = models.Armory(name="Variant", owner=user, parent=base_armory)
+        parent_weapon = models.Weapon(
+            armory=base_armory,
+            owner=user,
+            name="Halberd",
+            range="Melee",
+            attacks=3,
+            ap=1,
+            cached_cost=15.0,
+        )
+
+        session.add_all([user, base_armory, variant_armory, parent_weapon])
+        session.flush()
+
+        utils.ensure_armory_variant_sync(session, variant_armory)
+        session.flush()
+
+        variant_weapon = session.execute(
+            select(models.Weapon).where(models.Weapon.armory_id == variant_armory.id)
+        ).scalar_one()
+
+        recorded_calls: list[int] = []
+
+        def fake_weapon_cost(weapon: models.Weapon) -> float:
+            recorded_calls.append(weapon.id or -1)
+            return 99.0
+
+        monkeypatch.setattr(armories_router.costs, "weapon_cost", fake_weapon_cost)
+
+        request = _build_request(path=f"/armories/{variant_armory.id}")
+        response = armories_router.view_armory(
+            variant_armory.id, request, session, current_user=user
+        )
+
+        assert recorded_calls == []
+        weapon_rows = response.context["weapons"]
+        assert len(weapon_rows) == 1
+        assert weapon_rows[0]["cost"] == pytest.approx(parent_weapon.cached_cost)
+        assert variant_weapon.cached_cost == pytest.approx(parent_weapon.cached_cost)
+    finally:
+        session.close()
+
+
 def test_view_armory_falls_back_to_cost_when_cache_missing(monkeypatch):
     session = _session()
     try:
