@@ -157,7 +157,7 @@
               data-weapon-tree-payload='{{ weapon_tree | tojson }}'
               data-target-input="unit-weapons"
             >
-              <div class="row g-2 align-items-start">
+              <div class="row g-2 align-items-end">
                 <div class="col-md-5">
                   <div class="weapon-picker-tree-wrapper">
                     <button
@@ -169,9 +169,9 @@
                       aria-expanded="false"
                     >
                       <span class="weapon-picker-tree-trigger-label" data-weapon-tree-label>Wybierz broń</span>
-                      <span class="weapon-picker-tree-trigger-caret ms-2" aria-hidden="true">▾</span>
+                      <span class="weapon-picker-tree-trigger-caret" aria-hidden="true">▾</span>
                     </button>
-                    <div class="weapon-picker-tree-container d-none mt-2" data-weapon-tree-container>
+                    <div class="weapon-picker-tree-container d-none" data-weapon-tree-container>
                       <div class="weapon-picker-tree border rounded p-2" data-weapon-tree></div>
                     </div>
                   </div>
@@ -194,7 +194,7 @@
                     value="0"
                   />
                 </div>
-                <div class="col-md-auto">
+                <div class="col-sm-auto">
                   <div class="d-grid">
                     <button class="btn btn-outline-primary weapon-picker-add text-nowrap" type="button">Dodaj</button>
                   </div>

@@ -1508,12 +1508,16 @@ function initWeaponPicker(root) {
       }
       return;
     }
-    treeContainer.hidden = !treeExpanded;
-    treeContainer.classList.toggle('d-none', !treeExpanded);
-    treeTrigger.setAttribute('aria-expanded', treeExpanded ? 'true' : 'false');
-    treeTrigger.classList.toggle('weapon-tree-trigger-open', treeExpanded);
+    const expanded = Boolean(treeExpanded);
+    treeContainer.hidden = !expanded;
+    treeContainer.classList.toggle('d-none', !expanded);
+    treeContainer.classList.toggle('weapon-tree-container-open', expanded);
+    treeTrigger.hidden = expanded;
+    treeTrigger.classList.toggle('d-none', expanded);
+    treeTrigger.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    treeTrigger.classList.toggle('weapon-tree-trigger-open', expanded);
     if (treeRoot) {
-      treeRoot.setAttribute('aria-hidden', treeExpanded ? 'false' : 'true');
+      treeRoot.setAttribute('aria-hidden', expanded ? 'false' : 'true');
     }
   }
 
@@ -1754,8 +1758,6 @@ function initWeaponPicker(root) {
 
   initializeCollapsedState(treeData);
 
-  const treeHintId = `weapon-tree-hint-${pickerId}`;
-
   function ensureNodeVisible(weaponId) {
     const meta = weaponMap.get(String(weaponId));
     if (!meta || !Array.isArray(meta.path)) {
@@ -1883,11 +1885,6 @@ function initWeaponPicker(root) {
     treeRoot.innerHTML = '';
     treeRoot.classList.add('d-flex', 'flex-column', 'gap-2');
     treeRoot.setAttribute('role', 'tree');
-    const hint = document.createElement('div');
-    hint.className = 'text-muted small';
-    hint.id = treeHintId;
-    hint.textContent = 'Kliknij broń, aby wybrać. Podwójne kliknięcie dodaje ją do listy.';
-    treeRoot.appendChild(hint);
 
     if (!Array.isArray(treeData) || !treeData.length) {
       const empty = document.createElement('p');
@@ -1899,7 +1896,6 @@ function initWeaponPicker(root) {
 
     const list = document.createElement('ul');
     list.className = 'list-unstyled mb-0 weapon-tree-root';
-    list.setAttribute('aria-describedby', treeHintId);
     treeData.forEach((node) => {
       list.appendChild(createNodeElement(node));
     });
@@ -1980,6 +1976,13 @@ function initWeaponPicker(root) {
     }
     renderTree();
     updateSelectionState();
+    if (treeTrigger && treeContainer && treeExpanded) {
+      treeExpanded = false;
+      syncTreeVisibility();
+      if (typeof treeTrigger.focus === 'function') {
+        treeTrigger.focus();
+      }
+    }
   }
 
   function getWeaponMeta(weaponId, entry) {
