@@ -1392,64 +1392,520 @@ function initWeaponDefaults() {
 }
 
 function initWeaponPicker(root) {
-  const weaponsData = root.dataset.weapons;
-  const weapons = weaponsData ? JSON.parse(weaponsData) : [];
-  const weaponMap = new Map((weapons || []).map((item) => [String(item.id), item]));
+  const treePayloadRaw =
+    root.dataset.weaponTreePayload ||
+    root.dataset.weaponTree ||
+    root.dataset.weapons;
+  let parsedPayload = null;
+  if (treePayloadRaw) {
+    try {
+      parsedPayload = JSON.parse(treePayloadRaw);
+    } catch (err) {
+      console.warn('Nie udało się odczytać drzewa uzbrojenia', err);
+      parsedPayload = null;
+    }
+  }
+
+  let rawTree = [];
+  let rawFlat = [];
+  if (Array.isArray(parsedPayload)) {
+    rawTree = parsedPayload;
+  } else if (parsedPayload && typeof parsedPayload === 'object') {
+    if (Array.isArray(parsedPayload.tree)) {
+      rawTree = parsedPayload.tree;
+    } else if (Array.isArray(parsedPayload.nodes)) {
+      rawTree = parsedPayload.nodes;
+    }
+    if (Array.isArray(parsedPayload.flat)) {
+      rawFlat = parsedPayload.flat;
+    }
+  }
+
+  if ((!Array.isArray(rawTree) || !rawTree.length) && Array.isArray(rawFlat) && rawFlat.length) {
+    const cloneMap = new Map();
+    rawFlat.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const id = Number.parseInt(entry.id ?? entry.weapon_id, 10);
+      if (!Number.isFinite(id)) {
+        return;
+      }
+      cloneMap.set(String(id), {
+        id,
+        name: typeof entry.name === 'string' ? entry.name : '',
+        parent_id:
+          entry.parent_id !== undefined && entry.parent_id !== null
+            ? Number(entry.parent_id)
+            : null,
+        range_value: entry.range_value,
+        category: entry.category,
+        children: [],
+        path: entry.path,
+        path_labels: entry.path_labels,
+        path_text: entry.path_text,
+        is_leaf: entry.is_leaf,
+      });
+    });
+    const roots = [];
+    cloneMap.forEach((node) => {
+      const parentId =
+        node.parent_id !== undefined && node.parent_id !== null
+          ? Number(node.parent_id)
+          : null;
+      if (Number.isFinite(parentId) && cloneMap.has(String(parentId))) {
+        cloneMap.get(String(parentId)).children.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+    rawTree = roots;
+  }
+
   const targetId = root.dataset.targetInput;
-  const hiddenInput = targetId ? document.getElementById(targetId) : root.querySelector('input[type="hidden"]');
+  const hiddenInput =
+    targetId ? document.getElementById(targetId) : root.querySelector('input[type="hidden"]');
   const selectEl = root.querySelector('.weapon-picker-select');
   const defaultCountInput = root.querySelector('.weapon-picker-default-count');
   const addButton = root.querySelector('.weapon-picker-add');
   const listEl = root.querySelector('.weapon-picker-list');
+  const treeRoot = root.querySelector('[data-weapon-tree]');
   const pickerId = Math.random().toString(16).slice(2);
+
+  const weaponMap = new Map();
+  const collapsedNodes = new Set();
+  let treeData = [];
   let items = [];
+  let selectedWeaponId = null;
 
   function normalizeCategory(value) {
     if (typeof value !== 'string') {
       return null;
     }
     const lowered = value.trim().toLowerCase();
-    if (['ranged', 'dystansowa', 'dystansowe', 'dystansowy'].includes(lowered)) {
+    if (
+      [
+        'ranged',
+        'dystansowa',
+        'dystansowe',
+        'dystansowy',
+        'shooting',
+        'shoot',
+        'range',
+      ].includes(lowered)
+    ) {
       return 'ranged';
     }
-    if (['melee', 'wręcz', 'wrecz'].includes(lowered)) {
+    if (['melee', 'wręcz', 'wrecz', 'close', 'close combat'].includes(lowered)) {
       return 'melee';
     }
     return null;
   }
 
+  function sanitizeTree(nodes, parentId = null, parentPathIds = [], parentPathLabels = []) {
+    const result = [];
+    (Array.isArray(nodes) ? nodes : []).forEach((node) => {
+      if (!node || typeof node !== 'object') {
+        return;
+      }
+      const rawId = node.id ?? node.weapon_id;
+      const id = Number.parseInt(rawId, 10);
+      if (!Number.isFinite(id)) {
+        return;
+      }
+      const rawName = typeof node.name === 'string' ? node.name : '';
+      const name = rawName.trim() || `Broń #${id}`;
+      let pathIds = Array.isArray(node.path)
+        ? node.path
+            .map((value) => Number.parseInt(value, 10))
+            .filter((value) => Number.isFinite(value))
+        : [];
+      if (!pathIds.length || pathIds[pathIds.length - 1] !== id) {
+        pathIds = [...parentPathIds, id];
+      }
+      let pathLabels = Array.isArray(node.path_labels)
+        ? node.path_labels.map((value) => String(value))
+        : [];
+      if (!pathLabels.length || pathLabels.length !== pathIds.length) {
+        pathLabels = [...parentPathLabels, name];
+      }
+      const depth = pathIds.length ? pathIds.length - 1 : parentPathIds.length;
+      const rangeSource =
+        node.range_value ??
+        node.range ??
+        node.effective_range ??
+        node.rangeValue ??
+        0;
+      const rangeValue = normalizeRangeValue(rangeSource);
+      const rawCategory =
+        node.category ?? node.range_category ?? node.type ?? null;
+      const category =
+        normalizeCategory(rawCategory) ?? (rangeValue > 0 ? 'ranged' : 'melee');
+      let parentValue = null;
+      if (Number.isFinite(Number(node.parent_id))) {
+        parentValue = Number(node.parent_id);
+      } else if (pathIds.length >= 2) {
+        parentValue = pathIds[pathIds.length - 2];
+      } else if (Number.isFinite(Number(parentId))) {
+        parentValue = Number(parentId);
+      }
+      const childNodes = sanitizeTree(
+        node.children,
+        id,
+        pathIds,
+        pathLabels,
+      );
+      const hasChildren = childNodes.length > 0;
+      const isLeaf = !hasChildren || Boolean(node.is_leaf);
+      const meta = {
+        id,
+        name,
+        parent_id: Number.isFinite(parentValue) ? parentValue : null,
+        depth,
+        path: pathIds,
+        path_labels: pathLabels,
+        path_text:
+          typeof node.path_text === 'string' && node.path_text.trim()
+            ? node.path_text.trim()
+            : pathLabels.join(' / '),
+        category,
+        range_value: Number.isFinite(rangeValue) ? rangeValue : 0,
+        is_leaf: isLeaf,
+      };
+      weaponMap.set(String(id), { ...meta });
+      const sanitizedNode = {
+        ...meta,
+        children: childNodes,
+        has_children: hasChildren,
+      };
+      result.push(sanitizedNode);
+    });
+    return result;
+  }
+
+  function sortTree(nodes) {
+    if (!Array.isArray(nodes)) {
+      return;
+    }
+    nodes.sort((a, b) => {
+      const nameA = a && a.name ? String(a.name).toLowerCase() : '';
+      const nameB = b && b.name ? String(b.name).toLowerCase() : '';
+      if (nameA < nameB) {
+        return -1;
+      }
+      if (nameA > nameB) {
+        return 1;
+      }
+      return 0;
+    });
+    nodes.forEach((node) => {
+      if (node && Array.isArray(node.children) && node.children.length) {
+        sortTree(node.children);
+      }
+    });
+  }
+
+  treeData = sanitizeTree(rawTree);
+  sortTree(treeData);
+
+  if (Array.isArray(rawFlat)) {
+    rawFlat.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const id = Number.parseInt(entry.id ?? entry.weapon_id, 10);
+      if (!Number.isFinite(id) || weaponMap.has(String(id))) {
+        return;
+      }
+      const rawName = typeof entry.name === 'string' ? entry.name : '';
+      const name = rawName.trim() || `Broń #${id}`;
+      const rangeValue = normalizeRangeValue(
+        entry.range_value ?? entry.range ?? entry.effective_range ?? 0,
+      );
+      const category =
+        normalizeCategory(entry.category ?? entry.range_category ?? null) ??
+        (rangeValue > 0 ? 'ranged' : 'melee');
+      let path = Array.isArray(entry.path)
+        ? entry.path
+            .map((value) => Number.parseInt(value, 10))
+            .filter((value) => Number.isFinite(value))
+        : [];
+      if (!path.length || path[path.length - 1] !== id) {
+        path = [...path, id];
+      }
+      let pathLabels = Array.isArray(entry.path_labels)
+        ? entry.path_labels.map((value) => String(value))
+        : [];
+      if (!pathLabels.length || pathLabels.length !== path.length) {
+        pathLabels = path.map((value, index) => {
+          if (index === path.length - 1) {
+            return name;
+          }
+          const ancestor = weaponMap.get(String(path[index]));
+          return ancestor && ancestor.name ? ancestor.name : `#${path[index]}`;
+        });
+      }
+      weaponMap.set(String(id), {
+        id,
+        name,
+        parent_id:
+          entry.parent_id !== undefined && entry.parent_id !== null
+            ? Number(entry.parent_id)
+            : path.length > 1
+            ? path[path.length - 2]
+            : null,
+        depth: Number.isFinite(Number(entry.depth))
+          ? Number(entry.depth)
+          : Math.max(path.length - 1, 0),
+        path,
+        path_labels: pathLabels,
+        path_text:
+          typeof entry.path_text === 'string' && entry.path_text.trim()
+            ? entry.path_text.trim()
+            : pathLabels.join(' / '),
+        category,
+        range_value: Number.isFinite(rangeValue) ? rangeValue : 0,
+        is_leaf: entry.is_leaf !== undefined ? Boolean(entry.is_leaf) : true,
+      });
+    });
+  }
+
+  function initializeCollapsedState(nodes) {
+    (Array.isArray(nodes) ? nodes : []).forEach((node) => {
+      if (!node) {
+        return;
+      }
+      if (node.depth >= 2 && node.has_children) {
+        collapsedNodes.add(String(node.id));
+      }
+      initializeCollapsedState(node.children);
+    });
+  }
+
+  initializeCollapsedState(treeData);
+
+  const treeHintId = `weapon-tree-hint-${pickerId}`;
+
+  function ensureNodeVisible(weaponId) {
+    const meta = weaponMap.get(String(weaponId));
+    if (!meta || !Array.isArray(meta.path)) {
+      return;
+    }
+    meta.path.slice(0, -1).forEach((ancestorId) => {
+      collapsedNodes.delete(String(ancestorId));
+    });
+  }
+
+  function toggleNode(nodeId, forceOpen) {
+    const key = String(nodeId);
+    if (forceOpen === true) {
+      collapsedNodes.delete(key);
+    } else if (forceOpen === false) {
+      collapsedNodes.add(key);
+    } else if (collapsedNodes.has(key)) {
+      collapsedNodes.delete(key);
+    } else {
+      collapsedNodes.add(key);
+    }
+    renderTree();
+    updateSelectionState();
+  }
+
+  function createNodeElement(node) {
+    const li = document.createElement('li');
+    li.className = 'weapon-tree-node';
+    li.dataset.weaponNode = String(node.id);
+
+    const row = document.createElement('div');
+    row.className = 'weapon-tree-row d-flex align-items-center gap-2 py-1';
+    li.appendChild(row);
+
+    if (node.has_children) {
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.className = 'btn btn-sm btn-outline-secondary weapon-tree-toggle';
+      const collapsed = collapsedNodes.has(String(node.id));
+      toggleBtn.textContent = collapsed ? '▸' : '▾';
+      toggleBtn.setAttribute('aria-label', collapsed ? 'Rozwiń gałąź' : 'Zwiń gałąź');
+      toggleBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        toggleNode(node.id);
+      });
+      row.appendChild(toggleBtn);
+    } else {
+      const spacer = document.createElement('span');
+      spacer.className = 'weapon-tree-toggle-placeholder';
+      spacer.style.display = 'inline-block';
+      spacer.style.width = '1.75rem';
+      spacer.setAttribute('aria-hidden', 'true');
+      row.appendChild(spacer);
+    }
+
+    if (node.is_leaf) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className =
+        'btn btn-sm btn-outline-secondary weapon-tree-select flex-grow-1 text-start';
+      button.dataset.weaponSelect = String(node.id);
+      button.textContent = node.name;
+      button.title = node.path_text || node.name;
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        setSelectedNode(node.id);
+      });
+      button.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        setSelectedNode(node.id);
+        handleAdd();
+      });
+      row.appendChild(button);
+    } else {
+      const label = document.createElement('button');
+      label.type = 'button';
+      label.className =
+        'btn btn-sm btn-outline-secondary weapon-tree-group flex-grow-1 text-start';
+      label.textContent = node.name;
+      label.title = node.path_text || node.name;
+      label.addEventListener('click', (event) => {
+        event.preventDefault();
+        toggleNode(node.id);
+      });
+      row.appendChild(label);
+    }
+
+    const badge = document.createElement('span');
+    if (node.is_leaf) {
+      badge.className = 'badge text-bg-secondary weapon-tree-meta';
+      badge.textContent = node.range_value > 0 ? `${node.range_value}"` : 'Wręcz';
+    } else {
+      badge.className = 'badge text-bg-light border text-muted weapon-tree-meta';
+      badge.textContent = `${node.children.length}`;
+      badge.title = 'Liczba wariantów';
+    }
+    row.appendChild(badge);
+
+    if (node.children && node.children.length) {
+      const childList = document.createElement('ul');
+      childList.className = 'list-unstyled mb-0 weapon-tree-children ms-3';
+      if (collapsedNodes.has(String(node.id))) {
+        childList.hidden = true;
+      }
+      node.children.forEach((child) => {
+        childList.appendChild(createNodeElement(child));
+      });
+      li.appendChild(childList);
+    }
+
+    return li;
+  }
+
+  function renderTree() {
+    if (!treeRoot) {
+      return;
+    }
+    treeRoot.innerHTML = '';
+    treeRoot.classList.add('d-flex', 'flex-column', 'gap-2');
+    treeRoot.setAttribute('role', 'tree');
+    const hint = document.createElement('div');
+    hint.className = 'text-muted small';
+    hint.id = treeHintId;
+    hint.textContent = 'Kliknij broń, aby wybrać. Podwójne kliknięcie dodaje ją do listy.';
+    treeRoot.appendChild(hint);
+
+    if (!Array.isArray(treeData) || !treeData.length) {
+      const empty = document.createElement('p');
+      empty.className = 'text-muted mb-0 fst-italic small';
+      empty.textContent = 'Brak dostępnego uzbrojenia.';
+      treeRoot.appendChild(empty);
+      return;
+    }
+
+    const list = document.createElement('ul');
+    list.className = 'list-unstyled mb-0 weapon-tree-root';
+    list.setAttribute('aria-describedby', treeHintId);
+    treeData.forEach((node) => {
+      list.appendChild(createNodeElement(node));
+    });
+    treeRoot.appendChild(list);
+  }
+
+  function updateSelectionState() {
+    if (addButton) {
+      if (treeRoot) {
+        addButton.disabled = !selectedWeaponId;
+      } else {
+        addButton.disabled = false;
+      }
+    }
+    if (!treeRoot) {
+      return;
+    }
+    treeRoot.querySelectorAll('[data-weapon-select]').forEach((button) => {
+      const nodeId = button.dataset.weaponSelect;
+      const isSelected = selectedWeaponId && nodeId === selectedWeaponId;
+      button.classList.toggle('btn-primary', Boolean(isSelected));
+      button.classList.toggle('btn-outline-secondary', !isSelected);
+      const nodeElement = button.closest('[data-weapon-node]');
+      if (nodeElement) {
+        nodeElement.classList.toggle('active', Boolean(isSelected));
+      }
+    });
+  }
+
+  function setSelectedNode(weaponId) {
+    const key = String(weaponId ?? '');
+    if (!key) {
+      selectedWeaponId = null;
+      updateSelectionState();
+      return;
+    }
+    const meta = weaponMap.get(key);
+    if (!meta || !meta.is_leaf) {
+      return;
+    }
+    selectedWeaponId = key;
+    ensureNodeVisible(meta.id);
+    if (selectEl) {
+      selectEl.value = key;
+    }
+    renderTree();
+    updateSelectionState();
+  }
+
   function getWeaponMeta(weaponId, entry) {
-    const id = weaponId ?? (entry ? entry.weapon_id : undefined);
-    const weapon = id !== undefined && id !== null ? weaponMap.get(String(id)) || {} : {};
-    const rawRange =
-      entry && entry.range_value !== undefined
-        ? entry.range_value
-        : weapon.range_value ?? weapon.range;
-    const rangeValue = normalizeRangeValue(rawRange);
-    const rawCategory =
-      (entry && entry.category !== undefined && entry.category !== null ? entry.category : undefined) ??
-      weapon.category ??
-      weapon.range_category ??
-      weapon.type;
-    const normalizedCategory = normalizeCategory(rawCategory);
-    const category = normalizedCategory !== null ? normalizedCategory : rangeValue > 0 ? 'ranged' : 'melee';
+    const idKey =
+      weaponId !== undefined && weaponId !== null ? weaponId : entry ? entry.weapon_id : undefined;
+    const meta = idKey !== undefined && idKey !== null ? weaponMap.get(String(idKey)) : undefined;
+    const rangeSource =
+      (entry && entry.range_value !== undefined ? entry.range_value : undefined) ??
+      (entry && entry.range !== undefined ? entry.range : undefined) ??
+      (meta && meta.range_value !== undefined ? meta.range_value : undefined) ??
+      0;
+    const rangeValue = normalizeRangeValue(rangeSource);
+    const categorySource =
+      (entry && entry.category !== undefined && entry.category !== null ? entry.category : null) ??
+      (meta ? meta.category : null);
+    const category =
+      normalizeCategory(categorySource) ?? (Number.isFinite(rangeValue) && rangeValue > 0 ? 'ranged' : 'melee');
+    const pathText = meta && meta.path_text ? meta.path_text : '';
+    const pathLabels = meta && Array.isArray(meta.path_labels) ? [...meta.path_labels] : [];
+    const path = meta && Array.isArray(meta.path) ? [...meta.path] : [];
+    const name =
+      (meta && meta.name) ||
+      (entry && entry.name) ||
+      (selectEl && idKey !== undefined && idKey !== null
+        ? selectEl.querySelector(`option[value="${String(idKey)}"]`)?.textContent
+        : null) ||
+      (idKey !== undefined && idKey !== null ? `Broń #${idKey}` : 'Broń');
     return {
       category,
       rangeValue: Number.isFinite(rangeValue) ? rangeValue : 0,
+      pathText,
+      pathLabels,
+      path,
+      name,
+      isLeaf: Boolean(meta && meta.is_leaf),
     };
-  }
-
-  function getItemCategory(entry) {
-    if (!entry) {
-      return 'melee';
-    }
-    if (typeof entry.category === 'string') {
-      const normalized = normalizeCategory(entry.category);
-      if (normalized) {
-        return normalized;
-      }
-    }
-    return getWeaponMeta(entry.weapon_id, entry).category;
   }
 
   function parsePrimaryFlag(value) {
@@ -1472,41 +1928,50 @@ function initWeaponPicker(root) {
     }
     try {
       const parsed = JSON.parse(hiddenInput.value);
-      if (Array.isArray(parsed)) {
-        items = parsed
-          .map((entry) => {
-            const rawWeaponId = entry.weapon_id;
-            const weaponId = Number.parseInt(rawWeaponId, 10);
-            if (!Number.isFinite(weaponId)) {
-              return null;
-            }
-            const name = entry.name || weaponMap.get(String(weaponId))?.name || '';
-            const rawCount = entry.count ?? entry.default_count;
-            let defaultCount = Number.parseInt(rawCount, 10);
-            if (!Number.isFinite(defaultCount)) {
-              defaultCount = entry.is_default ? 1 : 0;
-            }
-            if (defaultCount < 0) {
-              defaultCount = 0;
-            }
-            if (!entry.is_default && entry.is_default !== undefined && defaultCount <= 0) {
-              defaultCount = 0;
-            }
-            const primaryFlag = parsePrimaryFlag(
-              entry.is_primary ?? entry.primary ?? entry.is_primary_weapon,
-            );
-            const meta = getWeaponMeta(weaponId, entry);
-            return {
-              weapon_id: weaponId,
-              name: name || weaponMap.get(String(weaponId))?.name || `Broń #${weaponId}`,
-              default_count: defaultCount,
-              is_primary: primaryFlag && defaultCount > 0,
-              category: meta.category,
-              range_value: meta.rangeValue,
-            };
-          })
-          .filter((entry) => entry && entry.weapon_id);
+      if (!Array.isArray(parsed)) {
+        items = [];
+        return;
       }
+      items = parsed
+        .map((entry) => {
+          if (!entry) {
+            return null;
+          }
+          const rawWeaponId = entry.weapon_id ?? entry.weaponId ?? entry.id;
+          const weaponId = Number.parseInt(rawWeaponId, 10);
+          if (!Number.isFinite(weaponId)) {
+            return null;
+          }
+          const meta = getWeaponMeta(weaponId, entry);
+          const name =
+            entry.name ||
+            meta.name ||
+            weaponMap.get(String(weaponId))?.name ||
+            `Broń #${weaponId}`;
+          const rawCount = entry.count ?? entry.default_count ?? entry.quantity;
+          let defaultCount = Number.parseInt(rawCount, 10);
+          if (!Number.isFinite(defaultCount)) {
+            defaultCount = parsePrimaryFlag(entry.is_default) ? 1 : 0;
+          }
+          if (defaultCount < 0) {
+            defaultCount = 0;
+          }
+          const primaryFlag = parsePrimaryFlag(
+            entry.is_primary ?? entry.primary ?? entry.is_primary_weapon,
+          );
+          return {
+            weapon_id: weaponId,
+            name,
+            default_count: defaultCount,
+            is_primary: primaryFlag && defaultCount > 0,
+            category: meta.category,
+            range_value: meta.rangeValue,
+            path_text: meta.pathText,
+            path: meta.path,
+            path_labels: meta.pathLabels,
+          };
+        })
+        .filter((entry) => entry && entry.weapon_id);
     } catch (err) {
       console.warn('Nie udało się odczytać listy broni', err);
       items = [];
@@ -1574,7 +2039,6 @@ function initWeaponPicker(root) {
         changed = true;
       }
     });
-
     return changed;
   }
 
@@ -1597,13 +2061,35 @@ function initWeaponPicker(root) {
       row.className = 'border rounded p-2 d-flex flex-wrap align-items-center gap-2';
 
       const nameWrapper = document.createElement('div');
-      nameWrapper.className = 'flex-grow-1 d-flex align-items-center gap-2';
+      nameWrapper.className = 'flex-grow-1 d-flex flex-column';
+
+      const nameRow = document.createElement('div');
+      nameRow.className = 'd-flex flex-wrap align-items-center gap-2';
+
       const nameLabel = document.createElement('span');
       nameLabel.className = 'fw-semibold';
-      nameLabel.textContent = item.name || weaponMap.get(String(item.weapon_id))?.name || `Broń #${item.weapon_id}`;
-      nameWrapper.appendChild(nameLabel);
+      nameLabel.textContent =
+        item.name || weaponMap.get(String(item.weapon_id))?.name || `Broń #${item.weapon_id}`;
+      nameRow.appendChild(nameLabel);
 
-      const category = getItemCategory(item);
+      const rangeBadge = document.createElement('span');
+      rangeBadge.className = 'badge text-bg-secondary';
+      rangeBadge.textContent = Number(item.range_value) > 0 ? `${item.range_value}"` : 'Wręcz';
+      nameRow.appendChild(rangeBadge);
+
+      nameWrapper.appendChild(nameRow);
+
+      const pathText =
+        item.path_text ||
+        weaponMap.get(String(item.weapon_id))?.path_text ||
+        '';
+      if (pathText && pathText !== nameLabel.textContent) {
+        const pathInfo = document.createElement('span');
+        pathInfo.className = 'text-muted small';
+        pathInfo.textContent = pathText;
+        nameWrapper.appendChild(pathInfo);
+      }
+
       const defaultGroup = document.createElement('div');
       defaultGroup.className = 'd-flex align-items-center gap-2 weapon-default-group';
       const defaultLabel = document.createElement('label');
@@ -1709,47 +2195,72 @@ function initWeaponPicker(root) {
   }
 
   function handleAdd() {
-    if (!selectEl) {
+    const selectedId = selectedWeaponId || (selectEl ? selectEl.value : '');
+    if (!selectedId) {
       return;
     }
-    const weaponId = selectEl.value;
-    if (!weaponId) {
+    if (!ensureUnique(selectedId)) {
+      if (selectEl) {
+        selectEl.value = '';
+      }
+      selectedWeaponId = null;
+      updateSelectionState();
       return;
     }
-    if (!ensureUnique(weaponId)) {
-      selectEl.value = '';
-      return;
-    }
-    const weapon = weaponMap.get(String(weaponId));
+    const meta = getWeaponMeta(selectedId);
     const rawCount = defaultCountInput ? Number.parseInt(defaultCountInput.value, 10) : 0;
     const safeCount = Number.isFinite(rawCount) && rawCount >= 0 ? rawCount : 0;
-    const meta = getWeaponMeta(weaponId);
     items.push({
-      weapon_id: Number.parseInt(weaponId, 10),
-      name: weapon?.name || selectEl.selectedOptions[0]?.textContent || `Broń #${weaponId}`,
+      weapon_id: Number.parseInt(selectedId, 10),
+      name: meta.name,
       default_count: safeCount,
       is_primary: false,
       category: meta.category,
       range_value: meta.rangeValue,
+      path_text: meta.pathText,
+      path: meta.path,
+      path_labels: meta.pathLabels,
     });
     sanitizePrimaryFlags();
     updateHidden();
     renderList();
-    selectEl.value = '';
+    selectedWeaponId = null;
+    if (selectEl) {
+      selectEl.value = '';
+    }
     if (defaultCountInput) {
       defaultCountInput.value = '0';
     }
+    updateSelectionState();
   }
 
   if (addButton) {
     addButton.addEventListener('click', handleAdd);
   }
 
+  if (selectEl && !treeRoot) {
+    selectEl.addEventListener('change', () => {
+      const value = selectEl.value;
+      selectedWeaponId = value || null;
+      updateSelectionState();
+    });
+  }
+
   parseInitial();
+  if (Array.isArray(items)) {
+    items.forEach((entry) => {
+      if (entry && entry.weapon_id !== undefined && entry.weapon_id !== null) {
+        ensureNodeVisible(entry.weapon_id);
+      }
+    });
+  }
+  renderTree();
   sanitizePrimaryFlags();
   updateHidden();
   renderList();
+  updateSelectionState();
 }
+
 
 function initWeaponPickers() {
   document.querySelectorAll('[data-weapon-picker]').forEach((element) => {
@@ -3098,8 +3609,6 @@ function initRosterEditor() {
   let rosterListEl = root.querySelector('[data-roster-list]');
   const items = [];
   const itemRegistry = new WeakSet();
-  const rosterDatasetCache = new WeakMap();
-
   if (warningsContainer) {
     try {
       const initialWarnings = JSON.parse(warningsContainer.dataset.warnings || '[]');
