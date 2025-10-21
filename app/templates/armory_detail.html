@@ -110,138 +110,101 @@
       placeholder="Wpisz nazwę, zdolność lub inną cechę"
       autocomplete="off"
     />
-    <div class="form-text">Kliknij nagłówek tabeli, aby posortować.</div>
+    <div class="form-text">Kliknij nagłówek listy, aby posortować.</div>
   </div>
 </div>
-<div class="table-responsive">
-  <table class="table table-striped align-middle" id="armory-weapons-table">
-    <thead>
-    <tr>
-      <th scope="col" data-sortable data-sort-type="text">
-        <button class="table-sort-btn" type="button">
+{% if can_edit %}
+<div class="d-flex justify-content-end mb-2">
+  <a class="btn btn-primary btn-sm" href="/armories/{{ armory.id }}/weapons/new">Nowa broń</a>
+</div>
+{% endif %}
+<div
+  class="armory-weapons-tree border rounded overflow-hidden"
+  id="armory-weapons-tree"
+  data-weapons='{{ (weapon_tree or []) | tojson }}'
+  data-can-edit="{{ 'true' if can_edit else 'false' }}"
+>
+  <div class="bg-body-tertiary border-bottom">
+    <div class="row g-0 align-items-center small fw-semibold text-uppercase px-3 py-2">
+      <div class="col-12 col-lg-3">
+        <button
+          class="btn btn-link btn-sm px-0 text-start armory-tree-sort"
+          type="button"
+          data-sort-key="name"
+          data-sort-type="text"
+        >
           <span>Nazwa</span>
-          <span class="table-sort-indicator" aria-hidden="true"></span>
+          <span class="armory-tree-sort-indicator ms-1" aria-hidden="true"></span>
           <span class="visually-hidden">Zmień sortowanie po nazwie</span>
         </button>
-      </th>
-      <th scope="col" data-sortable data-sort-type="text">
-        <button class="table-sort-btn" type="button">
+      </div>
+      <div class="col-6 col-sm-4 col-lg-1">
+        <button
+          class="btn btn-link btn-sm px-0 text-start armory-tree-sort"
+          type="button"
+          data-sort-key="range"
+          data-sort-type="number"
+        >
           <span>Zasięg</span>
-          <span class="table-sort-indicator" aria-hidden="true"></span>
+          <span class="armory-tree-sort-indicator ms-1" aria-hidden="true"></span>
           <span class="visually-hidden">Zmień sortowanie po zasięgu</span>
         </button>
-      </th>
-      <th scope="col" data-sortable data-sort-type="text">
-        <button class="table-sort-btn" type="button">
+      </div>
+      <div class="col-6 col-sm-4 col-lg-1">
+        <button
+          class="btn btn-link btn-sm px-0 text-start armory-tree-sort"
+          type="button"
+          data-sort-key="attacks"
+          data-sort-type="number"
+        >
           <span>Ataki</span>
-          <span class="table-sort-indicator" aria-hidden="true"></span>
+          <span class="armory-tree-sort-indicator ms-1" aria-hidden="true"></span>
           <span class="visually-hidden">Zmień sortowanie po liczbie ataków</span>
         </button>
-      </th>
-      <th scope="col" data-sortable data-sort-type="number">
-        <button class="table-sort-btn" type="button">
+      </div>
+      <div class="col-6 col-sm-4 col-lg-1">
+        <button
+          class="btn btn-link btn-sm px-0 text-start armory-tree-sort"
+          type="button"
+          data-sort-key="ap"
+          data-sort-type="number"
+        >
           <span>AP</span>
-          <span class="table-sort-indicator" aria-hidden="true"></span>
+          <span class="armory-tree-sort-indicator ms-1" aria-hidden="true"></span>
           <span class="visually-hidden">Zmień sortowanie po wartości AP</span>
         </button>
-      </th>
-      <th scope="col" data-sortable data-sort-type="text">
-        <button class="table-sort-btn" type="button">
+      </div>
+      <div class="col-12 col-lg-3">
+        <button
+          class="btn btn-link btn-sm px-0 text-start armory-tree-sort"
+          type="button"
+          data-sort-key="abilities"
+          data-sort-type="text"
+        >
           <span>Zdolności</span>
-          <span class="table-sort-indicator" aria-hidden="true"></span>
+          <span class="armory-tree-sort-indicator ms-1" aria-hidden="true"></span>
           <span class="visually-hidden">Zmień sortowanie po zdolnościach</span>
         </button>
-      </th>
-      <th scope="col" data-sortable data-sort-type="number">
-        <button class="table-sort-btn" type="button">
+      </div>
+      <div class="col-6 col-sm-4 col-lg-1">
+        <button
+          class="btn btn-link btn-sm px-0 text-start armory-tree-sort"
+          type="button"
+          data-sort-key="cost"
+          data-sort-type="number"
+        >
           <span>Koszt (Q4)</span>
-          <span class="table-sort-indicator" aria-hidden="true"></span>
+          <span class="armory-tree-sort-indicator ms-1" aria-hidden="true"></span>
           <span class="visually-hidden">Zmień sortowanie po koszcie</span>
         </button>
-      </th>
-
-      <th class="text-end">
-        {% if can_edit %}
-        <a class="btn btn-primary btn-sm" href="/armories/{{ armory.id }}/weapons/new">Nowa broń</a>
-        {% endif %}
-
-      </th>
-
-    </tr>
-  </thead>
-  <tbody>
-    {% for item in weapons %}
-    <tr data-weapon-row>
-      <td>
-        {{ item.instance.effective_name }}
-        {% if item.instance.parent %}
-        <div class="text-muted small">{% if item.overrides.name %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
-        {% endif %}
-      </td>
-      <td>
-        {{ item.instance.effective_range or '-' }}
-        {% if item.instance.parent %}
-        <div class="text-muted small">{% if item.overrides.range %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
-        {% endif %}
-      </td>
-      <td>
-
-        {{ item.instance.display_attacks }}
-
-        {% if item.instance.parent %}
-        <div class="text-muted small">{% if item.overrides.attacks %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
-        {% endif %}
-      </td>
-      <td data-sort-value="{{ item.instance.effective_ap if item.instance.effective_ap is not none else '' }}">
-        {{ item.instance.effective_ap }}
-        {% if item.instance.parent %}
-        <div class="text-muted small">{% if item.overrides.ap %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
-        {% endif %}
-      </td>
-      <td>
-        {% if item.abilities %}
-        <div class="d-flex flex-wrap gap-1">
-          {% for ability in item.abilities %}
-          <span
-            class="badge text-bg-secondary"
-            title="{{ ability.description or ability.raw }}"
-          >
-            {{ ability.label or ability.raw or ability.slug }}
-          </span>
-          {% endfor %}
-        </div>
-        {% else %}
-        <span class="text-muted">-</span>
-        {% endif %}
-        {% if item.instance.parent %}
-        <div class="text-muted small">{% if item.overrides.tags %}Nadpisano{% else %}Dziedziczone{% endif %}</div>
-        {% endif %}
-      </td>
-      <td data-sort-value="{{ item.cost }}">{{ "%.2f"|format(item.cost) }}</td>
-      <td class="text-end">
-        {% if can_edit %}
-        <div class="btn-group btn-group-sm">
-          <a class="btn btn-outline-secondary" href="/armories/{{ armory.id }}/weapons/{{ item.instance.id }}/edit">Edytuj</a>
-          <form method="post" action="/armories/{{ armory.id }}/weapons/{{ item.instance.id }}/delete" onsubmit="return confirm('Usunąć broń?');">
-            <button class="btn btn-outline-danger" type="submit">Usuń</button>
-          </form>
-        </div>
-        {% else %}
-        <span class="text-muted small">Tylko podgląd</span>
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-    {% if weapons %}
-    <tr class="d-none" data-empty-message="filter">
-      <td class="text-muted" colspan="7">Brak wyników spełniających kryteria</td>
-    </tr>
-    {% else %}
-    <tr data-empty-message="always">
-      <td class="text-muted" colspan="7">Brak uzbrojenia</td>
-    </tr>
-    {% endif %}
-    </tbody>
-  </table>
+      </div>
+      <div class="col-12 col-lg-2 text-lg-end">
+        <span>Akcje</span>
+      </div>
+    </div>
+  </div>
+  <div class="armory-tree-body" data-tree-body></div>
+  <p class="text-muted m-3{% if weapon_tree %} d-none{% endif %}" data-empty-state>Brak uzbrojenia</p>
+  <p class="text-muted m-3 d-none" data-filter-empty-state>Brak wyników spełniających kryteria</p>
 </div>
 {% endblock %}

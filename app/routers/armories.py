@@ -274,6 +274,92 @@ def _weapon_form_values(weapon: models.Weapon | None) -> dict:
     }
 
 
+def _weapon_tree_payload(weapon_rows: Iterable[dict]) -> list[dict]:
+    node_map: dict[int, dict] = {}
+    roots: list[dict] = []
+
+    for index, entry in enumerate(weapon_rows):
+        weapon = entry.get("instance")
+        if not weapon or weapon.id is None:
+            continue
+        ability_payload = list(entry.get("abilities") or [])
+        overrides = dict(entry.get("overrides") or {})
+        cost_value = entry.get("cost")
+        cost_float = float(cost_value) if cost_value is not None else 0.0
+        range_text = weapon.effective_range or ""
+        ability_labels = [
+            ability.get("label")
+            or ability.get("raw")
+            or ability.get("slug")
+            or ""
+            for ability in ability_payload
+        ]
+        ability_descriptions = [
+            ability.get("description") or ability.get("raw") or ""
+            for ability in ability_payload
+        ]
+        parent_name = weapon.parent.effective_name if weapon.parent else None
+        node_map[weapon.id] = {
+            "id": weapon.id,
+            "parent_id": weapon.parent_id,
+            "name": weapon.effective_name,
+            "name_sort": (weapon.effective_name or "").casefold(),
+            "range": range_text,
+            "range_value": costs.normalize_range_value(range_text),
+            "attacks": weapon.display_attacks,
+            "attacks_value": float(weapon.effective_attacks),
+            "ap": weapon.effective_ap,
+            "abilities": ability_payload,
+            "abilities_sort": " ".join(ability_labels).casefold(),
+            "cost": cost_float,
+            "cost_display": f"{cost_float:.2f}",
+            "overrides": overrides,
+            "has_parent": weapon.parent_id is not None,
+            "parent_name": parent_name,
+            "children": [],
+            "level": 0,
+            "default_order": index,
+            "search_source": " ".join(
+                part
+                for part in (
+                    weapon.effective_name,
+                    range_text,
+                    str(weapon.display_attacks),
+                    str(weapon.effective_ap),
+                    parent_name,
+                    " ".join(ability_labels),
+                    " ".join(ability_descriptions),
+                )
+                if part
+            ),
+            "edit_url": f"/armories/{weapon.armory_id}/weapons/{weapon.id}/edit",
+            "delete_url": f"/armories/{weapon.armory_id}/weapons/{weapon.id}/delete",
+        }
+
+    for entry in weapon_rows:
+        weapon = entry.get("instance")
+        if not weapon or weapon.id is None:
+            continue
+        node = node_map.get(weapon.id)
+        if not node:
+            continue
+        parent_id = weapon.parent_id
+        if parent_id and parent_id in node_map:
+            node_map[parent_id]["children"].append(node)
+        else:
+            roots.append(node)
+
+    def _finalize(nodes: list[dict], level: int = 0) -> None:
+        nodes.sort(key=lambda item: item.get("name_sort", ""))
+        for position, node in enumerate(nodes):
+            node["level"] = level
+            node["default_order"] = position
+            _finalize(node.get("children", []), level + 1)
+
+    _finalize(roots, 0)
+    return roots
+
+
 def _delete_weapon_chain(db: Session, weapon: models.Weapon) -> None:
     children = db.execute(
         select(models.Weapon).where(models.Weapon.parent_id == weapon.id)
@@ -435,6 +521,8 @@ def view_armory(
             }
         )
 
+    weapon_tree = _weapon_tree_payload(weapon_rows)
+
     db.commit()
 
     return templates.TemplateResponse(
@@ -444,6 +532,7 @@ def view_armory(
             "user": current_user,
             "armory": armory,
             "weapons": weapon_rows,
+            "weapon_tree": weapon_tree,
             "can_edit": can_edit,
             "can_delete": can_delete,
             "parent_chain": list(reversed(parent_chain)),
@@ -479,6 +568,7 @@ def rename_armory(
             }
             for weapon in weapons
         ]
+        weapon_tree = _weapon_tree_payload(weapon_rows)
         return templates.TemplateResponse(
             "armory_detail.html",
             {
@@ -486,6 +576,7 @@ def rename_armory(
                 "user": current_user,
                 "armory": armory,
                 "weapons": weapon_rows,
+                "weapon_tree": weapon_tree,
                 "can_edit": True,
                 "can_delete": not armory.variants and not armory.armies,
                 "parent_chain": list(reversed(_parent_chain(armory))),
