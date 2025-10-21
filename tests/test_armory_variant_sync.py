@@ -1,7 +1,13 @@
 from contextlib import contextmanager
+import sys
+from pathlib import Path
 
+import pytest
+from starlette.requests import Request
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app import models
 from app.db import Base
@@ -380,5 +386,96 @@ def test_variant_weapon_tree_preserves_parent_structure():
             assert (
                 payload_parent_lookup.get(clone.id) == expected_parent_id
             ), "Weapon tree payload should mirror base structure"
+    finally:
+        session.close()
+
+
+def test_copy_variant_preserves_parent_relationship():
+    session = _session()
+    try:
+        user = models.User(username="owner", password_hash="x", is_admin=False)
+        base_armory = models.Armory(name="Base", owner=user)
+        variant_armory = models.Armory(name="Variant", owner=user, parent=base_armory)
+
+        session.add_all([user, base_armory, variant_armory])
+        session.flush()
+
+        parent_weapon = models.Weapon(
+            armory=base_armory,
+            owner=user,
+            name="Sword",
+            range="Melee",
+            attacks=3,
+            ap=1,
+        )
+        parent_weapon.cached_cost = armories_router.costs.weapon_cost(parent_weapon)
+        session.add(parent_weapon)
+        session.flush()
+
+        utils.ensure_armory_variant_sync(session, variant_armory)
+        session.flush()
+
+        variant_weapon = session.execute(
+            select(models.Weapon).where(
+                models.Weapon.armory_id == variant_armory.id,
+                models.Weapon.parent_id == parent_weapon.id,
+            )
+        ).scalar_one()
+        variant_weapon.name = "Sword Variant"
+        variant_weapon.ap = 2
+        variant_weapon.cached_cost = armories_router.costs.weapon_cost(variant_weapon)
+
+        custom_weapon = models.Weapon(
+            armory=variant_armory,
+            owner=user,
+            name="Custom Blade",
+            range="12\"",
+            attacks=2,
+            ap=0,
+        )
+        custom_weapon.cached_cost = armories_router.costs.weapon_cost(custom_weapon)
+        session.add(custom_weapon)
+        session.flush()
+
+        request = Request({"type": "http"})
+        response = armories_router.copy_armory(
+            variant_armory.id,
+            request,
+            name="Variant Copy",
+            is_global=None,
+            db=session,
+            current_user=user,
+        )
+
+        assert response.status_code == 303
+
+        copied_armory = session.execute(
+            select(models.Armory).where(models.Armory.name == "Variant Copy")
+        ).scalar_one()
+        assert copied_armory.parent_id == base_armory.id
+
+        copied_weapons = session.execute(
+            select(models.Weapon).where(models.Weapon.armory_id == copied_armory.id)
+        ).scalars().all()
+
+        variant_clones = [weapon for weapon in copied_weapons if weapon.parent_id is not None]
+        custom_clones = [weapon for weapon in copied_weapons if weapon.parent_id is None]
+
+        assert len(variant_clones) == 1
+        assert len(custom_clones) == 1
+
+        cloned_variant_weapon = variant_clones[0]
+        assert cloned_variant_weapon.parent_id == parent_weapon.id
+        assert cloned_variant_weapon.name == variant_weapon.name
+        assert cloned_variant_weapon.ap == variant_weapon.ap
+        assert cloned_variant_weapon.cached_cost == pytest.approx(variant_weapon.cached_cost)
+
+        cloned_custom_weapon = custom_clones[0]
+        assert cloned_custom_weapon.parent_id is None
+        assert cloned_custom_weapon.name == custom_weapon.name
+        assert cloned_custom_weapon.range == custom_weapon.range
+        assert cloned_custom_weapon.attacks == custom_weapon.attacks
+        assert cloned_custom_weapon.ap == custom_weapon.ap
+        assert cloned_custom_weapon.cached_cost == pytest.approx(custom_weapon.cached_cost)
     finally:
         session.close()
