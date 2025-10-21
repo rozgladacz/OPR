@@ -317,6 +317,23 @@ def _weapon_tree_payload(weapon_rows: Iterable[dict]) -> list[dict]:
             "delete_url": f"/armories/{weapon.armory_id}/weapons/{weapon.id}/delete",
         }
 
+    source_node_map: dict[int, dict] = {}
+
+    for entry in weapon_rows:
+        weapon = entry.get("instance")
+        if not weapon or weapon.id is None:
+            continue
+        node = node_map.get(weapon.id)
+        if not node:
+            continue
+        parent = weapon.parent
+        if (
+            parent
+            and parent.id is not None
+            and getattr(parent, "armory_id", None) != weapon.armory_id
+        ):
+            source_node_map.setdefault(parent.id, node)
+
     for entry in weapon_rows:
         weapon = entry.get("instance")
         if not weapon or weapon.id is None:
@@ -328,7 +345,25 @@ def _weapon_tree_payload(weapon_rows: Iterable[dict]) -> list[dict]:
         if parent_id and parent_id in node_map:
             node_map[parent_id]["children"].append(node)
         else:
-            roots.append(node)
+            local_parent: dict | None = None
+            parent = weapon.parent
+            if parent_id and parent is not None:
+                visited_sources: set[int] = set()
+                current = parent
+                while current is not None:
+                    source_id = getattr(current, "id", None)
+                    if source_id is None or source_id in visited_sources:
+                        break
+                    visited_sources.add(source_id)
+                    candidate = source_node_map.get(source_id)
+                    if candidate and candidate is not node:
+                        local_parent = candidate
+                        break
+                    current = current.parent
+            if local_parent is not None:
+                local_parent.setdefault("children", []).append(node)
+            else:
+                roots.append(node)
 
     def _finalize(nodes: list[dict], level: int = 0) -> None:
         nodes.sort(key=lambda item: item.get("name_sort", ""))
