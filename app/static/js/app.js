@@ -5510,7 +5510,7 @@ function initArmoryWeaponTree() {
     }
 
     const abilitiesCol = document.createElement('div');
-    abilitiesCol.className = 'col-12 col-lg-3 d-flex flex-column gap-1 mt-2 mt-lg-0';
+    abilitiesCol.className = 'col-12 col-lg-3 d-flex flex-column gap-1 mt-2 mt-lg-0 justify-content-lg-center';
     if (Array.isArray(node.abilities) && node.abilities.length) {
       const abilityWrapper = document.createElement('div');
       abilityWrapper.className = 'd-flex flex-wrap gap-1';
@@ -5536,13 +5536,13 @@ function initArmoryWeaponTree() {
     }
 
     const costCol = document.createElement('div');
-    costCol.className = 'col-6 col-sm-4 col-lg-1 d-flex flex-column gap-1 mt-2 mt-lg-0';
+    costCol.className = 'col-6 col-sm-4 col-lg-1 d-flex flex-column gap-1 mt-2 mt-lg-0 justify-content-lg-center';
     const costText = document.createElement('span');
     costText.textContent = node.cost_display || Number(node.cost || 0).toFixed(2);
     costCol.appendChild(costText);
 
     const actionsCol = document.createElement('div');
-    actionsCol.className = 'col-12 col-lg-2 d-flex justify-content-lg-end mt-2 mt-lg-0';
+    actionsCol.className = 'col-12 col-lg-2 d-flex justify-content-lg-end align-items-lg-center mt-2 mt-lg-0';
     if (canEdit) {
       const group = document.createElement('div');
       group.className = 'btn-group btn-group-sm';
