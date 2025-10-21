@@ -340,18 +340,8 @@ def _normalized_weapon_name(value: str | None) -> str:
     return value.strip().casefold()
 
 
-def _armory_weapons(db: Session, armory: models.Armory) -> list[models.Weapon]:
-    utils.ensure_armory_variant_sync(db, armory)
-    weapons = (
-        db.execute(
-            select(models.Weapon).where(
-                models.Weapon.armory_id == armory.id,
-                models.Weapon.army_id.is_(None),
-            )
-        ).scalars().all()
-    )
-    weapons.sort(key=lambda weapon: weapon.effective_name.casefold())
-    return weapons
+def _armory_weapons(db: Session, armory: models.Armory) -> utils.ArmoryWeaponCollection:
+    return utils.load_armory_weapons(db, armory)
 
 
 def _weapon_tree_payload(weapons: list[models.Weapon]) -> dict[str, object]:
@@ -2147,8 +2137,23 @@ def edit_unit_form(
     if not army or unit is None or unit.army_id != army.id:
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
+    weapon_collection = _armory_weapons(db, army.armory)
     weapons = _armory_weapons(db, army.armory)
     weapon_tree = _weapon_tree_payload(weapons)
+
+    weapon_choices = []
+    for weapon in weapons:
+        range_value = costs.normalize_range_value(weapon.effective_range)
+        category = "ranged" if range_value > 0 else "melee"
+        weapon_choices.append(
+            {
+                "id": weapon.id,
+                "name": weapon.effective_name,
+                "range_value": range_value,
+                "category": category,
+            }
+        )
+
     active_definitions = ability_registry.definition_payload(db, "active")
     aura_definitions = ability_registry.definition_payload(db, "aura")
 
@@ -2160,6 +2165,7 @@ def edit_unit_form(
             "army": army,
             "unit": unit,
             "weapons": weapons,
+            "weapon_choices": weapon_choices,
             "weapon_tree": weapon_tree,
             "weapon_payload": _unit_weapon_payload(unit),
             "passive_definitions": PASSIVE_DEFINITIONS,
@@ -2532,8 +2538,21 @@ def _render_army_edit(
         ).first()
         can_delete = not bool(has_rosters)
 
+    weapon_collection = _armory_weapons(db, army.armory)
     weapons = _armory_weapons(db, army.armory)
     weapon_tree = _weapon_tree_payload(weapons)
+    weapon_choices = []
+    for weapon in weapons:
+        range_value = costs.normalize_range_value(weapon.effective_range)
+        category = "ranged" if range_value > 0 else "melee"
+        weapon_choices.append(
+            {
+                "id": weapon.id,
+                "name": weapon.effective_name,
+                "range_value": range_value,
+                "category": category,
+            }
+        )
 
     available_armories = _available_armories(db, current_user) if can_edit else []
     active_definitions = ability_registry.definition_payload(db, "active")
@@ -2582,6 +2601,7 @@ def _render_army_edit(
             "units": units,
             "weapons": weapons,
             "weapon_tree": weapon_tree,
+            "weapon_choices": weapon_choices,
             "armories": available_armories,
             "selected_armory_id": selected_armory_id,
             "error": error,

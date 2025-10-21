@@ -201,27 +201,8 @@ def _parse_ability_payload(text: str | None) -> list[dict]:
         )
     return result
 
-def _armory_weapons(db: Session, armory: models.Armory) -> list[models.Weapon]:
-    parent_loader = selectinload(models.Weapon.parent)
-    current_loader = parent_loader
-    # Preload several generations of parents to cover nested weapon variants.
-    for _ in range(5):
-        current_loader = current_loader.selectinload(models.Weapon.parent)
-
-    weapons = (
-        db.execute(
-            select(models.Weapon)
-            .where(
-                models.Weapon.armory_id == armory.id,
-                models.Weapon.army_id.is_(None),
-            )
-            .options(parent_loader)
-        )
-        .scalars()
-        .all()
-    )
-    weapons.sort(key=lambda weapon: weapon.effective_name.casefold())
-    return weapons
+def _armory_weapons(db: Session, armory: models.Armory) -> utils.ArmoryWeaponCollection:
+    return utils.load_armory_weapons(db, armory)
 
 
 def _update_weapon_cost(weapon: models.Weapon) -> bool:
@@ -499,7 +480,9 @@ def view_armory(
     if armory.parent_id is not None:
         utils.ensure_armory_variant_sync(db, armory)
 
-    weapons = _armory_weapons(db, armory)
+    weapon_collection = _armory_weapons(db, armory)
+    weapons = list(weapon_collection.items)
+    weapon_tree = weapon_collection.payload
     _refresh_costs(db, weapons)
 
     parent_chain = _parent_chain(armory)
@@ -555,7 +538,9 @@ def rename_armory(
 
     cleaned_name = name.strip()
     if not cleaned_name:
-        weapons = _armory_weapons(db, armory)
+        weapon_collection = _armory_weapons(db, armory)
+        weapons = list(weapon_collection.items)
+        weapon_tree = weapon_collection.payload
         weapon_rows = [
             {
                 "instance": weapon,
@@ -641,8 +626,8 @@ def copy_armory(
     db.add(new_armory)
     db.flush()
 
-    weapons = _armory_weapons(db, source)
-    for weapon in weapons:
+    weapon_collection = _armory_weapons(db, source)
+    for weapon in weapon_collection.items:
         clone = models.Weapon(
             armory=new_armory,
             owner_id=new_armory.owner_id,
