@@ -340,18 +340,8 @@ def _normalized_weapon_name(value: str | None) -> str:
     return value.strip().casefold()
 
 
-def _armory_weapons(db: Session, armory: models.Armory) -> list[models.Weapon]:
-    utils.ensure_armory_variant_sync(db, armory)
-    weapons = (
-        db.execute(
-            select(models.Weapon).where(
-                models.Weapon.armory_id == armory.id,
-                models.Weapon.army_id.is_(None),
-            )
-        ).scalars().all()
-    )
-    weapons.sort(key=lambda weapon: weapon.effective_name.casefold())
-    return weapons
+def _armory_weapons(db: Session, armory: models.Armory) -> utils.ArmoryWeaponCollection:
+    return utils.load_armory_weapons(db, armory)
 
 
 def _ordered_weapons(db: Session, armory: models.Armory, weapon_ids: list[int]) -> list[models.Weapon]:
@@ -2059,7 +2049,9 @@ def edit_unit_form(
     if not army or unit is None or unit.army_id != army.id:
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
-    weapons = _armory_weapons(db, army.armory)
+    weapon_collection = _armory_weapons(db, army.armory)
+    weapons = list(weapon_collection.items)
+    weapon_tree = weapon_collection.payload
 
     weapon_choices = []
     for weapon in weapons:
@@ -2085,6 +2077,7 @@ def edit_unit_form(
             "unit": unit,
             "weapons": weapons,
             "weapon_choices": weapon_choices,
+            "weapon_tree": weapon_tree,
             "weapon_payload": _unit_weapon_payload(unit),
             "passive_definitions": PASSIVE_DEFINITIONS,
             "passive_selected": _passive_payload(unit),
@@ -2456,7 +2449,9 @@ def _render_army_edit(
         ).first()
         can_delete = not bool(has_rosters)
 
-    weapons = _armory_weapons(db, army.armory)
+    weapon_collection = _armory_weapons(db, army.armory)
+    weapons = list(weapon_collection.items)
+    weapon_tree = weapon_collection.payload
     weapon_choices = []
     for weapon in weapons:
         range_value = costs.normalize_range_value(weapon.effective_range)
@@ -2516,6 +2511,7 @@ def _render_army_edit(
             "army": army,
             "units": units,
             "weapons": weapons,
+            "weapon_tree": weapon_tree,
             "weapon_choices": weapon_choices,
             "armories": available_armories,
             "selected_armory_id": selected_armory_id,

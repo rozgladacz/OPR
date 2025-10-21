@@ -114,7 +114,11 @@
   </div>
 </div>
 <div class="table-responsive">
-  <table class="table table-striped align-middle" id="armory-weapons-table">
+  <table
+    class="table table-striped align-middle"
+    id="armory-weapons-table"
+    data-weapon-tree='{{ weapon_tree | tojson }}'
+  >
     <thead>
     <tr>
       <th scope="col" data-sortable data-sort-type="text">

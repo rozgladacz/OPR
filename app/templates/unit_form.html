@@ -152,10 +152,11 @@
           <div class="mb-3">
             <label class="form-label" for="unit-weapons">Dostępne bronie</label>
             <div
-              class="weapon-picker"
-              data-weapon-picker
-              data-weapons='{{ weapon_choices | tojson }}'
-              data-target-input="unit-weapons"
+            class="weapon-picker"
+            data-weapon-picker
+            data-weapons='{{ weapon_choices | tojson }}'
+            data-weapon-tree='{{ weapon_tree | tojson }}'
+            data-target-input="unit-weapons"
             >
               <div class="row g-2 align-items-end">
                 <div class="col-md-5">

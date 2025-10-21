@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import functools
 import math
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Any, Sequence
+from typing import Any, Iterator, Sequence, TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -18,6 +19,175 @@ HIDDEN_TRAIT_SLUGS: set[str] = set()
 # should never be presented in the UI when editing armies/rosters.  They are
 # filtered out anywhere `_is_hidden_trait` is used.
 HIDDEN_TRAIT_SLUGS: set[str] = {"wojownik", "strzelec"}
+
+
+class WeaponTreeNode(TypedDict):
+    id: int
+    name: str
+    parent_id: int | None
+    parent_name: str | None
+    parent_armory_id: int | None
+    parent_armory_name: str | None
+    has_parent: bool
+    has_external_parent: bool
+    inherits: bool
+    children: list["WeaponTreeNode"]
+
+
+@dataclass(slots=True)
+class ArmoryWeaponCollection:
+    items: list[models.Weapon]
+    tree: list[WeaponTreeNode]
+
+    def __iter__(self) -> Iterator[models.Weapon]:
+        return iter(self.items)
+
+    def __len__(self) -> int:
+        return len(self.items)
+
+    def __getitem__(self, index: int) -> models.Weapon:
+        return self.items[index]
+
+    @property
+    def payload(self) -> list[WeaponTreeNode]:
+        return self.tree
+
+
+def _weapon_sort_key(weapon: models.Weapon) -> tuple[str, int]:
+    name = (weapon.effective_name or "").casefold()
+    identifier = getattr(weapon, "id", None)
+    try:
+        numeric_identifier = int(identifier) if identifier is not None else 0
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        numeric_identifier = 0
+    return name, numeric_identifier
+
+
+def _build_weapon_tree(
+    armory: models.Armory, weapons: list[models.Weapon]
+) -> tuple[list[WeaponTreeNode], list[models.Weapon]]:
+    weapon_map: dict[int, models.Weapon] = {
+        weapon.id: weapon for weapon in weapons if weapon.id is not None
+    }
+    children_map: dict[int, list[models.Weapon]] = {}
+    roots: list[models.Weapon] = []
+
+    for weapon in weapons:
+        parent_id = weapon.parent_id
+        if parent_id is not None and parent_id in weapon_map:
+            children_map.setdefault(parent_id, []).append(weapon)
+        else:
+            roots.append(weapon)
+
+    ordered_weapons: list[models.Weapon] = []
+
+    def build_nodes(candidates: list[models.Weapon]) -> list[WeaponTreeNode]:
+        nodes: list[WeaponTreeNode] = []
+        for item in sorted(candidates, key=_weapon_sort_key):
+            ordered_weapons.append(item)
+            parent = item.parent
+            has_parent = item.parent_id is not None
+            has_external_parent = bool(
+                has_parent and (item.parent_id not in weapon_map)
+            )
+            parent_name = parent.effective_name if parent else None
+            parent_armory_id = parent.armory_id if parent else None
+            parent_armory_name = None
+            if parent and getattr(parent, "armory", None) is not None:
+                parent_armory_name = parent.armory.name
+            elif has_external_parent and parent_armory_id == armory.id:
+                parent_armory_name = armory.name
+
+            node: WeaponTreeNode = {
+                "id": item.id,
+                "name": item.effective_name,
+                "parent_id": item.parent_id,
+                "parent_name": parent_name,
+                "parent_armory_id": parent_armory_id,
+                "parent_armory_name": parent_armory_name,
+                "has_parent": has_parent,
+                "has_external_parent": has_external_parent,
+                "inherits": item.inherits_from_parent(),
+                "children": build_nodes(children_map.get(item.id, [])),
+            }
+            nodes.append(node)
+        return nodes
+
+    tree = build_nodes(roots)
+
+    if len(ordered_weapons) != len(weapons):
+        remaining = [weapon for weapon in weapons if weapon not in ordered_weapons]
+        for item in sorted(remaining, key=_weapon_sort_key):
+            ordered_weapons.append(item)
+            parent = item.parent
+            has_parent = item.parent_id is not None
+            has_external_parent = bool(
+                has_parent and (item.parent_id not in weapon_map)
+            )
+            parent_name = parent.effective_name if parent else None
+            parent_armory_id = parent.armory_id if parent else None
+            parent_armory_name = None
+            if parent and getattr(parent, "armory", None) is not None:
+                parent_armory_name = parent.armory.name
+            elif has_external_parent and parent_armory_id == armory.id:
+                parent_armory_name = armory.name
+
+            tree.append(
+                {
+                    "id": item.id,
+                    "name": item.effective_name,
+                    "parent_id": item.parent_id,
+                    "parent_name": parent_name,
+                    "parent_armory_id": parent_armory_id,
+                    "parent_armory_name": parent_armory_name,
+                    "has_parent": has_parent,
+                    "has_external_parent": has_external_parent,
+                    "inherits": item.inherits_from_parent(),
+                    "children": [],
+                }
+            )
+
+    return tree, ordered_weapons
+
+
+def load_armory_weapons(db: Session, armory: models.Armory) -> ArmoryWeaponCollection:
+    ensure_armory_variant_sync(db, armory)
+
+    parent_loader = selectinload(models.Weapon.parent)
+    grandparent_loader = selectinload(models.Weapon.parent).selectinload(
+        models.Weapon.parent
+    )
+    parent_armory_loader = selectinload(models.Weapon.parent).selectinload(
+        models.Weapon.armory
+    )
+    grandparent_armory_loader = (
+        selectinload(models.Weapon.parent)
+        .selectinload(models.Weapon.parent)
+        .selectinload(models.Weapon.armory)
+    )
+
+    weapons = (
+        db.execute(
+            select(models.Weapon)
+            .where(
+                models.Weapon.armory_id == armory.id,
+                models.Weapon.army_id.is_(None),
+            )
+            .options(
+                parent_loader,
+                grandparent_loader,
+                parent_armory_loader,
+                grandparent_armory_loader,
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    tree, ordered_weapons = _build_weapon_tree(armory, weapons)
+    return ArmoryWeaponCollection(items=ordered_weapons, tree=tree)
+
+
 def round_points(value: Any) -> int:
     if value is None:
         return 0
