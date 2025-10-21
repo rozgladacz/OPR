@@ -503,26 +503,58 @@ def add_roster_unit(
 
     accept_header = (request.headers.get("accept") or "").lower()
     if "application/json" in accept_header:
-        total_cost = costs.roster_total(roster)
-        selected_passives = _selected_passive_entries(
-            roster_unit, loadout, passive_items, classification
+        loadout_payload = _roster_unit_loadout(
+            roster_unit,
+            weapon_options=weapon_options,
+            active_items=active_items,
+            aura_items=aura_items,
+            passive_items=passive_items,
         )
-        selected_actives = _selected_ability_entries(loadout, active_items, "active")
-        selected_auras = _selected_ability_entries(loadout, aura_items, "aura")
+        selected_passives = _selected_passive_entries(
+            roster_unit, loadout_payload, passive_items, classification
+        )
+        selected_actives = _selected_ability_entries(
+            loadout_payload, active_items, "active"
+        )
+        selected_auras = _selected_ability_entries(loadout_payload, aura_items, "aura")
+        total_cost = costs.roster_total(roster)
         loadout_mapping = (
-            {roster_unit.id: loadout} if roster_unit.id is not None else None
+            {roster_unit.id: loadout_payload} if roster_unit.id is not None else None
         )
         warnings = collect_roster_warnings(
             roster, total_cost=total_cost, loadouts=loadout_mapping
         )
-        loadout_json = json.dumps(loadout, ensure_ascii=False)
+        loadout_json = json.dumps(loadout_payload, ensure_ascii=False)
         default_summary = _default_loadout_summary(unit)
         loadout_summary = _loadout_display_summary(
             roster_unit,
-            loadout,
+            loadout_payload,
             weapon_options,
         )
         base_cost_per_model = _base_cost_per_model(unit, classification)
+        roster_item = {
+            "id": roster_unit.id,
+            "count": roster_unit.count,
+            "cached_cost": roster_unit.cached_cost,
+            "custom_name": roster_unit.custom_name or "",
+            "unit_name": unit.name,
+            "unit_quality": unit.quality,
+            "unit_defense": unit.defense,
+            "unit_toughness": unit.toughness,
+            "unit_flags": unit.flags or "",
+            "default_summary": default_summary,
+            "loadout_summary": loadout_summary,
+            "weapon_options": weapon_options,
+            "passive_items": passive_items,
+            "active_items": active_items,
+            "aura_items": aura_items,
+            "selected_passive_items": selected_passives,
+            "selected_active_items": selected_actives,
+            "selected_aura_items": selected_auras,
+            "loadout": loadout_payload,
+            "classification": classification,
+            "base_cost_per_model": base_cost_per_model,
+        }
         payload = {
             "unit": {
                 "id": roster_unit.id,
@@ -538,31 +570,9 @@ def add_roster_unit(
                 "selected_active_items": selected_actives,
                 "selected_aura_items": selected_auras,
             },
-            "item": {
-                "id": roster_unit.id,
-                "count": roster_unit.count,
-                "cached_cost": roster_unit.cached_cost,
-                "custom_name": roster_unit.custom_name or "",
-                "unit_name": unit.name,
-                "unit_quality": unit.quality,
-                "unit_defense": unit.defense,
-                "unit_toughness": unit.toughness,
-                "unit_flags": unit.flags or "",
-                "default_summary": default_summary,
-                "loadout_summary": loadout_summary,
-                "weapon_options": weapon_options,
-                "passive_items": passive_items,
-                "active_items": active_items,
-                "aura_items": aura_items,
-                "selected_passive_items": selected_passives,
-                "selected_active_items": selected_actives,
-                "selected_aura_items": selected_auras,
-                "loadout": loadout,
-                "classification": classification,
-                "base_cost_per_model": base_cost_per_model,
-            },
-            "roster": {"total_cost": total_cost},
+            "roster_item": roster_item,
             "warnings": warnings,
+            "total_cost": total_cost,
         }
         return JSONResponse(_json_safe(payload))
     return RedirectResponse(
