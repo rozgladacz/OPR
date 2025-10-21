@@ -69,13 +69,42 @@ def _build_weapon_tree(
     weapon_map: dict[int, models.Weapon] = {
         weapon.id: weapon for weapon in weapons if weapon.id is not None
     }
+    source_weapon_map: dict[int, models.Weapon] = {}
     children_map: dict[int, list[models.Weapon]] = {}
     roots: list[models.Weapon] = []
 
     for weapon in weapons:
+        parent = weapon.parent
+        if (
+            parent
+            and parent.id is not None
+            and getattr(parent, "armory_id", None) != weapon.armory_id
+            and parent.id not in source_weapon_map
+        ):
+            source_weapon_map[parent.id] = weapon
+
+    for weapon in weapons:
         parent_id = weapon.parent_id
+        assigned_parent_id: int | None = None
         if parent_id is not None and parent_id in weapon_map:
-            children_map.setdefault(parent_id, []).append(weapon)
+            assigned_parent_id = parent_id
+        else:
+            parent = weapon.parent
+            if parent is not None and parent_id is not None:
+                visited_sources: set[int] = set()
+                current = parent
+                while current is not None:
+                    source_id = getattr(current, "id", None)
+                    if source_id is None or source_id in visited_sources:
+                        break
+                    visited_sources.add(source_id)
+                    candidate = source_weapon_map.get(source_id)
+                    if candidate is not None and candidate is not weapon:
+                        assigned_parent_id = candidate.id
+                        break
+                    current = current.parent
+        if assigned_parent_id is not None and assigned_parent_id in weapon_map:
+            children_map.setdefault(assigned_parent_id, []).append(weapon)
         else:
             roots.append(weapon)
 

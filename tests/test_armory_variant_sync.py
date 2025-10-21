@@ -305,3 +305,80 @@ def test_weapon_tree_handles_multi_level_inheritance_without_n_plus_one():
             assert node["parent_armory_name"] == base_armory.name
     finally:
         session.close()
+
+
+def test_variant_weapon_tree_preserves_parent_structure():
+    session = _session()
+    try:
+        base_armory = models.Armory(name="Base")
+        variant_armory = models.Armory(name="Variant", parent=base_armory)
+
+        session.add_all([base_armory, variant_armory])
+        session.flush()
+
+        base_root = models.Weapon(armory=base_armory, name="Solar Blade")
+        base_child = models.Weapon(
+            armory=base_armory, name="Solar Blade Prime", parent=base_root
+        )
+        base_grandchild = models.Weapon(
+            armory=base_armory,
+            name="Solar Blade Prime Elite",
+            parent=base_child,
+        )
+        session.add_all([base_root, base_child, base_grandchild])
+        session.flush()
+
+        utils.ensure_armory_variant_sync(session, variant_armory)
+        session.flush()
+
+        collection = armories_router._armory_weapons(session, variant_armory)
+
+        source_to_clone: dict[int, models.Weapon] = {}
+        for weapon in collection.items:
+            parent = weapon.parent
+            if (
+                parent
+                and parent.id is not None
+                and parent.armory_id != weapon.armory_id
+                and parent.id not in source_to_clone
+            ):
+                source_to_clone[parent.id] = weapon
+
+        def _parent_lookup(nodes):
+            lookup: dict[int, int | None] = {}
+
+            def _visit(children, parent_id):
+                for child in children:
+                    lookup[child["id"]] = parent_id
+                    _visit(child.get("children", []), child["id"])
+
+            _visit(nodes, None)
+            return lookup
+
+        tree_parent_lookup = _parent_lookup(collection.tree)
+
+        weapon_rows = [
+            {"instance": weapon, "overrides": {}, "cost": 0, "abilities": []}
+            for weapon in collection.items
+        ]
+        payload_tree = armories_router._weapon_tree_payload(weapon_rows)
+        payload_parent_lookup = _parent_lookup(payload_tree)
+
+        for base_weapon in (base_root, base_child, base_grandchild):
+            clone = source_to_clone.get(base_weapon.id)
+            assert clone is not None, "Expected clone for base weapon"
+
+            expected_parent_id = None
+            if base_weapon.parent is not None:
+                clone_parent = source_to_clone.get(base_weapon.parent.id)
+                assert clone_parent is not None, "Expected clone for base parent"
+                expected_parent_id = clone_parent.id
+
+            assert (
+                tree_parent_lookup.get(clone.id) == expected_parent_id
+            ), "ArmoryWeaponCollection tree should mirror base structure"
+            assert (
+                payload_parent_lookup.get(clone.id) == expected_parent_id
+            ), "Weapon tree payload should mirror base structure"
+    finally:
+        session.close()
