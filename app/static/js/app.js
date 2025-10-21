@@ -2991,7 +2991,7 @@ function initRosterAdders(root) {
           fallback();
           return;
         }
-        if (!data || typeof data !== 'object' || !data.item || !data.unit) {
+        if (!data || typeof data !== 'object' || !data.roster_item || !data.unit) {
           fallback();
           return;
         }
@@ -3203,7 +3203,7 @@ function initRosterEditor() {
     if (!payload || typeof payload !== 'object') {
       return;
     }
-    const itemData = payload.item;
+    const itemData = payload.roster_item || payload.item;
     if (!itemData || typeof itemData !== 'object') {
       return;
     }
@@ -3911,8 +3911,14 @@ function initRosterEditor() {
         syncEditorFromItem(targetItem, { preserveAutoSave: true });
       }
     }
-    if (payload.roster && typeof payload.roster.total_cost === 'number') {
-      updateTotalSummary(payload.roster.total_cost);
+    let totalCostValue = null;
+    if (typeof payload.total_cost === 'number') {
+      totalCostValue = payload.total_cost;
+    } else if (payload.roster && typeof payload.roster.total_cost === 'number') {
+      totalCostValue = payload.roster.total_cost;
+    }
+    if (Number.isFinite(totalCostValue)) {
+      updateTotalSummary(totalCostValue);
     }
     if (Array.isArray(payload.warnings)) {
       renderWarningsList(warningsContainer, payload.warnings);
