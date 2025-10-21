@@ -5422,10 +5422,13 @@ function initArmoryWeaponTree() {
     return visibleCount;
   };
 
-  const createInheritanceLabel = (isOverridden) => {
+  const createInheritanceLabel = (isOverridden, indentRem = 0) => {
     const label = document.createElement('div');
     label.className = 'text-muted small';
     label.textContent = isOverridden ? 'Nadpisano' : 'Dziedziczone';
+    if (indentRem > 0) {
+      label.style.paddingLeft = `${indentRem}rem`;
+    }
     return label;
   };
 
@@ -5442,11 +5445,13 @@ function initArmoryWeaponTree() {
     nameCol.className = 'col-12 col-lg-3 d-flex flex-column gap-1';
     const nameWrapper = document.createElement('div');
     nameWrapper.className = 'd-flex align-items-center gap-2';
-    nameWrapper.style.paddingLeft = `${Math.max(0, node.level) * 1.5}rem`;
+    const nameIndent = Math.max(0, node.level) * 1.5;
+    nameWrapper.style.paddingLeft = `${nameIndent}rem`;
 
     const toggleContainer = document.createElement('div');
     toggleContainer.className = 'flex-shrink-0';
-    toggleContainer.style.width = '1.5rem';
+    const toggleWidthRem = 1.5;
+    toggleContainer.style.width = `${toggleWidthRem}rem`;
     if (Array.isArray(node.children) && node.children.length) {
       const toggle = document.createElement('button');
       toggle.type = 'button';
@@ -5475,7 +5480,8 @@ function initArmoryWeaponTree() {
     nameWrapper.appendChild(nameText);
     nameCol.appendChild(nameWrapper);
     if (node.has_parent) {
-      nameCol.appendChild(createInheritanceLabel(Boolean(node.overrides?.name)));
+      const nameLabelIndent = nameIndent + toggleWidthRem;
+      nameCol.appendChild(createInheritanceLabel(Boolean(node.overrides?.name), nameLabelIndent));
     }
 
     const rangeCol = document.createElement('div');
