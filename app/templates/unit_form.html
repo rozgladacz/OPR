@@ -159,7 +159,22 @@
             >
               <div class="row g-2 align-items-start">
                 <div class="col-md-5">
-                  <div class="weapon-picker-tree border rounded p-2" data-weapon-tree></div>
+                  <div class="weapon-picker-tree-wrapper">
+                    <button
+                      class="weapon-picker-tree-trigger"
+                      type="button"
+                      data-weapon-tree-trigger
+                      data-weapon-tree-placeholder="Wybierz broń"
+                      aria-haspopup="tree"
+                      aria-expanded="false"
+                    >
+                      <span class="weapon-picker-tree-trigger-label" data-weapon-tree-label>Wybierz broń</span>
+                      <span class="weapon-picker-tree-trigger-caret ms-2" aria-hidden="true">▾</span>
+                    </button>
+                    <div class="weapon-picker-tree-container d-none mt-2" data-weapon-tree-container>
+                      <div class="weapon-picker-tree border rounded p-2" data-weapon-tree></div>
+                    </div>
+                  </div>
                   <select class="form-select weapon-picker-select d-none" aria-hidden="true" tabindex="-1">
                     <option value="">Wybierz broń</option>
                     {% for option in weapon_tree.flat %}
