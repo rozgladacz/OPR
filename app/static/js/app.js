@@ -3263,6 +3263,46 @@ function initRosterEditor() {
   };
   let currentSaveStatus = 'idle';
   const customPlaceholder = customLabel ? customLabel.dataset.placeholder || '' : '';
+  const rosterDatasetCache = new WeakMap();
+  const UNIT_DATASET_KEYS = [
+    'weapon_options',
+    'passive_items',
+    'active_items',
+    'aura_items',
+    'default_summary',
+  ];
+  const UNIT_DATASET_ATTRIBUTE_MAP = new Map([
+    ['data-weapon-options', 'weapon_options'],
+    ['data-passives', 'passive_items'],
+    ['data-actives', 'active_items'],
+    ['data-auras', 'aura_items'],
+    ['data-default-summary', 'default_summary'],
+  ]);
+  const rosterUnitDatasetRepo = new Map();
+  const rosterUnitDatasetCache = new Map();
+
+  (function initializeUnitDatasetRepo() {
+    const raw = root.dataset ? root.dataset.rosterUnitDatasets || '' : '';
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          Object.entries(parsed).forEach(([unitId, value]) => {
+            if (!unitId || !value || typeof value !== 'object') {
+              return;
+            }
+            rosterUnitDatasetRepo.set(String(unitId), value);
+          });
+        }
+      } catch (err) {
+        console.warn('Nie udało się odczytać danych jednostek', err);
+      }
+    }
+    if (root.dataset && Object.prototype.hasOwnProperty.call(root.dataset, 'rosterUnitDatasets')) {
+      delete root.dataset.rosterUnitDatasets;
+    }
+  })();
+
   function setSaveStatus(status) {
     currentSaveStatus = status;
     if (!saveStateEl) {
@@ -3323,6 +3363,86 @@ function initRosterEditor() {
     }
   }
 
+  function resolveUnitCacheId(source) {
+    if (source === null || source === undefined) {
+      return '';
+    }
+    if (typeof source === 'string' || typeof source === 'number') {
+      const text = String(source).trim();
+      return text ? text : '';
+    }
+    if (source instanceof Element) {
+      return source.getAttribute('data-unit-cache-id') || '';
+    }
+    return '';
+  }
+
+  function getUnitDatasetEntry(source) {
+    const cacheId = resolveUnitCacheId(source);
+    if (!cacheId) {
+      return null;
+    }
+    let entry = rosterUnitDatasetCache.get(cacheId);
+    if (!entry) {
+      entry = {
+        data: rosterUnitDatasetRepo.get(cacheId) || null,
+        values: new Map(),
+      };
+      rosterUnitDatasetCache.set(cacheId, entry);
+    }
+    return entry;
+  }
+
+  function getUnitDatasetValue(source, datasetKey, fallback = null) {
+    const cacheId = resolveUnitCacheId(source);
+    if (!cacheId || !datasetKey) {
+      return fallback;
+    }
+    const entry = getUnitDatasetEntry(cacheId);
+    if (!entry || !entry.data) {
+      return fallback;
+    }
+    if (entry.values.has(datasetKey)) {
+      const cached = entry.values.get(datasetKey);
+      return cached === undefined ? fallback : cached;
+    }
+    const value = entry.data[datasetKey];
+    entry.values.set(datasetKey, value);
+    return value === undefined ? fallback : value;
+  }
+
+  function getUnitDatasetList(source, datasetKey) {
+    const value = getUnitDatasetValue(source, datasetKey, []);
+    return Array.isArray(value) ? value : [];
+  }
+
+  function updateUnitDataset(source, updates) {
+    const cacheId = resolveUnitCacheId(source);
+    if (!cacheId || !updates || typeof updates !== 'object') {
+      return;
+    }
+    const normalizedUpdates = {};
+    UNIT_DATASET_KEYS.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(updates, key)) {
+        const value = updates[key];
+        if (value !== undefined) {
+          normalizedUpdates[key] = value;
+        }
+      }
+    });
+    const updateKeys = Object.keys(normalizedUpdates);
+    if (!updateKeys.length) {
+      return;
+    }
+    const previous = rosterUnitDatasetRepo.get(cacheId);
+    const next = previous && typeof previous === 'object' ? { ...previous } : {};
+    updateKeys.forEach((key) => {
+      next[key] = normalizedUpdates[key];
+    });
+    rosterUnitDatasetRepo.set(cacheId, next);
+    rosterUnitDatasetCache.delete(cacheId);
+  }
+
   function getCacheEntry(item, attribute, rawValue) {
     if (!item || !attribute) {
       return null;
@@ -3357,6 +3477,13 @@ function initRosterEditor() {
   function getParsedList(item, attribute) {
     if (!item || !attribute) {
       return [];
+    }
+    const datasetKey = UNIT_DATASET_ATTRIBUTE_MAP.get(attribute);
+    if (datasetKey) {
+      const cacheId = resolveUnitCacheId(item);
+      if (cacheId) {
+        return getUnitDatasetList(cacheId, datasetKey);
+      }
     }
     const rawValue = item.getAttribute(attribute) || '';
     const entry = getCacheEntry(item, attribute, rawValue);
@@ -3727,10 +3854,10 @@ function initRosterEditor() {
       customEditInput = null;
     }
 
-    currentPassives = getParsedList(item, 'data-passives');
-    currentActives = getParsedList(item, 'data-actives');
-    currentAuras = getParsedList(item, 'data-auras');
-    currentWeapons = getParsedList(item, 'data-weapon-options');
+    currentPassives = getUnitDatasetList(item, 'passive_items');
+    currentActives = getUnitDatasetList(item, 'active_items');
+    currentAuras = getUnitDatasetList(item, 'aura_items');
+    currentWeapons = getUnitDatasetList(item, 'weapon_options');
     currentBaseFlags = parseFlagString(item.getAttribute('data-unit-flags'));
 
     const unitName = item.getAttribute('data-unit-name') || 'Jednostka';
@@ -3844,6 +3971,18 @@ function initRosterEditor() {
         ? root.querySelector(`[data-roster-item][data-roster-unit-id="${unitId}"]`)
         : null;
     if (unitData && targetItem) {
+      const unitCacheId = resolveUnitCacheId(targetItem);
+      if (unitCacheId) {
+        const datasetUpdates = {};
+        UNIT_DATASET_KEYS.forEach((key) => {
+          if (Object.prototype.hasOwnProperty.call(unitData, key)) {
+            datasetUpdates[key] = unitData[key];
+          }
+        });
+        if (Object.keys(datasetUpdates).length) {
+          updateUnitDataset(unitCacheId, datasetUpdates);
+        }
+      }
       if (typeof unitData.count === 'number' && Number.isFinite(unitData.count)) {
         targetItem.setAttribute('data-unit-count', String(unitData.count));
       }
@@ -3895,7 +4034,8 @@ function initRosterEditor() {
       }
       const loadoutEl = targetItem.querySelector('[data-roster-unit-loadout]');
       if (loadoutEl) {
-        const defaultSummary = targetItem.getAttribute('data-default-summary') || '-';
+        const defaultSummary =
+          getUnitDatasetValue(unitCacheId || targetItem, 'default_summary', unitData.default_summary || '-') || '-';
         const summary = unitData.loadout_summary || defaultSummary;
         loadoutEl.textContent = `Uzbrojenie: ${summary || '-'}`;
       }

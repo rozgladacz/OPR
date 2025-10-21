@@ -75,6 +75,7 @@
   data-roster-root
   data-roster-id="{{ roster.id }}"
   data-selected-id="{{ selected_id or '' }}"
+  data-roster-unit-datasets='{{ unit_payloads | tojson | e }}'
 >
   {% if can_edit %}
   <div class="col-12 d-xl-none">
@@ -215,6 +216,7 @@
                 class="roster-unit-item roster-card text-start position-relative flex-grow-1 border rounded p-3 bg-body"
                 data-roster-item
                 data-roster-unit-id="{{ ru.id }}"
+                data-unit-cache-id="{{ ru.unit.id }}"
                 data-unit-name="{{ ru.unit.name }}"
                 data-unit-count="{{ ru.count }}"
                 data-unit-cost="{{ ru.cached_cost }}"
@@ -223,12 +225,7 @@
                 data-unit-defense="{{ ru.unit.defense }}"
                 data-unit-toughness="{{ ru.unit.toughness }}"
                 data-unit-custom-name="{{ ru.custom_name or '' }}"
-                data-default-summary="{{ item.default_summary }}"
                 data-unit-flags='{{ ru.unit.flags | default('', true) | e }}'
-                data-weapon-options='{{ item.weapon_options | tojson | e }}'
-                data-passives='{{ item.passive_items | tojson | e }}'
-                data-actives='{{ item.active_items | tojson | e }}'
-                data-auras='{{ item.aura_items | tojson | e }}'
                 data-selected-passives='{{ item.selected_passive_items | tojson | e }}'
                 data-selected-actives='{{ item.selected_active_items | tojson | e }}'
                 data-selected-auras='{{ item.selected_aura_items | tojson | e }}'
