@@ -562,15 +562,18 @@
             class="weapon-picker"
             data-weapon-picker
             data-weapons='{{ weapon_choices | tojson }}'
-            data-weapon-tree='{{ weapon_tree | tojson }}'
+            data-weapon-tree-payload='{{ weapon_tree | tojson }}'
             data-target-input="unit-weapons"
           >
-            <div class="row g-2 align-items-end">
+            <div class="row g-2 align-items-start">
               <div class="col-sm-6 col-lg-5">
-                <select class="form-select weapon-picker-select">
+                <div class="weapon-picker-tree border rounded p-2" data-weapon-tree></div>
+                <select class="form-select weapon-picker-select d-none" aria-hidden="true" tabindex="-1">
                   <option value="">Wybierz broń</option>
-                  {% for option in weapon_choices %}
+                  {% for option in weapon_tree.flat %}
+                  {% if option.is_leaf %}
                   <option value="{{ option.id }}">{{ option.name }}</option>
+                  {% endif %}
                   {% endfor %}
                 </select>
               </div>

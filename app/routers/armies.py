@@ -344,6 +344,94 @@ def _armory_weapons(db: Session, armory: models.Armory) -> utils.ArmoryWeaponCol
     return utils.load_armory_weapons(db, armory)
 
 
+def _weapon_tree_payload(weapons: list[models.Weapon]) -> dict[str, object]:
+    if not weapons:
+        return {"tree": [], "flat": []}
+
+    nodes: dict[int, dict[str, object]] = {}
+    for weapon in weapons:
+        range_value = costs.normalize_range_value(weapon.effective_range)
+        category = "ranged" if range_value > 0 else "melee"
+        nodes[weapon.id] = {
+            "id": weapon.id,
+            "name": weapon.effective_name,
+            "parent_id": weapon.parent_id,
+            "children": [],
+            "depth": 0,
+            "path": [],
+            "path_labels": [],
+            "path_text": "",
+            "range_value": range_value,
+            "category": category,
+            "is_leaf": True,
+        }
+
+    roots: list[dict[str, object]] = []
+    for weapon in weapons:
+        node = nodes[weapon.id]
+        parent_id = weapon.parent_id
+        if parent_id is not None and parent_id in nodes:
+            parent_node = nodes[parent_id]
+            parent_children = parent_node.setdefault("children", [])
+            parent_children.append(node)
+        else:
+            roots.append(node)
+
+    def sort_children(node: dict[str, object]) -> None:
+        children = node.get("children", []) or []
+        children.sort(key=lambda item: str(item.get("name", "")).casefold())
+        for child in children:
+            sort_children(child)
+
+    for root in roots:
+        sort_children(root)
+
+    flat: list[dict[str, object]] = []
+    visited: set[int] = set()
+
+    def assign(node: dict[str, object], depth: int, path_ids: list[int], path_labels: list[str]) -> None:
+        node_id = int(node.get("id", 0) or 0)
+        if node_id in visited:
+            return
+        visited.add(node_id)
+
+        name = str(node.get("name", "")).strip() or f"Broń #{node_id}"
+        current_path_ids = [*path_ids, node_id]
+        current_path_labels = [*path_labels, name]
+
+        node["depth"] = depth
+        node["path"] = current_path_ids
+        node["path_labels"] = current_path_labels
+        node["path_text"] = " / ".join(current_path_labels)
+
+        children = node.get("children", []) or []
+        for child in children:
+            assign(child, depth + 1, current_path_ids, current_path_labels)
+
+        is_leaf = not bool(children)
+        node["is_leaf"] = is_leaf
+        flat.append(
+            {
+                "id": node_id,
+                "name": name,
+                "parent_id": node.get("parent_id"),
+                "depth": depth,
+                "path": current_path_ids,
+                "path_labels": current_path_labels,
+                "path_text": node["path_text"],
+                "range_value": node.get("range_value", 0),
+                "category": node.get("category"),
+                "is_leaf": is_leaf,
+            }
+        )
+
+    roots.sort(key=lambda item: str(item.get("name", "")).casefold())
+    for root in roots:
+        assign(root, 0, [], [])
+
+    return {"tree": roots, "flat": flat}
+
+
 def _ordered_weapons(db: Session, armory: models.Armory, weapon_ids: list[int]) -> list[models.Weapon]:
     if not weapon_ids:
         return []
@@ -2050,8 +2138,8 @@ def edit_unit_form(
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
     weapon_collection = _armory_weapons(db, army.armory)
-    weapons = list(weapon_collection.items)
-    weapon_tree = weapon_collection.payload
+    weapons = _armory_weapons(db, army.armory)
+    weapon_tree = _weapon_tree_payload(weapons)
 
     weapon_choices = []
     for weapon in weapons:
@@ -2065,6 +2153,7 @@ def edit_unit_form(
                 "category": category,
             }
         )
+
     active_definitions = ability_registry.definition_payload(db, "active")
     aura_definitions = ability_registry.definition_payload(db, "aura")
 
@@ -2450,8 +2539,8 @@ def _render_army_edit(
         can_delete = not bool(has_rosters)
 
     weapon_collection = _armory_weapons(db, army.armory)
-    weapons = list(weapon_collection.items)
-    weapon_tree = weapon_collection.payload
+    weapons = _armory_weapons(db, army.armory)
+    weapon_tree = _weapon_tree_payload(weapons)
     weapon_choices = []
     for weapon in weapons:
         range_value = costs.normalize_range_value(weapon.effective_range)

@@ -1392,64 +1392,520 @@ function initWeaponDefaults() {
 }
 
 function initWeaponPicker(root) {
-  const weaponsData = root.dataset.weapons;
-  const weapons = weaponsData ? JSON.parse(weaponsData) : [];
-  const weaponMap = new Map((weapons || []).map((item) => [String(item.id), item]));
+  const treePayloadRaw =
+    root.dataset.weaponTreePayload ||
+    root.dataset.weaponTree ||
+    root.dataset.weapons;
+  let parsedPayload = null;
+  if (treePayloadRaw) {
+    try {
+      parsedPayload = JSON.parse(treePayloadRaw);
+    } catch (err) {
+      console.warn('Nie udało się odczytać drzewa uzbrojenia', err);
+      parsedPayload = null;
+    }
+  }
+
+  let rawTree = [];
+  let rawFlat = [];
+  if (Array.isArray(parsedPayload)) {
+    rawTree = parsedPayload;
+  } else if (parsedPayload && typeof parsedPayload === 'object') {
+    if (Array.isArray(parsedPayload.tree)) {
+      rawTree = parsedPayload.tree;
+    } else if (Array.isArray(parsedPayload.nodes)) {
+      rawTree = parsedPayload.nodes;
+    }
+    if (Array.isArray(parsedPayload.flat)) {
+      rawFlat = parsedPayload.flat;
+    }
+  }
+
+  if ((!Array.isArray(rawTree) || !rawTree.length) && Array.isArray(rawFlat) && rawFlat.length) {
+    const cloneMap = new Map();
+    rawFlat.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const id = Number.parseInt(entry.id ?? entry.weapon_id, 10);
+      if (!Number.isFinite(id)) {
+        return;
+      }
+      cloneMap.set(String(id), {
+        id,
+        name: typeof entry.name === 'string' ? entry.name : '',
+        parent_id:
+          entry.parent_id !== undefined && entry.parent_id !== null
+            ? Number(entry.parent_id)
+            : null,
+        range_value: entry.range_value,
+        category: entry.category,
+        children: [],
+        path: entry.path,
+        path_labels: entry.path_labels,
+        path_text: entry.path_text,
+        is_leaf: entry.is_leaf,
+      });
+    });
+    const roots = [];
+    cloneMap.forEach((node) => {
+      const parentId =
+        node.parent_id !== undefined && node.parent_id !== null
+          ? Number(node.parent_id)
+          : null;
+      if (Number.isFinite(parentId) && cloneMap.has(String(parentId))) {
+        cloneMap.get(String(parentId)).children.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+    rawTree = roots;
+  }
+
   const targetId = root.dataset.targetInput;
-  const hiddenInput = targetId ? document.getElementById(targetId) : root.querySelector('input[type="hidden"]');
+  const hiddenInput =
+    targetId ? document.getElementById(targetId) : root.querySelector('input[type="hidden"]');
   const selectEl = root.querySelector('.weapon-picker-select');
   const defaultCountInput = root.querySelector('.weapon-picker-default-count');
   const addButton = root.querySelector('.weapon-picker-add');
   const listEl = root.querySelector('.weapon-picker-list');
+  const treeRoot = root.querySelector('[data-weapon-tree]');
   const pickerId = Math.random().toString(16).slice(2);
+
+  const weaponMap = new Map();
+  const collapsedNodes = new Set();
+  let treeData = [];
   let items = [];
+  let selectedWeaponId = null;
 
   function normalizeCategory(value) {
     if (typeof value !== 'string') {
       return null;
     }
     const lowered = value.trim().toLowerCase();
-    if (['ranged', 'dystansowa', 'dystansowe', 'dystansowy'].includes(lowered)) {
+    if (
+      [
+        'ranged',
+        'dystansowa',
+        'dystansowe',
+        'dystansowy',
+        'shooting',
+        'shoot',
+        'range',
+      ].includes(lowered)
+    ) {
       return 'ranged';
     }
-    if (['melee', 'wręcz', 'wrecz'].includes(lowered)) {
+    if (['melee', 'wręcz', 'wrecz', 'close', 'close combat'].includes(lowered)) {
       return 'melee';
     }
     return null;
   }
 
+  function sanitizeTree(nodes, parentId = null, parentPathIds = [], parentPathLabels = []) {
+    const result = [];
+    (Array.isArray(nodes) ? nodes : []).forEach((node) => {
+      if (!node || typeof node !== 'object') {
+        return;
+      }
+      const rawId = node.id ?? node.weapon_id;
+      const id = Number.parseInt(rawId, 10);
+      if (!Number.isFinite(id)) {
+        return;
+      }
+      const rawName = typeof node.name === 'string' ? node.name : '';
+      const name = rawName.trim() || `Broń #${id}`;
+      let pathIds = Array.isArray(node.path)
+        ? node.path
+            .map((value) => Number.parseInt(value, 10))
+            .filter((value) => Number.isFinite(value))
+        : [];
+      if (!pathIds.length || pathIds[pathIds.length - 1] !== id) {
+        pathIds = [...parentPathIds, id];
+      }
+      let pathLabels = Array.isArray(node.path_labels)
+        ? node.path_labels.map((value) => String(value))
+        : [];
+      if (!pathLabels.length || pathLabels.length !== pathIds.length) {
+        pathLabels = [...parentPathLabels, name];
+      }
+      const depth = pathIds.length ? pathIds.length - 1 : parentPathIds.length;
+      const rangeSource =
+        node.range_value ??
+        node.range ??
+        node.effective_range ??
+        node.rangeValue ??
+        0;
+      const rangeValue = normalizeRangeValue(rangeSource);
+      const rawCategory =
+        node.category ?? node.range_category ?? node.type ?? null;
+      const category =
+        normalizeCategory(rawCategory) ?? (rangeValue > 0 ? 'ranged' : 'melee');
+      let parentValue = null;
+      if (Number.isFinite(Number(node.parent_id))) {
+        parentValue = Number(node.parent_id);
+      } else if (pathIds.length >= 2) {
+        parentValue = pathIds[pathIds.length - 2];
+      } else if (Number.isFinite(Number(parentId))) {
+        parentValue = Number(parentId);
+      }
+      const childNodes = sanitizeTree(
+        node.children,
+        id,
+        pathIds,
+        pathLabels,
+      );
+      const hasChildren = childNodes.length > 0;
+      const isLeaf = !hasChildren || Boolean(node.is_leaf);
+      const meta = {
+        id,
+        name,
+        parent_id: Number.isFinite(parentValue) ? parentValue : null,
+        depth,
+        path: pathIds,
+        path_labels: pathLabels,
+        path_text:
+          typeof node.path_text === 'string' && node.path_text.trim()
+            ? node.path_text.trim()
+            : pathLabels.join(' / '),
+        category,
+        range_value: Number.isFinite(rangeValue) ? rangeValue : 0,
+        is_leaf: isLeaf,
+      };
+      weaponMap.set(String(id), { ...meta });
+      const sanitizedNode = {
+        ...meta,
+        children: childNodes,
+        has_children: hasChildren,
+      };
+      result.push(sanitizedNode);
+    });
+    return result;
+  }
+
+  function sortTree(nodes) {
+    if (!Array.isArray(nodes)) {
+      return;
+    }
+    nodes.sort((a, b) => {
+      const nameA = a && a.name ? String(a.name).toLowerCase() : '';
+      const nameB = b && b.name ? String(b.name).toLowerCase() : '';
+      if (nameA < nameB) {
+        return -1;
+      }
+      if (nameA > nameB) {
+        return 1;
+      }
+      return 0;
+    });
+    nodes.forEach((node) => {
+      if (node && Array.isArray(node.children) && node.children.length) {
+        sortTree(node.children);
+      }
+    });
+  }
+
+  treeData = sanitizeTree(rawTree);
+  sortTree(treeData);
+
+  if (Array.isArray(rawFlat)) {
+    rawFlat.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const id = Number.parseInt(entry.id ?? entry.weapon_id, 10);
+      if (!Number.isFinite(id) || weaponMap.has(String(id))) {
+        return;
+      }
+      const rawName = typeof entry.name === 'string' ? entry.name : '';
+      const name = rawName.trim() || `Broń #${id}`;
+      const rangeValue = normalizeRangeValue(
+        entry.range_value ?? entry.range ?? entry.effective_range ?? 0,
+      );
+      const category =
+        normalizeCategory(entry.category ?? entry.range_category ?? null) ??
+        (rangeValue > 0 ? 'ranged' : 'melee');
+      let path = Array.isArray(entry.path)
+        ? entry.path
+            .map((value) => Number.parseInt(value, 10))
+            .filter((value) => Number.isFinite(value))
+        : [];
+      if (!path.length || path[path.length - 1] !== id) {
+        path = [...path, id];
+      }
+      let pathLabels = Array.isArray(entry.path_labels)
+        ? entry.path_labels.map((value) => String(value))
+        : [];
+      if (!pathLabels.length || pathLabels.length !== path.length) {
+        pathLabels = path.map((value, index) => {
+          if (index === path.length - 1) {
+            return name;
+          }
+          const ancestor = weaponMap.get(String(path[index]));
+          return ancestor && ancestor.name ? ancestor.name : `#${path[index]}`;
+        });
+      }
+      weaponMap.set(String(id), {
+        id,
+        name,
+        parent_id:
+          entry.parent_id !== undefined && entry.parent_id !== null
+            ? Number(entry.parent_id)
+            : path.length > 1
+            ? path[path.length - 2]
+            : null,
+        depth: Number.isFinite(Number(entry.depth))
+          ? Number(entry.depth)
+          : Math.max(path.length - 1, 0),
+        path,
+        path_labels: pathLabels,
+        path_text:
+          typeof entry.path_text === 'string' && entry.path_text.trim()
+            ? entry.path_text.trim()
+            : pathLabels.join(' / '),
+        category,
+        range_value: Number.isFinite(rangeValue) ? rangeValue : 0,
+        is_leaf: entry.is_leaf !== undefined ? Boolean(entry.is_leaf) : true,
+      });
+    });
+  }
+
+  function initializeCollapsedState(nodes) {
+    (Array.isArray(nodes) ? nodes : []).forEach((node) => {
+      if (!node) {
+        return;
+      }
+      if (node.depth >= 2 && node.has_children) {
+        collapsedNodes.add(String(node.id));
+      }
+      initializeCollapsedState(node.children);
+    });
+  }
+
+  initializeCollapsedState(treeData);
+
+  const treeHintId = `weapon-tree-hint-${pickerId}`;
+
+  function ensureNodeVisible(weaponId) {
+    const meta = weaponMap.get(String(weaponId));
+    if (!meta || !Array.isArray(meta.path)) {
+      return;
+    }
+    meta.path.slice(0, -1).forEach((ancestorId) => {
+      collapsedNodes.delete(String(ancestorId));
+    });
+  }
+
+  function toggleNode(nodeId, forceOpen) {
+    const key = String(nodeId);
+    if (forceOpen === true) {
+      collapsedNodes.delete(key);
+    } else if (forceOpen === false) {
+      collapsedNodes.add(key);
+    } else if (collapsedNodes.has(key)) {
+      collapsedNodes.delete(key);
+    } else {
+      collapsedNodes.add(key);
+    }
+    renderTree();
+    updateSelectionState();
+  }
+
+  function createNodeElement(node) {
+    const li = document.createElement('li');
+    li.className = 'weapon-tree-node';
+    li.dataset.weaponNode = String(node.id);
+
+    const row = document.createElement('div');
+    row.className = 'weapon-tree-row d-flex align-items-center gap-2 py-1';
+    li.appendChild(row);
+
+    if (node.has_children) {
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.className = 'btn btn-sm btn-outline-secondary weapon-tree-toggle';
+      const collapsed = collapsedNodes.has(String(node.id));
+      toggleBtn.textContent = collapsed ? '▸' : '▾';
+      toggleBtn.setAttribute('aria-label', collapsed ? 'Rozwiń gałąź' : 'Zwiń gałąź');
+      toggleBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        toggleNode(node.id);
+      });
+      row.appendChild(toggleBtn);
+    } else {
+      const spacer = document.createElement('span');
+      spacer.className = 'weapon-tree-toggle-placeholder';
+      spacer.style.display = 'inline-block';
+      spacer.style.width = '1.75rem';
+      spacer.setAttribute('aria-hidden', 'true');
+      row.appendChild(spacer);
+    }
+
+    if (node.is_leaf) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className =
+        'btn btn-sm btn-outline-secondary weapon-tree-select flex-grow-1 text-start';
+      button.dataset.weaponSelect = String(node.id);
+      button.textContent = node.name;
+      button.title = node.path_text || node.name;
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        setSelectedNode(node.id);
+      });
+      button.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        setSelectedNode(node.id);
+        handleAdd();
+      });
+      row.appendChild(button);
+    } else {
+      const label = document.createElement('button');
+      label.type = 'button';
+      label.className =
+        'btn btn-sm btn-outline-secondary weapon-tree-group flex-grow-1 text-start';
+      label.textContent = node.name;
+      label.title = node.path_text || node.name;
+      label.addEventListener('click', (event) => {
+        event.preventDefault();
+        toggleNode(node.id);
+      });
+      row.appendChild(label);
+    }
+
+    const badge = document.createElement('span');
+    if (node.is_leaf) {
+      badge.className = 'badge text-bg-secondary weapon-tree-meta';
+      badge.textContent = node.range_value > 0 ? `${node.range_value}"` : 'Wręcz';
+    } else {
+      badge.className = 'badge text-bg-light border text-muted weapon-tree-meta';
+      badge.textContent = `${node.children.length}`;
+      badge.title = 'Liczba wariantów';
+    }
+    row.appendChild(badge);
+
+    if (node.children && node.children.length) {
+      const childList = document.createElement('ul');
+      childList.className = 'list-unstyled mb-0 weapon-tree-children ms-3';
+      if (collapsedNodes.has(String(node.id))) {
+        childList.hidden = true;
+      }
+      node.children.forEach((child) => {
+        childList.appendChild(createNodeElement(child));
+      });
+      li.appendChild(childList);
+    }
+
+    return li;
+  }
+
+  function renderTree() {
+    if (!treeRoot) {
+      return;
+    }
+    treeRoot.innerHTML = '';
+    treeRoot.classList.add('d-flex', 'flex-column', 'gap-2');
+    treeRoot.setAttribute('role', 'tree');
+    const hint = document.createElement('div');
+    hint.className = 'text-muted small';
+    hint.id = treeHintId;
+    hint.textContent = 'Kliknij broń, aby wybrać. Podwójne kliknięcie dodaje ją do listy.';
+    treeRoot.appendChild(hint);
+
+    if (!Array.isArray(treeData) || !treeData.length) {
+      const empty = document.createElement('p');
+      empty.className = 'text-muted mb-0 fst-italic small';
+      empty.textContent = 'Brak dostępnego uzbrojenia.';
+      treeRoot.appendChild(empty);
+      return;
+    }
+
+    const list = document.createElement('ul');
+    list.className = 'list-unstyled mb-0 weapon-tree-root';
+    list.setAttribute('aria-describedby', treeHintId);
+    treeData.forEach((node) => {
+      list.appendChild(createNodeElement(node));
+    });
+    treeRoot.appendChild(list);
+  }
+
+  function updateSelectionState() {
+    if (addButton) {
+      if (treeRoot) {
+        addButton.disabled = !selectedWeaponId;
+      } else {
+        addButton.disabled = false;
+      }
+    }
+    if (!treeRoot) {
+      return;
+    }
+    treeRoot.querySelectorAll('[data-weapon-select]').forEach((button) => {
+      const nodeId = button.dataset.weaponSelect;
+      const isSelected = selectedWeaponId && nodeId === selectedWeaponId;
+      button.classList.toggle('btn-primary', Boolean(isSelected));
+      button.classList.toggle('btn-outline-secondary', !isSelected);
+      const nodeElement = button.closest('[data-weapon-node]');
+      if (nodeElement) {
+        nodeElement.classList.toggle('active', Boolean(isSelected));
+      }
+    });
+  }
+
+  function setSelectedNode(weaponId) {
+    const key = String(weaponId ?? '');
+    if (!key) {
+      selectedWeaponId = null;
+      updateSelectionState();
+      return;
+    }
+    const meta = weaponMap.get(key);
+    if (!meta || !meta.is_leaf) {
+      return;
+    }
+    selectedWeaponId = key;
+    ensureNodeVisible(meta.id);
+    if (selectEl) {
+      selectEl.value = key;
+    }
+    renderTree();
+    updateSelectionState();
+  }
+
   function getWeaponMeta(weaponId, entry) {
-    const id = weaponId ?? (entry ? entry.weapon_id : undefined);
-    const weapon = id !== undefined && id !== null ? weaponMap.get(String(id)) || {} : {};
-    const rawRange =
-      entry && entry.range_value !== undefined
-        ? entry.range_value
-        : weapon.range_value ?? weapon.range;
-    const rangeValue = normalizeRangeValue(rawRange);
-    const rawCategory =
-      (entry && entry.category !== undefined && entry.category !== null ? entry.category : undefined) ??
-      weapon.category ??
-      weapon.range_category ??
-      weapon.type;
-    const normalizedCategory = normalizeCategory(rawCategory);
-    const category = normalizedCategory !== null ? normalizedCategory : rangeValue > 0 ? 'ranged' : 'melee';
+    const idKey =
+      weaponId !== undefined && weaponId !== null ? weaponId : entry ? entry.weapon_id : undefined;
+    const meta = idKey !== undefined && idKey !== null ? weaponMap.get(String(idKey)) : undefined;
+    const rangeSource =
+      (entry && entry.range_value !== undefined ? entry.range_value : undefined) ??
+      (entry && entry.range !== undefined ? entry.range : undefined) ??
+      (meta && meta.range_value !== undefined ? meta.range_value : undefined) ??
+      0;
+    const rangeValue = normalizeRangeValue(rangeSource);
+    const categorySource =
+      (entry && entry.category !== undefined && entry.category !== null ? entry.category : null) ??
+      (meta ? meta.category : null);
+    const category =
+      normalizeCategory(categorySource) ?? (Number.isFinite(rangeValue) && rangeValue > 0 ? 'ranged' : 'melee');
+    const pathText = meta && meta.path_text ? meta.path_text : '';
+    const pathLabels = meta && Array.isArray(meta.path_labels) ? [...meta.path_labels] : [];
+    const path = meta && Array.isArray(meta.path) ? [...meta.path] : [];
+    const name =
+      (meta && meta.name) ||
+      (entry && entry.name) ||
+      (selectEl && idKey !== undefined && idKey !== null
+        ? selectEl.querySelector(`option[value="${String(idKey)}"]`)?.textContent
+        : null) ||
+      (idKey !== undefined && idKey !== null ? `Broń #${idKey}` : 'Broń');
     return {
       category,
       rangeValue: Number.isFinite(rangeValue) ? rangeValue : 0,
+      pathText,
+      pathLabels,
+      path,
+      name,
+      isLeaf: Boolean(meta && meta.is_leaf),
     };
-  }
-
-  function getItemCategory(entry) {
-    if (!entry) {
-      return 'melee';
-    }
-    if (typeof entry.category === 'string') {
-      const normalized = normalizeCategory(entry.category);
-      if (normalized) {
-        return normalized;
-      }
-    }
-    return getWeaponMeta(entry.weapon_id, entry).category;
   }
 
   function parsePrimaryFlag(value) {
@@ -1472,41 +1928,50 @@ function initWeaponPicker(root) {
     }
     try {
       const parsed = JSON.parse(hiddenInput.value);
-      if (Array.isArray(parsed)) {
-        items = parsed
-          .map((entry) => {
-            const rawWeaponId = entry.weapon_id;
-            const weaponId = Number.parseInt(rawWeaponId, 10);
-            if (!Number.isFinite(weaponId)) {
-              return null;
-            }
-            const name = entry.name || weaponMap.get(String(weaponId))?.name || '';
-            const rawCount = entry.count ?? entry.default_count;
-            let defaultCount = Number.parseInt(rawCount, 10);
-            if (!Number.isFinite(defaultCount)) {
-              defaultCount = entry.is_default ? 1 : 0;
-            }
-            if (defaultCount < 0) {
-              defaultCount = 0;
-            }
-            if (!entry.is_default && entry.is_default !== undefined && defaultCount <= 0) {
-              defaultCount = 0;
-            }
-            const primaryFlag = parsePrimaryFlag(
-              entry.is_primary ?? entry.primary ?? entry.is_primary_weapon,
-            );
-            const meta = getWeaponMeta(weaponId, entry);
-            return {
-              weapon_id: weaponId,
-              name: name || weaponMap.get(String(weaponId))?.name || `Broń #${weaponId}`,
-              default_count: defaultCount,
-              is_primary: primaryFlag && defaultCount > 0,
-              category: meta.category,
-              range_value: meta.rangeValue,
-            };
-          })
-          .filter((entry) => entry && entry.weapon_id);
+      if (!Array.isArray(parsed)) {
+        items = [];
+        return;
       }
+      items = parsed
+        .map((entry) => {
+          if (!entry) {
+            return null;
+          }
+          const rawWeaponId = entry.weapon_id ?? entry.weaponId ?? entry.id;
+          const weaponId = Number.parseInt(rawWeaponId, 10);
+          if (!Number.isFinite(weaponId)) {
+            return null;
+          }
+          const meta = getWeaponMeta(weaponId, entry);
+          const name =
+            entry.name ||
+            meta.name ||
+            weaponMap.get(String(weaponId))?.name ||
+            `Broń #${weaponId}`;
+          const rawCount = entry.count ?? entry.default_count ?? entry.quantity;
+          let defaultCount = Number.parseInt(rawCount, 10);
+          if (!Number.isFinite(defaultCount)) {
+            defaultCount = parsePrimaryFlag(entry.is_default) ? 1 : 0;
+          }
+          if (defaultCount < 0) {
+            defaultCount = 0;
+          }
+          const primaryFlag = parsePrimaryFlag(
+            entry.is_primary ?? entry.primary ?? entry.is_primary_weapon,
+          );
+          return {
+            weapon_id: weaponId,
+            name,
+            default_count: defaultCount,
+            is_primary: primaryFlag && defaultCount > 0,
+            category: meta.category,
+            range_value: meta.rangeValue,
+            path_text: meta.pathText,
+            path: meta.path,
+            path_labels: meta.pathLabels,
+          };
+        })
+        .filter((entry) => entry && entry.weapon_id);
     } catch (err) {
       console.warn('Nie udało się odczytać listy broni', err);
       items = [];
@@ -1574,7 +2039,6 @@ function initWeaponPicker(root) {
         changed = true;
       }
     });
-
     return changed;
   }
 
@@ -1597,13 +2061,35 @@ function initWeaponPicker(root) {
       row.className = 'border rounded p-2 d-flex flex-wrap align-items-center gap-2';
 
       const nameWrapper = document.createElement('div');
-      nameWrapper.className = 'flex-grow-1 d-flex align-items-center gap-2';
+      nameWrapper.className = 'flex-grow-1 d-flex flex-column';
+
+      const nameRow = document.createElement('div');
+      nameRow.className = 'd-flex flex-wrap align-items-center gap-2';
+
       const nameLabel = document.createElement('span');
       nameLabel.className = 'fw-semibold';
-      nameLabel.textContent = item.name || weaponMap.get(String(item.weapon_id))?.name || `Broń #${item.weapon_id}`;
-      nameWrapper.appendChild(nameLabel);
+      nameLabel.textContent =
+        item.name || weaponMap.get(String(item.weapon_id))?.name || `Broń #${item.weapon_id}`;
+      nameRow.appendChild(nameLabel);
 
-      const category = getItemCategory(item);
+      const rangeBadge = document.createElement('span');
+      rangeBadge.className = 'badge text-bg-secondary';
+      rangeBadge.textContent = Number(item.range_value) > 0 ? `${item.range_value}"` : 'Wręcz';
+      nameRow.appendChild(rangeBadge);
+
+      nameWrapper.appendChild(nameRow);
+
+      const pathText =
+        item.path_text ||
+        weaponMap.get(String(item.weapon_id))?.path_text ||
+        '';
+      if (pathText && pathText !== nameLabel.textContent) {
+        const pathInfo = document.createElement('span');
+        pathInfo.className = 'text-muted small';
+        pathInfo.textContent = pathText;
+        nameWrapper.appendChild(pathInfo);
+      }
+
       const defaultGroup = document.createElement('div');
       defaultGroup.className = 'd-flex align-items-center gap-2 weapon-default-group';
       const defaultLabel = document.createElement('label');
@@ -1709,47 +2195,72 @@ function initWeaponPicker(root) {
   }
 
   function handleAdd() {
-    if (!selectEl) {
+    const selectedId = selectedWeaponId || (selectEl ? selectEl.value : '');
+    if (!selectedId) {
       return;
     }
-    const weaponId = selectEl.value;
-    if (!weaponId) {
+    if (!ensureUnique(selectedId)) {
+      if (selectEl) {
+        selectEl.value = '';
+      }
+      selectedWeaponId = null;
+      updateSelectionState();
       return;
     }
-    if (!ensureUnique(weaponId)) {
-      selectEl.value = '';
-      return;
-    }
-    const weapon = weaponMap.get(String(weaponId));
+    const meta = getWeaponMeta(selectedId);
     const rawCount = defaultCountInput ? Number.parseInt(defaultCountInput.value, 10) : 0;
     const safeCount = Number.isFinite(rawCount) && rawCount >= 0 ? rawCount : 0;
-    const meta = getWeaponMeta(weaponId);
     items.push({
-      weapon_id: Number.parseInt(weaponId, 10),
-      name: weapon?.name || selectEl.selectedOptions[0]?.textContent || `Broń #${weaponId}`,
+      weapon_id: Number.parseInt(selectedId, 10),
+      name: meta.name,
       default_count: safeCount,
       is_primary: false,
       category: meta.category,
       range_value: meta.rangeValue,
+      path_text: meta.pathText,
+      path: meta.path,
+      path_labels: meta.pathLabels,
     });
     sanitizePrimaryFlags();
     updateHidden();
     renderList();
-    selectEl.value = '';
+    selectedWeaponId = null;
+    if (selectEl) {
+      selectEl.value = '';
+    }
     if (defaultCountInput) {
       defaultCountInput.value = '0';
     }
+    updateSelectionState();
   }
 
   if (addButton) {
     addButton.addEventListener('click', handleAdd);
   }
 
+  if (selectEl && !treeRoot) {
+    selectEl.addEventListener('change', () => {
+      const value = selectEl.value;
+      selectedWeaponId = value || null;
+      updateSelectionState();
+    });
+  }
+
   parseInitial();
+  if (Array.isArray(items)) {
+    items.forEach((entry) => {
+      if (entry && entry.weapon_id !== undefined && entry.weapon_id !== null) {
+        ensureNodeVisible(entry.weapon_id);
+      }
+    });
+  }
+  renderTree();
   sanitizePrimaryFlags();
   updateHidden();
   renderList();
+  updateSelectionState();
 }
+
 
 function initWeaponPickers() {
   document.querySelectorAll('[data-weapon-picker]').forEach((element) => {
@@ -3098,8 +3609,6 @@ function initRosterEditor() {
   let rosterListEl = root.querySelector('[data-roster-list]');
   const items = [];
   const itemRegistry = new WeakSet();
-  const rosterDatasetCache = new WeakMap();
-
   if (warningsContainer) {
     try {
       const initialWarnings = JSON.parse(warningsContainer.dataset.warnings || '[]');
@@ -4719,172 +5228,458 @@ function initSpellAbilityForms() {
   });
 }
 
-function initArmoryWeaponTable() {
-  const table = document.getElementById('armory-weapons-table');
-  if (!table) {
+function initArmoryWeaponTree() {
+  const root = document.getElementById('armory-weapons-tree');
+  if (!root) {
     return;
   }
-  const tbody = table.querySelector('tbody');
-  if (!tbody) {
-    return;
-  }
-  const dataRows = Array.from(tbody.querySelectorAll('tr[data-weapon-row]'));
-  const filterRow = tbody.querySelector('tr[data-empty-message="filter"]');
-  const staticEmptyRow = tbody.querySelector('tr[data-empty-message="always"]');
+  const treeBody = root.querySelector('[data-tree-body]');
+  const emptyState = root.querySelector('[data-empty-state]');
+  const filterEmptyState = root.querySelector('[data-filter-empty-state]');
   const filterInput = document.getElementById('weapons-filter');
-  if (!dataRows.length) {
-    if (filterInput) {
-      filterInput.disabled = true;
-      filterInput.placeholder = 'Brak pozycji do filtrowania';
-    }
-    return;
+  const sortButtons = Array.from(root.querySelectorAll('[data-sort-key]'));
+  const canEdit = root.dataset.canEdit === 'true';
+
+  let rawData;
+  try {
+    rawData = root.dataset.weapons ? JSON.parse(root.dataset.weapons) : [];
+  } catch (err) {
+    rawData = [];
   }
+  const nodeState = new Map();
+  const sortState = { key: null, direction: 'none', type: 'text' };
+  let filterQuery = '';
 
   const normalizeText = typeof normalizeName === 'function'
     ? (value) => normalizeName(value || '')
     : (value) => (value === undefined || value === null ? '' : String(value).toLowerCase());
 
-  const originalOrder = dataRows.slice();
-  const originalIndex = new Map();
-  originalOrder.forEach((row, index) => {
-    originalIndex.set(row, index);
-  });
+  const hydrate = (node, level = 0, orderIndex = 0) => {
+    const abilityItems = Array.isArray(node.abilities) ? node.abilities : [];
+    const abilityLabels = abilityItems.map((ability) => ability.label || ability.raw || ability.slug || '');
+    const abilityDescriptions = abilityItems.map((ability) => ability.description || ability.raw || '');
+    const hydrated = {
+      ...node,
+      abilities: abilityItems,
+      level: Number.isFinite(node.level) ? Number(node.level) : level,
+      default_order: Number.isFinite(node.default_order) ? Number(node.default_order) : orderIndex,
+      nameSort:
+        typeof node.name_sort === 'string' && node.name_sort
+          ? node.name_sort
+          : normalizeText(node.name || ''),
+      abilitiesSort:
+        typeof node.abilities_sort === 'string' && node.abilities_sort
+          ? node.abilities_sort
+          : normalizeText(abilityLabels.join(' ')),
+      range_value: Number.isFinite(Number(node.range_value))
+        ? Number(node.range_value)
+        : normalizeRangeValue(node.range),
+      attacks_value: Number.isFinite(Number(node.attacks_value))
+        ? Number(node.attacks_value)
+        : Number(node.attacks ?? 0),
+      ap: Number.isFinite(Number(node.ap)) ? Number(node.ap) : Number(node.ap ?? 0),
+      cost: Number.isFinite(Number(node.cost)) ? Number(node.cost) : 0,
+      cost_display:
+        typeof node.cost_display === 'string' && node.cost_display
+          ? node.cost_display
+          : (Number.isFinite(Number(node.cost)) ? Number(node.cost).toFixed(2) : '0.00'),
+      overrides: { ...(node.overrides || {}) },
+      has_parent:
+        node.has_parent !== undefined
+          ? Boolean(node.has_parent)
+          : node.parent_id !== undefined && node.parent_id !== null,
+      parent_name: node.parent_name || '',
+    };
+    if (hydrated.attacks === undefined || hydrated.attacks === null) {
+      hydrated.attacks = Math.round(hydrated.attacks_value);
+    }
+    hydrated.searchText = normalizeText(
+      [
+        hydrated.name || '',
+        hydrated.range || '',
+        String(hydrated.attacks ?? ''),
+        String(hydrated.ap ?? ''),
+        hydrated.parent_name || '',
+        abilityLabels.join(' '),
+        abilityDescriptions.join(' '),
+      ]
+        .filter((part) => part && part.length)
+        .join(' '),
+    );
+    const childLevel = hydrated.level + 1;
+    hydrated.children = Array.isArray(node.children)
+      ? node.children.map((child, idx) =>
+          hydrate(
+            child,
+            Number.isFinite(child.level) ? Number(child.level) : childLevel,
+            Number.isFinite(child.default_order) ? Number(child.default_order) : idx,
+          ),
+        )
+      : [];
+    if (!nodeState.has(hydrated.id) && hydrated.children.length) {
+      nodeState.set(hydrated.id, { expanded: true });
+    }
+    return hydrated;
+  };
 
-  let currentOrder = dataRows.slice();
-  const headers = Array.from(table.querySelectorAll('th[data-sortable]'));
+  const treeData = Array.isArray(rawData)
+    ? rawData.map((node, index) =>
+        hydrate(
+          node,
+          Number.isFinite(node.level) ? Number(node.level) : 0,
+          Number.isFinite(node.default_order) ? Number(node.default_order) : index,
+        ),
+      )
+    : [];
 
-  dataRows.forEach((row) => {
-    row.dataset.filterText = normalizeText(row.textContent || '');
-  });
+  const restoreDefaultOrder = (nodes) => {
+    nodes.sort((a, b) => (a.default_order ?? 0) - (b.default_order ?? 0));
+    nodes.forEach((node) => {
+      if (Array.isArray(node.children) && node.children.length) {
+        restoreDefaultOrder(node.children);
+      }
+    });
+  };
 
-  const indicatorSymbols = { asc: '▲', desc: '▼' };
-  const sortState = { index: null, direction: 'none' };
+  const updateSortIndicators = () => {
+    const indicatorSymbols = { asc: '▲', desc: '▼' };
+    sortButtons.forEach((button) => {
+      const indicator = button.querySelector('.armory-tree-sort-indicator');
+      const key = button.dataset.sortKey;
+      const isActive = sortState.key === key && sortState.direction !== 'none';
+      button.dataset.sortDirection = isActive ? sortState.direction : 'none';
+      if (indicator) {
+        indicator.textContent = isActive ? indicatorSymbols[sortState.direction] || '' : '';
+      }
+    });
+  };
 
-  const placeRow = (row) => {
-    if (filterRow) {
-      tbody.insertBefore(row, filterRow);
-    } else if (staticEmptyRow) {
-      tbody.insertBefore(row, staticEmptyRow);
+  const sortAccessors = {
+    name: (node) => node.nameSort || '',
+    range: (node) => (Number.isFinite(node.range_value) ? node.range_value : 0),
+    attacks: (node) => (Number.isFinite(node.attacks_value) ? node.attacks_value : 0),
+    ap: (node) => (Number.isFinite(node.ap) ? node.ap : 0),
+    abilities: (node) => node.abilitiesSort || '',
+    cost: (node) => (Number.isFinite(node.cost) ? node.cost : 0),
+  };
+
+  const sortBranch = (nodes, comparator) => {
+    nodes.sort(comparator);
+    nodes.forEach((node) => {
+      if (Array.isArray(node.children) && node.children.length) {
+        sortBranch(node.children, comparator);
+      }
+    });
+  };
+
+  const applySort = () => {
+    if (!treeData.length) {
+      return;
+    }
+    if (sortState.direction === 'none' || !sortState.key) {
+      restoreDefaultOrder(treeData);
+      return;
+    }
+    restoreDefaultOrder(treeData);
+    const accessor = sortAccessors[sortState.key];
+    if (typeof accessor !== 'function') {
+      return;
+    }
+    const comparator = (a, b) => {
+      const rawA = accessor(a);
+      const rawB = accessor(b);
+      let result = 0;
+      if (sortState.type === 'number') {
+        const valueA = Number.isFinite(rawA) ? rawA : Number.NEGATIVE_INFINITY;
+        const valueB = Number.isFinite(rawB) ? rawB : Number.NEGATIVE_INFINITY;
+        result = valueA - valueB;
+      } else {
+        const textA = String(rawA || '');
+        const textB = String(rawB || '');
+        result = textA.localeCompare(textB, undefined, { sensitivity: 'base' });
+      }
+      if (result === 0) {
+        result = (a.default_order ?? 0) - (b.default_order ?? 0);
+      }
+      return sortState.direction === 'asc' ? result : -result;
+    };
+    sortBranch(treeData, comparator);
+  };
+
+  const computeVisibility = (nodes) => {
+    let visibleCount = 0;
+    nodes.forEach((node) => {
+      const childVisible = computeVisibility(Array.isArray(node.children) ? node.children : []);
+      const matches = !filterQuery || node.searchText.includes(filterQuery);
+      const isVisible = matches || childVisible > 0;
+      node._matches = matches;
+      node._visible = isVisible;
+      node._visibleChildren = childVisible;
+      if (isVisible) {
+        visibleCount += 1;
+      }
+    });
+    return visibleCount;
+  };
+
+  const createInheritanceLabel = (isOverridden) => {
+    const label = document.createElement('div');
+    label.className = 'text-muted small';
+    label.textContent = isOverridden ? 'Nadpisano' : 'Dziedziczone';
+    return label;
+  };
+
+  const renderNode = (node, rows) => {
+    if (!node._visible) {
+      return;
+    }
+    const isExpanded = filterQuery ? true : (nodeState.get(node.id)?.expanded !== false);
+    const row = document.createElement('div');
+    row.className = 'armory-tree-row row g-3 align-items-start px-3 py-3 border-bottom';
+    row.dataset.nodeId = String(node.id);
+
+    const nameCol = document.createElement('div');
+    nameCol.className = 'col-12 col-lg-3 d-flex flex-column gap-1';
+    const nameWrapper = document.createElement('div');
+    nameWrapper.className = 'd-flex align-items-center gap-2';
+    nameWrapper.style.paddingLeft = `${Math.max(0, node.level) * 1.5}rem`;
+
+    const toggleContainer = document.createElement('div');
+    toggleContainer.className = 'flex-shrink-0';
+    toggleContainer.style.width = '1.5rem';
+    if (Array.isArray(node.children) && node.children.length) {
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'btn btn-link btn-sm p-0 armory-tree-toggle';
+      toggle.innerHTML = `<span aria-hidden="true">${isExpanded ? '▾' : '▸'}</span>`;
+      toggle.setAttribute('aria-label', isExpanded ? 'Zwiń potomne' : 'Rozwiń potomne');
+      toggle.disabled = Boolean(filterQuery);
+      toggle.addEventListener('click', (event) => {
+        event.preventDefault();
+        const current = nodeState.get(node.id) || { expanded: true };
+        nodeState.set(node.id, { expanded: !current.expanded });
+        applyFilterAndRender();
+      });
+      toggleContainer.appendChild(toggle);
     } else {
-      tbody.appendChild(row);
+      const spacer = document.createElement('span');
+      spacer.style.display = 'inline-block';
+      spacer.style.width = '0.75rem';
+      spacer.style.height = '1rem';
+      toggleContainer.appendChild(spacer);
+    }
+    nameWrapper.appendChild(toggleContainer);
+
+    const nameText = document.createElement('span');
+    nameText.textContent = node.name || 'Bez nazwy';
+    nameWrapper.appendChild(nameText);
+    nameCol.appendChild(nameWrapper);
+    if (node.has_parent) {
+      nameCol.appendChild(createInheritanceLabel(Boolean(node.overrides?.name)));
+    }
+
+    const rangeCol = document.createElement('div');
+    rangeCol.className = 'col-6 col-sm-4 col-lg-1 d-flex flex-column gap-1';
+    const rangeValue = node.range && String(node.range).trim() ? node.range : '-';
+    const rangeText = document.createElement('span');
+    if (!node.range || !String(node.range).trim()) {
+      rangeText.className = 'text-muted';
+    }
+    rangeText.textContent = rangeValue;
+    rangeCol.appendChild(rangeText);
+    if (node.has_parent) {
+      rangeCol.appendChild(createInheritanceLabel(Boolean(node.overrides?.range)));
+    }
+
+    const attacksCol = document.createElement('div');
+    attacksCol.className = 'col-6 col-sm-4 col-lg-1 d-flex flex-column gap-1';
+    const attacksText = document.createElement('span');
+    attacksText.textContent = String(node.attacks ?? Math.round(node.attacks_value ?? 0));
+    attacksCol.appendChild(attacksText);
+    if (node.has_parent) {
+      attacksCol.appendChild(createInheritanceLabel(Boolean(node.overrides?.attacks)));
+    }
+
+    const apCol = document.createElement('div');
+    apCol.className = 'col-6 col-sm-4 col-lg-1 d-flex flex-column gap-1';
+    const apText = document.createElement('span');
+    apText.textContent = String(Number.isFinite(node.ap) ? node.ap : 0);
+    apCol.appendChild(apText);
+    if (node.has_parent) {
+      apCol.appendChild(createInheritanceLabel(Boolean(node.overrides?.ap)));
+    }
+
+    const abilitiesCol = document.createElement('div');
+    abilitiesCol.className = 'col-12 col-lg-3 d-flex flex-column gap-1 mt-2 mt-lg-0';
+    if (Array.isArray(node.abilities) && node.abilities.length) {
+      const abilityWrapper = document.createElement('div');
+      abilityWrapper.className = 'd-flex flex-wrap gap-1';
+      node.abilities.forEach((ability) => {
+        const badge = document.createElement('span');
+        badge.className = 'badge text-bg-secondary';
+        badge.textContent = ability.label || ability.raw || ability.slug || '-';
+        const title = ability.description || ability.raw || '';
+        if (title) {
+          badge.title = title;
+        }
+        abilityWrapper.appendChild(badge);
+      });
+      abilitiesCol.appendChild(abilityWrapper);
+    } else {
+      const empty = document.createElement('span');
+      empty.className = 'text-muted';
+      empty.textContent = '-';
+      abilitiesCol.appendChild(empty);
+    }
+    if (node.has_parent) {
+      abilitiesCol.appendChild(createInheritanceLabel(Boolean(node.overrides?.tags)));
+    }
+
+    const costCol = document.createElement('div');
+    costCol.className = 'col-6 col-sm-4 col-lg-1 d-flex flex-column gap-1 mt-2 mt-lg-0';
+    const costText = document.createElement('span');
+    costText.textContent = node.cost_display || Number(node.cost || 0).toFixed(2);
+    costCol.appendChild(costText);
+
+    const actionsCol = document.createElement('div');
+    actionsCol.className = 'col-12 col-lg-2 d-flex justify-content-lg-end mt-2 mt-lg-0';
+    if (canEdit) {
+      const group = document.createElement('div');
+      group.className = 'btn-group btn-group-sm';
+      const editLink = document.createElement('a');
+      editLink.className = 'btn btn-outline-secondary';
+      editLink.href = node.edit_url;
+      editLink.textContent = 'Edytuj';
+      group.appendChild(editLink);
+
+      const deleteForm = document.createElement('form');
+      deleteForm.method = 'post';
+      deleteForm.action = node.delete_url;
+      deleteForm.addEventListener('submit', (event) => {
+        if (!confirm('Usunąć broń?')) {
+          event.preventDefault();
+        }
+      });
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'submit';
+      deleteButton.className = 'btn btn-outline-danger';
+      deleteButton.textContent = 'Usuń';
+      deleteForm.appendChild(deleteButton);
+      group.appendChild(deleteForm);
+
+      actionsCol.appendChild(group);
+    } else {
+      const readonly = document.createElement('span');
+      readonly.className = 'text-muted small';
+      readonly.textContent = 'Tylko podgląd';
+      actionsCol.appendChild(readonly);
+    }
+
+    if (filterQuery && !node._matches && node._visibleChildren > 0) {
+      row.classList.add('text-muted');
+    }
+
+    row.appendChild(nameCol);
+    row.appendChild(rangeCol);
+    row.appendChild(attacksCol);
+    row.appendChild(apCol);
+    row.appendChild(abilitiesCol);
+    row.appendChild(costCol);
+    row.appendChild(actionsCol);
+    treeBody.appendChild(row);
+    rows.push(row);
+
+    const showChildren = Array.isArray(node.children) && node.children.length && (filterQuery ? true : isExpanded);
+    if (showChildren) {
+      node.children.forEach((child) => {
+        renderNode(child, rows);
+      });
     }
   };
 
-  const applyFilter = () => {
-    if (!filterInput) {
-      if (filterRow) {
-        filterRow.classList.add('d-none');
+  const renderTree = (visibleCount) => {
+    if (!treeBody) {
+      return;
+    }
+    treeBody.innerHTML = '';
+    sortButtons.forEach((button) => {
+      button.disabled = !treeData.length;
+    });
+    if (!treeData.length) {
+      if (filterInput) {
+        filterInput.disabled = true;
+        filterInput.placeholder = 'Brak pozycji do filtrowania';
+      }
+      if (emptyState) {
+        emptyState.classList.remove('d-none');
+      }
+      if (filterEmptyState) {
+        filterEmptyState.classList.add('d-none');
       }
       return;
     }
-    const query = normalizeText(filterInput.value || '');
-    let visible = 0;
-    currentOrder.forEach((row) => {
-      const haystack = row.dataset.filterText || '';
-      if (!query || haystack.includes(query)) {
-        row.style.removeProperty('display');
-        visible += 1;
-      } else {
-        row.style.display = 'none';
+    if (filterInput && filterInput.disabled) {
+      filterInput.disabled = false;
+      filterInput.placeholder = 'Wpisz nazwę, zdolność lub inną cechę';
+    }
+    if (filterQuery && visibleCount === 0) {
+      if (filterEmptyState) {
+        filterEmptyState.classList.remove('d-none');
       }
+      if (emptyState) {
+        emptyState.classList.add('d-none');
+      }
+      return;
+    }
+    if (emptyState) {
+      emptyState.classList.add('d-none');
+    }
+    if (filterEmptyState) {
+      filterEmptyState.classList.add('d-none');
+    }
+    const rows = [];
+    treeData.forEach((node) => {
+      renderNode(node, rows);
     });
-    if (filterRow) {
-      if (query && visible === 0) {
-        filterRow.classList.remove('d-none');
-      } else {
-        filterRow.classList.add('d-none');
-      }
+    if (rows.length) {
+      rows[rows.length - 1].classList.remove('border-bottom');
     }
   };
 
-  const updateIndicators = (activeIndex, direction) => {
-    headers.forEach((header, index) => {
-      const indicator = header.querySelector('.table-sort-indicator');
-      const isActive = index === activeIndex && direction !== 'none';
-      header.dataset.sortDirection = isActive ? direction : 'none';
-      if (indicator) {
-        indicator.textContent = isActive ? indicatorSymbols[direction] || '' : '';
-      }
-    });
+  const applyFilterAndRender = () => {
+    applySort();
+    const visibleCount = computeVisibility(treeData);
+    renderTree(visibleCount);
+    updateSortIndicators();
   };
 
-  const resetOrder = () => {
-    currentOrder = originalOrder.slice();
-    currentOrder.forEach((row) => {
-      placeRow(row);
-    });
-  };
-
-  const parseNumber = (value) => {
-    const normalized = String(value || '')
-      .replace(/,/g, '.')
-      .replace(/[^0-9+\-\.]/g, '')
-      .trim();
-    if (!normalized) {
-      return Number.NaN;
-    }
-    return Number.parseFloat(normalized);
-  };
-
-  const sortRows = (columnIndex, direction, type) => {
-    const sorted = currentOrder.slice().sort((a, b) => {
-      const cellA = a.querySelectorAll('td')[columnIndex];
-      const cellB = b.querySelectorAll('td')[columnIndex];
-      const rawA = cellA ? (cellA.dataset.sortValue ?? cellA.textContent ?? '') : '';
-      const rawB = cellB ? (cellB.dataset.sortValue ?? cellB.textContent ?? '') : '';
-      let compare = 0;
-      if (type === 'number') {
-        const numA = parseNumber(rawA);
-        const numB = parseNumber(rawB);
-        const safeA = Number.isNaN(numA) ? Number.NEGATIVE_INFINITY : numA;
-        const safeB = Number.isNaN(numB) ? Number.NEGATIVE_INFINITY : numB;
-        compare = safeA - safeB;
-      } else {
-        const textA = normalizeText(rawA);
-        const textB = normalizeText(rawB);
-        compare = textA.localeCompare(textB, undefined, { sensitivity: 'base' });
-      }
-      if (compare === 0) {
-        compare = (originalIndex.get(a) || 0) - (originalIndex.get(b) || 0);
-      }
-      return direction === 'asc' ? compare : -compare;
-    });
-    currentOrder = sorted;
-    currentOrder.forEach((row) => {
-      placeRow(row);
-    });
-  };
-
-  headers.forEach((header, index) => {
-    const trigger = header.querySelector('.table-sort-btn') || header;
-    const type = header.dataset.sortType || 'text';
-    trigger.addEventListener('click', (event) => {
+  sortButtons.forEach((button) => {
+    const sortKey = button.dataset.sortKey;
+    const sortType = button.dataset.sortType || 'text';
+    button.addEventListener('click', (event) => {
       event.preventDefault();
+      if (!treeData.length) {
+        return;
+      }
       let nextDirection = 'asc';
-      if (sortState.index === index) {
+      if (sortState.key === sortKey) {
         nextDirection = sortState.direction === 'asc' ? 'desc' : sortState.direction === 'desc' ? 'none' : 'asc';
       }
-      sortState.index = nextDirection === 'none' ? null : index;
+      sortState.key = nextDirection === 'none' ? null : sortKey;
       sortState.direction = nextDirection;
-      if (nextDirection === 'none') {
-        resetOrder();
-      } else {
-        sortRows(index, nextDirection, type);
-      }
-      updateIndicators(sortState.index ?? -1, nextDirection);
-      applyFilter();
+      sortState.type = sortType;
+      applyFilterAndRender();
     });
   });
 
   if (filterInput) {
     filterInput.addEventListener('input', () => {
-      applyFilter();
+      filterQuery = normalizeText(filterInput.value || '');
+      applyFilterAndRender();
     });
   }
 
-  resetOrder();
-  updateIndicators(-1, 'none');
-  applyFilter();
+  applyFilterAndRender();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -4895,5 +5690,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initRosterEditor();
   initWeaponDefaults();
   initSpellAbilityForms();
-  initArmoryWeaponTable();
+  initArmoryWeaponTree();
 });
