@@ -1470,7 +1470,77 @@ function initWeaponPicker(root) {
   const addButton = root.querySelector('.weapon-picker-add');
   const listEl = root.querySelector('.weapon-picker-list');
   const treeRoot = root.querySelector('[data-weapon-tree]');
+  if (treeRoot) {
+    treeRoot.setAttribute('tabindex', '-1');
+  }
   const pickerId = Math.random().toString(16).slice(2);
+
+  const treeContainer = root.querySelector('[data-weapon-tree-container]');
+  const treeTrigger = root.querySelector('[data-weapon-tree-trigger]');
+  const treeTriggerLabel = root.querySelector('[data-weapon-tree-label]');
+  const treePlaceholder =
+    (treeTrigger && treeTrigger.dataset.weaponTreePlaceholder) ||
+    (treeTriggerLabel && treeTriggerLabel.textContent?.trim()) ||
+    (treeTrigger && treeTrigger.textContent?.trim()) ||
+    'Wybierz broń';
+  const treeContainerId =
+    treeContainer && (treeContainer.id || `weapon-tree-container-${pickerId}`);
+  if (treeContainer && !treeContainer.id && treeContainerId) {
+    treeContainer.id = treeContainerId;
+  }
+  if (treeTrigger && treeContainerId) {
+    treeTrigger.setAttribute('aria-controls', treeContainerId);
+  }
+  if (treeTrigger) {
+    treeTrigger.dataset.weaponTreePlaceholder = treePlaceholder;
+  }
+  if (treeTriggerLabel) {
+    treeTriggerLabel.dataset.weaponTreePlaceholder = treePlaceholder;
+  }
+
+  let treeExpanded = !treeTrigger;
+
+  function syncTreeVisibility() {
+    if (!treeContainer || !treeTrigger) {
+      treeExpanded = true;
+      if (treeRoot) {
+        treeRoot.setAttribute('aria-hidden', 'false');
+      }
+      return;
+    }
+    treeContainer.hidden = !treeExpanded;
+    treeContainer.classList.toggle('d-none', !treeExpanded);
+    treeTrigger.setAttribute('aria-expanded', treeExpanded ? 'true' : 'false');
+    treeTrigger.classList.toggle('weapon-tree-trigger-open', treeExpanded);
+    if (treeRoot) {
+      treeRoot.setAttribute('aria-hidden', treeExpanded ? 'false' : 'true');
+    }
+  }
+
+  syncTreeVisibility();
+
+  if (treeTrigger && treeContainer) {
+    treeTrigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      treeExpanded = !treeExpanded;
+      syncTreeVisibility();
+      if (treeExpanded && treeRoot && typeof treeRoot.focus === 'function') {
+        treeRoot.focus();
+      }
+    });
+  }
+
+  if (treeRoot && treeTrigger && treeContainer) {
+    treeRoot.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        treeExpanded = false;
+        syncTreeVisibility();
+        if (typeof treeTrigger.focus === 'function') {
+          treeTrigger.focus();
+        }
+      }
+    });
+  }
 
   const weaponMap = new Map();
   const collapsedNodes = new Set();
@@ -1727,6 +1797,7 @@ function initWeaponPicker(root) {
       const collapsed = collapsedNodes.has(String(node.id));
       toggleBtn.textContent = collapsed ? '▸' : '▾';
       toggleBtn.setAttribute('aria-label', collapsed ? 'Rozwiń gałąź' : 'Zwiń gałąź');
+      toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       toggleBtn.addEventListener('click', (event) => {
         event.preventDefault();
         toggleNode(node.id);
@@ -1764,11 +1835,17 @@ function initWeaponPicker(root) {
       label.type = 'button';
       label.className =
         'btn btn-sm btn-outline-secondary weapon-tree-group flex-grow-1 text-start';
+      label.dataset.weaponSelect = String(node.id);
       label.textContent = node.name;
       label.title = node.path_text || node.name;
       label.addEventListener('click', (event) => {
         event.preventDefault();
-        toggleNode(node.id);
+        setSelectedNode(node.id, { allowGroup: true });
+      });
+      label.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        setSelectedNode(node.id, { allowGroup: true });
+        handleAdd();
       });
       row.appendChild(label);
     }
@@ -1829,6 +1906,34 @@ function initWeaponPicker(root) {
     treeRoot.appendChild(list);
   }
 
+  function updateTriggerLabel() {
+    if (!treeTrigger) {
+      return;
+    }
+    const labelElement = treeTriggerLabel || treeTrigger;
+    const placeholder =
+      treeTrigger.dataset.weaponTreePlaceholder ||
+      treeTriggerLabel?.dataset.weaponTreePlaceholder ||
+      treePlaceholder;
+    let labelText = placeholder;
+    let titleText = placeholder || '';
+    if (selectedWeaponId) {
+      const meta = getWeaponMeta(selectedWeaponId);
+      if (meta) {
+        labelText = meta.name || placeholder;
+        titleText = meta.pathText || meta.name || labelText;
+      }
+    }
+    if (labelElement) {
+      labelElement.textContent = labelText;
+    }
+    if (titleText) {
+      treeTrigger.title = titleText;
+    } else {
+      treeTrigger.removeAttribute('title');
+    }
+  }
+
   function updateSelectionState() {
     if (addButton) {
       if (treeRoot) {
@@ -1837,6 +1942,7 @@ function initWeaponPicker(root) {
         addButton.disabled = false;
       }
     }
+    updateTriggerLabel();
     if (!treeRoot) {
       return;
     }
@@ -1852,7 +1958,7 @@ function initWeaponPicker(root) {
     });
   }
 
-  function setSelectedNode(weaponId) {
+  function setSelectedNode(weaponId, options = {}) {
     const key = String(weaponId ?? '');
     if (!key) {
       selectedWeaponId = null;
@@ -1860,7 +1966,11 @@ function initWeaponPicker(root) {
       return;
     }
     const meta = weaponMap.get(key);
-    if (!meta || !meta.is_leaf) {
+    if (!meta) {
+      return;
+    }
+    const allowGroup = Boolean(options && options.allowGroup);
+    if (!meta.is_leaf && !allowGroup) {
       return;
     }
     selectedWeaponId = key;

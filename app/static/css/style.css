@@ -137,6 +137,62 @@ body {
   width: 4.5rem;
 }
 
+.weapon-picker-tree-wrapper {
+  position: relative;
+}
+
+.weapon-picker-tree-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: calc(2.25rem + 2px);
+  padding: 0.375rem 0.75rem;
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background-color: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  line-height: 1.5;
+  font-size: 1rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  appearance: none;
+  text-align: left;
+}
+
+.weapon-picker-tree-trigger:hover {
+  border-color: var(--bs-primary);
+}
+
+.weapon-picker-tree-trigger:focus-visible {
+  outline: none;
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb, 13, 110, 253), 0.25);
+}
+
+.weapon-picker-tree-trigger.weapon-tree-trigger-open {
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb, 13, 110, 253), 0.25);
+}
+
+.weapon-picker-tree-trigger-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.weapon-picker-tree-trigger-caret {
+  transition: transform 0.2s ease-in-out;
+}
+
+.weapon-picker-tree-trigger.weapon-tree-trigger-open
+  .weapon-picker-tree-trigger-caret {
+  transform: rotate(180deg);
+}
+
 .roster-count-input {
   max-width: 5rem;
 }
