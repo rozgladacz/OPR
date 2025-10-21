@@ -657,28 +657,83 @@ def copy_armory(
             raise HTTPException(status_code=403, detail="Tylko administrator może tworzyć globalne zbrojownie")
         owner_id = None
 
-    new_armory = models.Armory(name=cleaned_name, owner_id=owner_id)
+    new_armory = models.Armory(
+        name=cleaned_name,
+        owner_id=owner_id,
+        parent=source.parent if source.parent_id is not None else None,
+    )
     db.add(new_armory)
     db.flush()
 
-    weapon_collection = _armory_weapons(db, source)
-    for weapon in weapon_collection.items:
-        clone = models.Weapon(
-            armory=new_armory,
-            owner_id=new_armory.owner_id,
-            name=weapon.effective_name,
-            range=weapon.effective_range,
-            attacks=weapon.effective_attacks,
-            ap=weapon.effective_ap,
-            tags=weapon.effective_tags,
-            notes=weapon.effective_notes,
+    if source.parent_id is not None:
+        utils.ensure_armory_variant_sync(db, new_armory)
+        db.flush()
+
+        source_weapons = (
+            db.execute(select(models.Weapon).where(models.Weapon.armory_id == source.id))
+            .scalars()
+            .all()
         )
-        cached_cost = weapon.effective_cached_cost
-        if cached_cost is not None:
+        new_variant_weapons = (
+            db.execute(
+                select(models.Weapon).where(models.Weapon.armory_id == new_armory.id)
+            )
+            .scalars()
+            .all()
+        )
+        new_weapons_by_parent = {
+            weapon.parent_id: weapon
+            for weapon in new_variant_weapons
+            if weapon.parent_id is not None
+        }
+
+        for weapon in source_weapons:
+            if weapon.parent_id is not None:
+                clone = new_weapons_by_parent.get(weapon.parent_id)
+                if not clone:
+                    continue
+                for field in OVERRIDABLE_FIELDS:
+                    setattr(clone, field, getattr(weapon, field))
+                clone.cached_cost = weapon.cached_cost
+                continue
+
+            clone = models.Weapon(
+                armory=new_armory,
+                owner_id=new_armory.owner_id,
+                name=weapon.name,
+                range=weapon.range,
+                attacks=weapon.attacks,
+                ap=weapon.ap,
+                tags=weapon.tags,
+                notes=weapon.notes,
+            )
+            cached_cost = weapon.cached_cost
+            if cached_cost is None:
+                cached_cost = costs.weapon_cost(clone)
             clone.cached_cost = cached_cost
-        else:
-            clone.cached_cost = costs.weapon_cost(clone)
-        db.add(clone)
+            db.add(clone)
+
+        utils.ensure_armory_variant_sync(db, new_armory)
+        db.flush()
+    else:
+        weapon_collection = _armory_weapons(db, source)
+        for weapon in weapon_collection.items:
+            clone = models.Weapon(
+                armory=new_armory,
+                owner_id=new_armory.owner_id,
+                name=weapon.effective_name,
+                range=weapon.effective_range,
+                attacks=weapon.effective_attacks,
+                ap=weapon.effective_ap,
+                tags=weapon.effective_tags,
+                notes=weapon.effective_notes,
+            )
+            cached_cost = weapon.effective_cached_cost
+            if cached_cost is not None:
+                clone.cached_cost = cached_cost
+            else:
+                clone.cached_cost = costs.weapon_cost(clone)
+            db.add(clone)
 
     db.commit()
     return RedirectResponse(url=f"/armories/{new_armory.id}", status_code=303)
