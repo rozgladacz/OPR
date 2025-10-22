@@ -528,6 +528,16 @@ def view_armory(
     weapon_tree = weapon_collection.payload
     _refresh_costs(db, weapons)
 
+    selected_weapon_id: int | None = None
+    selected_weapon_param = request.query_params.get("selected_weapon")
+    if selected_weapon_param:
+        try:
+            candidate = int(selected_weapon_param)
+        except (TypeError, ValueError):
+            candidate = None
+        if candidate is not None and any(weapon.id == candidate for weapon in weapons):
+            selected_weapon_id = candidate
+
     parent_chain = _parent_chain(armory)
     can_edit = current_user.is_admin or armory.owner_id == current_user.id
     can_delete = can_edit and not armory.variants and not armory.armies
@@ -564,6 +574,7 @@ def view_armory(
             "parent_chain": list(reversed(parent_chain)),
             "form_values": _weapon_form_values(None),
             "error": None,
+            "selected_weapon_id": selected_weapon_id,
         },
     )
 
@@ -937,6 +948,7 @@ def edit_weapon_form(
             "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
 
             "error": None,
+            "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
         },
     )
 
@@ -989,6 +1001,7 @@ def update_weapon(
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
 
                 "error": "Nazwa broni jest wymagana.",
+                "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
             },
         )
 
@@ -1017,6 +1030,7 @@ def update_weapon(
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
 
                 "error": str(exc),
+                "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
             },
         )
 
@@ -1131,7 +1145,10 @@ def update_weapon(
 
     _update_weapon_cost(weapon)
     db.commit()
-    return RedirectResponse(url=f"/armories/{armory.id}", status_code=303)
+    selected_param = f"?selected_weapon={weapon.id}" if weapon.id is not None else ""
+    return RedirectResponse(
+        url=f"/armories/{armory.id}{selected_param}", status_code=303
+    )
 
 
 @router.post("/{armory_id}/weapons/{weapon_id}/delete")
