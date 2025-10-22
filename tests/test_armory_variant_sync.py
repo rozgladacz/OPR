@@ -36,6 +36,32 @@ def _session():
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)()
 
 
+def test_child_weapon_inherits_attacks_from_parent():
+    session = _session()
+    try:
+        base_armory = models.Armory(name="Base")
+        variant_armory = models.Armory(name="Variant", parent=base_armory)
+
+        parent_weapon = models.Weapon(
+            armory=base_armory,
+            name="Ancestral Blade",
+            attacks=5,
+        )
+        child_weapon = models.Weapon(
+            armory=variant_armory,
+            parent=parent_weapon,
+            name="Ancestral Blade Mk II",
+        )
+
+        session.add_all([base_armory, variant_armory, parent_weapon, child_weapon])
+        session.flush()
+
+        assert child_weapon.attacks is None
+        assert child_weapon.effective_attacks == pytest.approx(5)
+    finally:
+        session.close()
+
+
 def _tree_parent_lookup(nodes):
     lookup: dict[int, int | None] = {}
 
