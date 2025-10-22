@@ -1780,7 +1780,7 @@ function initWeaponPicker(root) {
       if (!node) {
         return;
       }
-      if (node.depth >= 2 && node.has_children) {
+      if (node.has_children) {
         collapsedNodes.add(String(node.id));
       }
       initializeCollapsedState(node.children);
