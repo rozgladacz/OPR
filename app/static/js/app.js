@@ -1509,7 +1509,19 @@ function initWeaponPicker(root) {
     if (!(target instanceof Node)) {
       return;
     }
-    if (treeExpanded && !root.contains(target)) {
+    if (treeExpanded) {
+      const safeElements = [treeContainer];
+      const caret = root.querySelector('.weapon-picker-tree-trigger-caret');
+      if (caret && !safeElements.includes(caret)) {
+        safeElements.push(caret);
+      }
+      const isInsideTree = safeElements.some(
+        (element) => element instanceof Node && element.contains(target),
+      );
+      if (isInsideTree) {
+        return;
+      }
+
       treeExpanded = false;
       syncTreeVisibility();
       if (typeof treeTrigger.focus === 'function') {
