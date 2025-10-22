@@ -1499,16 +1499,47 @@ function initWeaponPicker(root) {
   }
 
   let treeExpanded = !treeTrigger;
+  let outsidePointerAttached = false;
+
+  function handleOutsidePointer(event) {
+    if (!treeExpanded || !treeTrigger || !treeContainer) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Node)) {
+      return;
+    }
+    if (treeExpanded && !root.contains(target)) {
+      treeExpanded = false;
+      syncTreeVisibility();
+      if (typeof treeTrigger.focus === 'function') {
+        treeTrigger.focus();
+      }
+    }
+  }
 
   function syncTreeVisibility() {
     if (!treeContainer || !treeTrigger) {
       treeExpanded = true;
+      if (outsidePointerAttached) {
+        document.removeEventListener('pointerdown', handleOutsidePointer, true);
+        outsidePointerAttached = false;
+      }
       if (treeRoot) {
         treeRoot.setAttribute('aria-hidden', 'false');
       }
       return;
     }
     const expanded = Boolean(treeExpanded);
+    if (expanded) {
+      if (!outsidePointerAttached) {
+        document.addEventListener('pointerdown', handleOutsidePointer, true);
+        outsidePointerAttached = true;
+      }
+    } else if (outsidePointerAttached) {
+      document.removeEventListener('pointerdown', handleOutsidePointer, true);
+      outsidePointerAttached = false;
+    }
     treeContainer.hidden = !expanded;
     treeContainer.classList.toggle('d-none', !expanded);
     treeContainer.classList.toggle('weapon-tree-container-open', expanded);
