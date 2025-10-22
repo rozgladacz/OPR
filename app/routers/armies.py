@@ -366,14 +366,63 @@ def _weapon_tree_payload(weapons: list[models.Weapon]) -> dict[str, object]:
             "is_leaf": True,
         }
 
+    source_node_map: dict[int, dict[str, object]] = {}
+    for weapon in weapons:
+        node = nodes.get(weapon.id)
+        if not node:
+            continue
+        parent = weapon.parent
+        if (
+            parent
+            and parent.id is not None
+            and getattr(parent, "armory_id", None) != weapon.armory_id
+        ):
+            visited_sources: set[int] = set()
+            current = parent
+            while current is not None:
+                source_id = getattr(current, "id", None)
+                if source_id is None or source_id in visited_sources:
+                    break
+                visited_sources.add(source_id)
+                source_node_map.setdefault(source_id, node)
+                current = getattr(current, "parent", None)
+
     roots: list[dict[str, object]] = []
     for weapon in weapons:
         node = nodes[weapon.id]
         parent_id = weapon.parent_id
+        parent_node: dict[str, object] | None = None
         if parent_id is not None and parent_id in nodes:
             parent_node = nodes[parent_id]
-            parent_children = parent_node.setdefault("children", [])
-            parent_children.append(node)
+        else:
+            local_parent: dict[str, object] | None = None
+            parent = weapon.parent
+            if parent_id and parent is not None:
+                visited_sources: set[int] = set()
+                current = parent
+                while current is not None:
+                    source_id = getattr(current, "id", None)
+                    if source_id is None or source_id in visited_sources:
+                        break
+                    visited_sources.add(source_id)
+                    candidate = source_node_map.get(source_id)
+                    if candidate and candidate is not node:
+                        local_parent = candidate
+                        break
+                    current = getattr(current, "parent", None)
+            if local_parent is not None:
+                parent_node = local_parent
+                parent_id_value = parent_node.get("id")
+                try:
+                    parent_id = int(parent_id_value) if parent_id_value is not None else None
+                except (TypeError, ValueError):
+                    parent_id = None
+            else:
+                parent_id = None
+
+        node["parent_id"] = parent_id
+        if parent_node is not None:
+            parent_node.setdefault("children", []).append(node)
         else:
             roots.append(node)
 
