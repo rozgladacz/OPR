@@ -90,7 +90,7 @@ class Weapon(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     range: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    attacks: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=1.0)
+    attacks: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     ap: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0)
     tags: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
