@@ -2235,17 +2235,6 @@ function initWeaponPicker(root) {
 
       nameWrapper.appendChild(nameRow);
 
-      const pathText =
-        item.path_text ||
-        weaponMap.get(String(item.weapon_id))?.path_text ||
-        '';
-      if (pathText && pathText !== nameLabel.textContent) {
-        const pathInfo = document.createElement('span');
-        pathInfo.className = 'text-muted small';
-        pathInfo.textContent = pathText;
-        nameWrapper.appendChild(pathInfo);
-      }
-
       const defaultGroup = document.createElement('div');
       defaultGroup.className = 'd-flex align-items-center gap-2 weapon-default-group';
       const defaultLabel = document.createElement('label');
