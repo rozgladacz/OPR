@@ -332,7 +332,15 @@ def _weapon_tree_payload(weapon_rows: Iterable[dict]) -> list[dict]:
             and parent.id is not None
             and getattr(parent, "armory_id", None) != weapon.armory_id
         ):
-            source_node_map.setdefault(parent.id, node)
+            visited_sources: set[int] = set()
+            current = parent
+            while current is not None:
+                source_id = getattr(current, "id", None)
+                if source_id is None or source_id in visited_sources:
+                    break
+                visited_sources.add(source_id)
+                source_node_map.setdefault(source_id, node)
+                current = getattr(current, "parent", None)
 
     for entry in weapon_rows:
         weapon = entry.get("instance")
@@ -359,7 +367,7 @@ def _weapon_tree_payload(weapon_rows: Iterable[dict]) -> list[dict]:
                     if candidate and candidate is not node:
                         local_parent = candidate
                         break
-                    current = current.parent
+                    current = getattr(current, "parent", None)
             if local_parent is not None:
                 local_parent.setdefault("children", []).append(node)
             else:

@@ -79,9 +79,16 @@ def _build_weapon_tree(
             parent
             and parent.id is not None
             and getattr(parent, "armory_id", None) != weapon.armory_id
-            and parent.id not in source_weapon_map
         ):
-            source_weapon_map[parent.id] = weapon
+            visited_sources: set[int] = set()
+            current = parent
+            while current is not None:
+                source_id = getattr(current, "id", None)
+                if source_id is None or source_id in visited_sources:
+                    break
+                visited_sources.add(source_id)
+                source_weapon_map.setdefault(source_id, weapon)
+                current = getattr(current, "parent", None)
 
     for weapon in weapons:
         parent_id = weapon.parent_id
@@ -102,7 +109,7 @@ def _build_weapon_tree(
                     if candidate is not None and candidate is not weapon:
                         assigned_parent_id = candidate.id
                         break
-                    current = current.parent
+                    current = getattr(current, "parent", None)
         if assigned_parent_id is not None and assigned_parent_id in weapon_map:
             children_map.setdefault(assigned_parent_id, []).append(weapon)
         else:
