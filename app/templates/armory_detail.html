@@ -123,6 +123,7 @@
   id="armory-weapons-tree"
   data-weapons='{{ (weapon_tree or []) | tojson }}'
   data-can-edit="{{ 'true' if can_edit else 'false' }}"
+  data-highlight-weapon="{{ selected_weapon_id | default('', true) }}"
 >
   <div class="bg-body-tertiary border-bottom">
     <div class="row g-0 align-items-center small fw-semibold text-uppercase px-3 py-2">

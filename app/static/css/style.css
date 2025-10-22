@@ -209,6 +209,13 @@ body {
   outline: none;
 }
 
+.armory-tree-row.armory-tree-highlight {
+  background-color: var(--bs-warning-bg-subtle, #fff3cd);
+  border-color: var(--bs-warning-border-subtle, rgba(217, 164, 6, 0.5)) !important;
+  box-shadow: inset 0 0 0 1px var(--bs-warning-border-subtle, rgba(217, 164, 6, 0.5));
+  scroll-margin-top: 4rem;
+}
+
 .print-header,
 .print-footer {
   text-align: center;

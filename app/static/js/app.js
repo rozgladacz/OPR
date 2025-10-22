@@ -5395,6 +5395,10 @@ function initArmoryWeaponTree() {
   const filterInput = document.getElementById('weapons-filter');
   const sortButtons = Array.from(root.querySelectorAll('[data-sort-key]'));
   const canEdit = root.dataset.canEdit === 'true';
+  const highlightWeaponId = root.dataset.highlightWeapon ? String(root.dataset.highlightWeapon) : '';
+
+  let highlightRow = null;
+  let highlightScrollPending = Boolean(highlightWeaponId);
 
   let rawData;
   try {
@@ -5410,7 +5414,9 @@ function initArmoryWeaponTree() {
     ? (value) => normalizeName(value || '')
     : (value) => (value === undefined || value === null ? '' : String(value).toLowerCase());
 
-  const hydrate = (node, level = 0, orderIndex = 0) => {
+  const nodeLookup = new Map();
+
+  const hydrate = (node, level = 0, orderIndex = 0, parentId = null) => {
     const abilityItems = Array.isArray(node.abilities) ? node.abilities : [];
     const abilityLabels = abilityItems.map((ability) => ability.label || ability.raw || ability.slug || '');
     const abilityDescriptions = abilityItems.map((ability) => ability.description || ability.raw || '');
@@ -5440,6 +5446,12 @@ function initArmoryWeaponTree() {
           ? node.cost_display
           : (Number.isFinite(Number(node.cost)) ? Number(node.cost).toFixed(2) : '0.00'),
       overrides: { ...(node.overrides || {}) },
+      parent_id:
+        node.parent_id !== undefined && node.parent_id !== null
+          ? node.parent_id
+          : parentId !== undefined && parentId !== null
+            ? parentId
+            : null,
       has_parent:
         node.has_parent !== undefined
           ? Boolean(node.has_parent)
@@ -5462,6 +5474,8 @@ function initArmoryWeaponTree() {
         .filter((part) => part && part.length)
         .join(' '),
     );
+    nodeLookup.set(String(hydrated.id), hydrated);
+
     const childLevel = hydrated.level + 1;
     hydrated.children = Array.isArray(node.children)
       ? node.children.map((child, idx) =>
@@ -5469,6 +5483,7 @@ function initArmoryWeaponTree() {
             child,
             Number.isFinite(child.level) ? Number(child.level) : childLevel,
             Number.isFinite(child.default_order) ? Number(child.default_order) : idx,
+            hydrated.id,
           ),
         )
       : [];
@@ -5484,9 +5499,24 @@ function initArmoryWeaponTree() {
           node,
           Number.isFinite(node.level) ? Number(node.level) : 0,
           Number.isFinite(node.default_order) ? Number(node.default_order) : index,
+          node.parent_id !== undefined && node.parent_id !== null ? node.parent_id : null,
         ),
       )
     : [];
+
+  if (highlightWeaponId && nodeLookup.has(highlightWeaponId)) {
+    const visited = new Set();
+    let current = nodeLookup.get(highlightWeaponId);
+    while (current && current.parent_id !== null && !visited.has(current.id)) {
+      visited.add(current.id);
+      const parentId = current.parent_id;
+      const state = nodeState.get(parentId) || {};
+      if (state.expanded === false) {
+        nodeState.set(parentId, { ...state, expanded: true });
+      }
+      current = nodeLookup.get(String(parentId));
+    }
+  }
 
   const restoreDefaultOrder = (nodes) => {
     nodes.sort((a, b) => (a.default_order ?? 0) - (b.default_order ?? 0));
@@ -5596,6 +5626,11 @@ function initArmoryWeaponTree() {
     const row = document.createElement('div');
     row.className = 'armory-tree-row row g-3 align-items-start px-3 py-3 border-bottom';
     row.dataset.nodeId = String(node.id);
+
+    if (highlightWeaponId && String(node.id) === highlightWeaponId) {
+      row.classList.add('armory-tree-highlight');
+      highlightRow = row;
+    }
 
     const nameCol = document.createElement('div');
     nameCol.className = 'col-12 col-lg-3 d-flex flex-column gap-1';
@@ -5800,11 +5835,21 @@ function initArmoryWeaponTree() {
       filterEmptyState.classList.add('d-none');
     }
     const rows = [];
+    highlightRow = null;
     treeData.forEach((node) => {
       renderNode(node, rows);
     });
     if (rows.length) {
       rows[rows.length - 1].classList.remove('border-bottom');
+    }
+
+    if (highlightRow && highlightScrollPending) {
+      highlightScrollPending = false;
+      if (typeof highlightRow.scrollIntoView === 'function') {
+        requestAnimationFrame(() => {
+          highlightRow.scrollIntoView({ block: 'center' });
+        });
+      }
     }
   };
 
