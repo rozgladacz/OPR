@@ -211,7 +211,7 @@ def _update_weapon_cost(weapon: models.Weapon) -> bool:
             weapon.cached_cost = None
             return True
         return False
-    recalculated = costs.weapon_cost(weapon)
+    recalculated = costs.weapon_cost(weapon, use_cached=False)
     if weapon.cached_cost is None or not math.isclose(
         weapon.cached_cost, recalculated, rel_tol=1e-9, abs_tol=1e-9
     ):

@@ -869,6 +869,8 @@ def weapon_cost(
     weapon: models.Weapon,
     unit_quality: int = 4,
     unit_flags: dict | Sequence[str] | None = None,
+    *,
+    use_cached: bool = True,
 ) -> float:
     if isinstance(unit_flags, dict):
         unit_traits = flags_to_ability_list(unit_flags)
@@ -878,7 +880,7 @@ def weapon_cost(
         unit_traits = list(unit_flags)
 
     # Standard armory views should reuse cached weapon costs when possible.
-    if unit_quality == 4 and not unit_traits:
+    if use_cached and unit_quality == 4 and not unit_traits:
         cached = getattr(weapon, "effective_cached_cost", None)
         if isinstance(cached, (int, float)) and math.isfinite(cached):
             return round(max(float(cached), 0.0), 2)
