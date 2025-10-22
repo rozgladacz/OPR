@@ -492,6 +492,71 @@ def test_multi_generation_variant_weapon_tree_preserves_structure():
         session.close()
 
 
+def test_army_weapon_tree_payload_resolves_variant_parents():
+    session = _session()
+    try:
+        base_armory = models.Armory(name="Base")
+        middle_armory = models.Armory(name="Variant A", parent=base_armory)
+        final_armory = models.Armory(name="Variant B", parent=middle_armory)
+
+        session.add_all([base_armory, middle_armory, final_armory])
+        session.flush()
+
+        base_root = models.Weapon(armory=base_armory, name="Root Weapon")
+        base_child = models.Weapon(armory=base_armory, name="Child Weapon", parent=base_root)
+        session.add_all([base_root, base_child])
+        session.flush()
+
+        utils.ensure_armory_variant_sync(session, middle_armory)
+        utils.ensure_armory_variant_sync(session, final_armory)
+        session.flush()
+
+        middle_weapons = (
+            session.execute(
+                select(models.Weapon)
+                .where(models.Weapon.armory_id == middle_armory.id)
+                .order_by(models.Weapon.id)
+            )
+            .scalars()
+            .all()
+        )
+        final_weapons = (
+            session.execute(
+                select(models.Weapon)
+                .where(models.Weapon.armory_id == final_armory.id)
+                .order_by(models.Weapon.id)
+            )
+            .scalars()
+            .all()
+        )
+
+        assert len(middle_weapons) == 2
+        assert len(final_weapons) == 2
+
+        middle_root, middle_child = middle_weapons
+        final_root = next(
+            weapon for weapon in final_weapons if weapon.parent_id == middle_root.id
+        )
+        final_child = next(
+            weapon for weapon in final_weapons if weapon.parent_id == middle_child.id
+        )
+
+        payload = armies_router._weapon_tree_payload(final_weapons)
+        tree_lookup = _tree_parent_lookup(payload["tree"])
+        flat_lookup = {entry["id"]: entry for entry in payload["flat"]}
+
+        assert tree_lookup[final_root.id] is None
+        assert tree_lookup[final_child.id] == final_root.id
+
+        child_flat = flat_lookup[final_child.id]
+        assert child_flat["parent_id"] == final_root.id
+        assert child_flat["depth"] == 1
+        assert child_flat["path"][0] == final_root.id
+        assert child_flat["path"][-1] == final_child.id
+    finally:
+        session.close()
+
+
 def test_copy_variant_preserves_parent_relationship():
     session = _session()
     try:
