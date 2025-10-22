@@ -36,6 +36,18 @@ def _session():
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)()
 
 
+def _tree_parent_lookup(nodes):
+    lookup: dict[int, int | None] = {}
+
+    def _visit(children, parent_id):
+        for child in children:
+            lookup[child["id"]] = parent_id
+            _visit(child.get("children", []), child["id"])
+
+    _visit(nodes, None)
+    return lookup
+
+
 def test_variant_inherits_new_weapon_without_overrides():
     session = _session()
     try:
@@ -386,6 +398,96 @@ def test_variant_weapon_tree_preserves_parent_structure():
             assert (
                 payload_parent_lookup.get(clone.id) == expected_parent_id
             ), "Weapon tree payload should mirror base structure"
+    finally:
+        session.close()
+
+
+def test_multi_generation_variant_weapon_tree_preserves_structure():
+    session = _session()
+    try:
+        base_armory = models.Armory(name="Armory A")
+        middle_armory = models.Armory(name="Armory B", parent=base_armory)
+        final_armory = models.Armory(name="Armory C", parent=middle_armory)
+
+        session.add_all([base_armory, middle_armory, final_armory])
+        session.flush()
+
+        base_root = models.Weapon(armory=base_armory, name="Ancestor Blade")
+        base_child = models.Weapon(
+            armory=base_armory, name="Ancestor Blade Mk II", parent=base_root
+        )
+        base_grandchild = models.Weapon(
+            armory=base_armory,
+            name="Ancestor Blade Mk III",
+            parent=base_child,
+        )
+        session.add_all([base_root, base_child, base_grandchild])
+        session.flush()
+
+        utils.ensure_armory_variant_sync(session, middle_armory)
+        utils.ensure_armory_variant_sync(session, final_armory)
+        session.flush()
+
+        collection_middle = armories_router._armory_weapons(session, middle_armory)
+        collection_final = armories_router._armory_weapons(session, final_armory)
+
+        def _payload(collection):
+            return armories_router._weapon_tree_payload(
+                [
+                    {
+                        "instance": weapon,
+                        "overrides": {},
+                        "cost": 0,
+                        "abilities": [],
+                    }
+                    for weapon in collection.items
+                ]
+            )
+
+        payload_middle = _payload(collection_middle)
+        payload_final = _payload(collection_final)
+
+        expected_relations = {
+            "Ancestor Blade": None,
+            "Ancestor Blade Mk II": "Ancestor Blade",
+            "Ancestor Blade Mk III": "Ancestor Blade Mk II",
+        }
+
+        def _assert_structure(collection, payload):
+            clones_by_name = {
+                weapon.effective_name: weapon
+                for weapon in collection.items
+                if weapon.effective_name in expected_relations
+            }
+
+            assert set(clones_by_name) == set(expected_relations), (
+                "Expected clones for every ancestor weapon in the variant armory"
+            )
+
+            tree_lookup = _tree_parent_lookup(collection.tree)
+            payload_lookup = _tree_parent_lookup(payload)
+
+            for name, expected_parent_name in expected_relations.items():
+                clone = clones_by_name.get(name)
+                assert clone is not None, f"Missing clone for weapon {name!r}"
+
+                expected_parent_id = None
+                if expected_parent_name is not None:
+                    parent_clone = clones_by_name.get(expected_parent_name)
+                    assert parent_clone is not None, (
+                        f"Missing expected parent clone {expected_parent_name!r}"
+                    )
+                    expected_parent_id = parent_clone.id
+
+                assert (
+                    tree_lookup.get(clone.id) == expected_parent_id
+                ), "ArmoryWeaponCollection tree should preserve nested structure"
+                assert (
+                    payload_lookup.get(clone.id) == expected_parent_id
+                ), "Weapon tree payload should preserve nested structure"
+
+        _assert_structure(collection_middle, payload_middle)
+        _assert_structure(collection_final, payload_final)
     finally:
         session.close()
 
