@@ -5473,7 +5473,7 @@ function initArmoryWeaponTree() {
         )
       : [];
     if (!nodeState.has(hydrated.id) && hydrated.children.length) {
-      nodeState.set(hydrated.id, { expanded: true });
+      nodeState.set(hydrated.id, { expanded: false });
     }
     return hydrated;
   };
