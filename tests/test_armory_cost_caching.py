@@ -92,7 +92,7 @@ def test_refresh_costs_only_updates_missing_entries(monkeypatch):
 
         recorded_calls: list[str] = []
 
-        def fake_weapon_cost(weapon: models.Weapon) -> float:
+        def fake_weapon_cost(weapon: models.Weapon, **kwargs) -> float:
             recorded_calls.append(weapon.name or "")
             return {"Missing": 11.0, "Invalid": 12.0}.get(weapon.name or "", 0.0)
 
@@ -130,7 +130,7 @@ def test_view_armory_uses_cached_cost_without_recomputation(monkeypatch):
 
         recorded_calls: list[int] = []
 
-        def fake_weapon_cost(weapon: models.Weapon) -> float:
+        def fake_weapon_cost(weapon: models.Weapon, **kwargs) -> float:
             recorded_calls.append(weapon.id or -1)
             return 99.0
 
@@ -177,7 +177,7 @@ def test_view_variant_armory_uses_parent_cached_cost(monkeypatch):
 
         recorded_calls: list[int] = []
 
-        def fake_weapon_cost(weapon: models.Weapon) -> float:
+        def fake_weapon_cost(weapon: models.Weapon, **kwargs) -> float:
             recorded_calls.append(weapon.id or -1)
             return 99.0
 
@@ -224,7 +224,7 @@ def test_view_armory_falls_back_to_cost_when_cache_missing(monkeypatch):
 
         recorded_calls: list[int] = []
 
-        def fake_weapon_cost(weapon: models.Weapon) -> float:
+        def fake_weapon_cost(weapon: models.Weapon, **kwargs) -> float:
             recorded_calls.append(weapon.id or -1)
             return 21.0
 
@@ -241,3 +241,34 @@ def test_view_armory_falls_back_to_cost_when_cache_missing(monkeypatch):
         assert weapon_rows[0]["cost"] == pytest.approx(21.0)
     finally:
         session.close()
+
+
+def test_variant_creation_recalculates_cost(monkeypatch):
+    parent_weapon = models.Weapon(
+        name="Parent",
+        range="12",
+        attacks=2,
+        ap=0,
+        cached_cost=41.0,
+    )
+
+    variant_weapon = models.Weapon(
+        parent=parent_weapon,
+        range="24",
+        attacks=3,
+        ap=1,
+    )
+
+    recorded_calls: list[dict] = []
+
+    def fake_weapon_cost(weapon: models.Weapon, **kwargs) -> float:
+        recorded_calls.append(kwargs)
+        return 17.5
+
+    monkeypatch.setattr(armories_router.costs, "weapon_cost", fake_weapon_cost)
+
+    updated = armories_router._update_weapon_cost(variant_weapon)
+
+    assert updated is True
+    assert variant_weapon.cached_cost == pytest.approx(17.5)
+    assert recorded_calls == [{"use_cached": False}]

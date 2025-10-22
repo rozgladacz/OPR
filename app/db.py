@@ -556,7 +556,7 @@ def init_db() -> None:
                     owner_id=default_armory.owner_id,
                     armory=default_armory,
                 )
-                weapon.cached_cost = costs.weapon_cost(weapon)
+                weapon.cached_cost = costs.weapon_cost(weapon, use_cached=False)
                 weapons.append(weapon)
 
             session.add_all(weapons)
