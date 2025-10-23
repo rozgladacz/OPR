@@ -2437,6 +2437,12 @@ function createRosterItemElement(data, options = {}) {
   const unitQuality = data.unit_quality !== undefined ? data.unit_quality : '-';
   const unitDefense = data.unit_defense !== undefined ? data.unit_defense : '-';
   const unitToughness = data.unit_toughness !== undefined ? data.unit_toughness : '-';
+  const unitCacheId =
+    data.unit_cache_id !== undefined && data.unit_cache_id !== null
+      ? String(data.unit_cache_id)
+      : data.unit_id !== undefined && data.unit_id !== null
+        ? String(data.unit_id)
+        : '';
   const defaultSummary = data.default_summary || '';
   const loadoutSummary = data.loadout_summary || defaultSummary;
   const customName = typeof data.custom_name === 'string' ? data.custom_name : '';
@@ -2518,6 +2524,9 @@ function createRosterItemElement(data, options = {}) {
   item.setAttribute('data-unit-defense', String(unitDefense));
   item.setAttribute('data-unit-toughness', String(unitToughness));
   item.setAttribute('data-unit-custom-name', customName);
+  if (unitCacheId) {
+    item.setAttribute('data-unit-cache-id', unitCacheId);
+  }
   if (data.unit_flags !== undefined && data.unit_flags !== null) {
     item.setAttribute('data-unit-flags', String(data.unit_flags));
   }
