@@ -2,8 +2,11 @@
 {% block title %}Użytkownicy - OPR{% endblock %}
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
-  <h1 class="h3 mb-0">Zarządzanie użytkownikami</h1>
-  <p class="text-muted mb-0">Dodawanie nowych użytkowników odbywa się przez formularz rejestracji.</p>
+  <div>
+    <h1 class="h3 mb-1">Zarządzanie użytkownikami</h1>
+    <p class="text-muted mb-0">Dodawanie nowych użytkowników odbywa się przez formularz rejestracji.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/users/backup">Pobierz bazę danych</a>
 </div>
 
 {% if message %}

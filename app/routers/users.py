@@ -1,17 +1,46 @@
 from __future__ import annotations
 
+from datetime import datetime
+import shutil
+import tempfile
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
 from .. import models
 from ..db import get_db
 from ..security import get_current_user, hash_password
+from ..config import DB_URL
 
 router = APIRouter(prefix="/users", tags=["users"])
 templates = Jinja2Templates(directory="app/templates")
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _cleanup_temp_file(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except FileNotFoundError:
+        pass
+
+
+def _resolve_sqlite_path() -> Path:
+    if not DB_URL.startswith("sqlite"):
+        raise HTTPException(
+            status_code=400,
+            detail="Kopia zapasowa jest dostępna tylko dla bazy danych SQLite.",
+        )
+    raw_path = DB_URL.split("///")[-1]
+    db_path = Path(raw_path).expanduser()
+    if not db_path.is_absolute():
+        db_path = (_PROJECT_ROOT / db_path).resolve()
+    return db_path
 
 
 def _require_admin(user: models.User) -> None:
@@ -88,6 +117,32 @@ def list_users(
         message=message,
         error=error,
         error_user_id=error_user_id,
+    )
+
+
+@router.get("/backup")
+def download_backup(current_user: models.User = Depends(get_current_user())) -> FileResponse:
+    _require_admin(current_user)
+    db_path = _resolve_sqlite_path()
+    if not db_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Plik bazy danych nie został znaleziony.",
+        )
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=db_path.suffix or ".db") as tmp:
+        temp_path = Path(tmp.name)
+    shutil.copy2(db_path, temp_path)
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    download_name = f"opr-backup-{timestamp}{temp_path.suffix}"
+
+    background = BackgroundTask(_cleanup_temp_file, temp_path)
+    return FileResponse(
+        temp_path,
+        filename=download_name,
+        media_type="application/octet-stream",
+        background=background,
     )
 
 
