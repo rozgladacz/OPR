@@ -223,6 +223,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Jego premia za osłonę wzrasta do +2.",
     ),
     AbilityDefinition(
+        slug="zdobywca",
+        name="Zdobywca",
+        type="passive",
+        description="Możesz ignorować wrogie oddziały bez tej zdolności podczas sprawdzania celów misji.",
+    ),
+    AbilityDefinition(
         slug="transport",
         name="Transport",
         type="passive",
