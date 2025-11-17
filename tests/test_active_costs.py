@@ -19,6 +19,9 @@ def test_latanie_cost_is_20():
 
 def test_ociezalosc_aura_cost_is_10():
     assert costs.ability_cost_from_name("Ociężałość") == 10.0
+    
+def test_mobilizacja_cost_is_30():
+    assert costs.ability_cost_from_name("Mobilizacja") == 30.0
 
 
 def test_ability_identifier_ignores_diacritics():
