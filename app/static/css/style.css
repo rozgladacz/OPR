@@ -87,7 +87,18 @@ body {
   transform: none;
   padding: 0.25rem 0.5rem;
   line-height: 1;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   z-index: 2;
+}
+
+.roster-unit-lock-toggle svg {
+  width: 1rem;
+  height: 1rem;
+  fill: currentColor;
 }
 
 .roster-lock-boundary {

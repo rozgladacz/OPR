@@ -3955,6 +3955,25 @@ function initRosterEditor() {
     return blocks;
   }
 
+  const LOCK_ICON_UNLOCKED =
+    '<svg aria-hidden="true" class="roster-lock-icon" viewBox="0 0 16 16">' +
+    '<path fill="currentColor" d="M11 1a2 2 0 0 1 2 2v2h-1V3a1 1 0 0 0-2 0v2H6.5A1.5 1.5 0 0 0 5 6.5v6A1.5 1.5 0 0 0 6.5 14h6A1.5 1.5 0 0 0 14 12.5V9h1v3.5A2.5 2.5 0 0 1 12.5 15h-6A2.5 2.5 0 0 1 4 12.5v-6A2.5 2.5 0 0 1 6.5 4H10V3a2 2 0 0 1 2-2z" />' +
+    '<path fill="currentColor" d="M10 8a2 2 0 1 0-4 0v4a2 2 0 1 0 4 0z" />' +
+    '</svg>';
+
+  const LOCK_ICON_LOCKED =
+    '<svg aria-hidden="true" class="roster-lock-icon" viewBox="0 0 16 16">' +
+    '<path fill="currentColor" d="M8 1a3 3 0 0 0-3 3v3H4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1V4a3 3 0 0 0-3-3z" />' +
+    '<path fill="currentColor" d="M6 4a2 2 0 1 1 4 0v3H6z" />' +
+    '</svg>';
+
+  function setLockButtonIcon(button, isLocked) {
+    if (!button) {
+      return;
+    }
+    button.innerHTML = isLocked ? LOCK_ICON_LOCKED : LOCK_ICON_UNLOCKED;
+  }
+
   function registerLockButton(button) {
     if (!button || lockButtons.has(button)) {
       return;
@@ -3986,7 +4005,7 @@ function initRosterEditor() {
       const isVisible = Boolean(topId && bottomId);
       button.classList.toggle('d-none', !isVisible);
       button.disabled = !isVisible;
-      button.textContent = isActive ? '🔒' : '🔓';
+      setLockButtonIcon(button, isActive);
       button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
       button.title = isActive ? 'Rozłącz parę' : 'Połącz z kolejnym oddziałem';
     });
@@ -4028,7 +4047,7 @@ function initRosterEditor() {
       lockButton.setAttribute('data-roster-lock-toggle', '');
       lockButton.setAttribute('aria-label', 'Połącz z kolejnym oddziałem');
       lockButton.title = 'Połącz z kolejnym oddziałem';
-      lockButton.textContent = '🔓';
+      setLockButtonIcon(lockButton, false);
 
       lockAnchor.appendChild(lockButton);
       lockRow.appendChild(lockAnchor);
