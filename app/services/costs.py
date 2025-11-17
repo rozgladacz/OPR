@@ -28,6 +28,7 @@ DEFENSE_ABILITY_MODIFIERS = {
     "niewrazliwy": {2: 0.05, 3: 0.1, 4: 0.2, 5: 0.3, 6: 0.35},
     "regeneracja": {2: 1.0, 3: 0.65, 4: 0.5, 5: 0.45, 6: 0.4},
     "szpica": {2: 0.1, 3: 0.17, 4: 0.17, 5: 0.17, 6: 0.1},
+    "waagh": {2: -0.03, 3: -0.03, 4: -0.03, 5: -0.02, 6: -0.01},
 }
 
 TOUGHNESS_SPECIAL = {1: 1.0, 2: 2.15, 3: 3.5}
@@ -42,6 +43,7 @@ AP_BASE = {-1: 0.8, 0: 1.0, 1: 1.5, 2: 1.9, 3: 2.25, 4: 2.5, 5: 2.65}
 AP_LANCE = {-1: 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05}
 AP_NO_COVER = {-1: 0.1, 0: 0.25, 1: 0.2, 2: 0.15, 3: 0.1, 4: 0.1, 5: 0.05}
 AP_CORROSIVE = {-1: 0.05, 0: 0.05, 1: 0.1, 2: 0.25, 3: 0.4, 4: 0.5, 5: 0.55}
+WAAGH_AP_MODIFIER = {-1: 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02}
 
 BLAST_MULTIPLIER = {2: 1.95, 3: 2.8, 6: 4.3}
 DEADLY_MULTIPLIER = {2: 1.9, 3: 2.6, 6: 3.8}
@@ -756,9 +758,9 @@ def _weapon_cost(
     chance = 7.0
     attacks = float(attacks if attacks is not None else 1.0)
     attacks = max(attacks, 0.0)
-    ap = int(ap or 0)
+    base_ap = int(ap or 0)
     range_mod = range_multiplier(range_value)
-    ap_mod = lookup_with_nearest(AP_BASE, ap)
+    ap_mod = lookup_with_nearest(AP_BASE, base_ap)
     mult = 1.0
     q = int(quality)
 
@@ -768,6 +770,10 @@ def _weapon_cost(
         if identifier:
             unit_set.add(identifier)
     melee = range_value == 0
+
+    waagh_penalty = 0.0
+    if "waagh" in unit_set:
+        waagh_penalty = lookup_with_nearest(WAAGH_AP_MODIFIER, base_ap)
 
     if melee and "furia" in unit_set:
         chance += 0.65
@@ -815,13 +821,13 @@ def _weapon_cost(
         elif norm in {"namierzanie", "lock on"}:
             chance += 0.35
             mult *= 1.1
-            ap_mod += lookup_with_nearest(AP_NO_COVER, ap)
+            ap_mod += lookup_with_nearest(AP_NO_COVER, base_ap)
         elif norm in {"impet", "impact"}:
-            ap_mod += lookup_with_nearest(AP_LANCE, ap)
+            ap_mod += lookup_with_nearest(AP_LANCE, base_ap)
         elif norm in {"bez oslon", "bez oslony", "no cover"}:
-            ap_mod += lookup_with_nearest(AP_NO_COVER, ap)
+            ap_mod += lookup_with_nearest(AP_NO_COVER, base_ap)
         elif norm in {"zracy", "corrosive"}:
-            ap_mod += lookup_with_nearest(AP_CORROSIVE, ap)
+            ap_mod += lookup_with_nearest(AP_CORROSIVE, base_ap)
         elif norm in {"niebezposredni", "indirect"}:
             mult *= 1.2
         elif norm in {"zuzywalny", "limited"}:
@@ -845,6 +851,9 @@ def _weapon_cost(
         elif norm in {"podkrecenie", "overcharge", "overclock"}:
             overcharge = True
 
+    if waagh_penalty:
+        ap_mod = max(ap_mod - waagh_penalty, 0.0)
+
     chance = max(chance - q, 1.0)
     cost = attacks * 2.0 * range_mod * chance * ap_mod * mult
 
@@ -856,7 +865,7 @@ def _weapon_cost(
             quality,
             0,
             attacks,
-            ap,
+            base_ap,
             weapon_traits,
             unit_traits,
             allow_assault_extra=False,
