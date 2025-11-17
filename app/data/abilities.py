@@ -300,6 +300,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Raz na rundę, gdy Mag w zasięgu 12” rzuca czar, może go rzucić z twojej pozycji z +1 do rzutu.",
     ),
     AbilityDefinition(
+        slug="koordynacja",
+        name="Koordynacja",
+        type="active",
+        description="Przeciwnik pomija swoją następną aktywację.",
+    ),
+    AbilityDefinition(
         slug="latanie",
         name="Łatanie",
         type="active",
