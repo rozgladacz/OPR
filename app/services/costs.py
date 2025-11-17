@@ -27,7 +27,6 @@ DEFENSE_ABILITY_MODIFIERS = {
     "delikatny": {2: -0.05, 3: -0.07, 4: -0.08, 5: -0.1, 6: -0.13},
     "niewrazliwy": {2: 0.05, 3: 0.1, 4: 0.2, 5: 0.3, 6: 0.35},
     "regeneracja": {2: 1.0, 3: 0.65, 4: 0.5, 5: 0.45, 6: 0.4},
-    "szpica": {2: 0.1, 3: 0.17, 4: 0.17, 5: 0.17, 6: 0.1},
     "waagh": {2: -0.03, 3: -0.03, 4: -0.03, 5: -0.02, 6: -0.01},
 }
 
@@ -703,9 +702,9 @@ def ability_cost_from_name(
     elif desc == "radio":
         base_result = 3.0
     elif slug == "ociezalosc":
-        base_result = 10.0
-    elif desc == "spaczenie":
         base_result = 20.0
+    elif desc == "spaczenie":
+        base_result = 30.0
     else:
         tou_value = float(toughness) if toughness is not None else 1.0
         definition = ability_catalog.find_definition(slug) if slug else None
