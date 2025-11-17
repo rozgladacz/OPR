@@ -361,6 +361,10 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Jeżeli model w twoim oddziale wydaje rozkaz, może wybrać oddział odległy o 24” który też ma radio.",
     ),
     AbilityDefinition(
+        slug="ociezalosc",
+        name="Ociężałość",
+        type="aura",
+        description="Teren w zasięgu 12” jest uznawany za trudny dla wrogich oddziałów.",
         slug="spaczenie",
         name="Spaczenie",
         type="aura",

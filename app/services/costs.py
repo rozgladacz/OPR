@@ -702,6 +702,8 @@ def ability_cost_from_name(
         base_result = passive_cost(ability_slug, 10.0, True)
     elif desc == "radio":
         base_result = 3.0
+    elif slug == "ociezalosc":
+        base_result = 10.0
     elif desc == "spaczenie":
         base_result = 20.0
     else:
