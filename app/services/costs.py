@@ -694,6 +694,8 @@ def ability_cost_from_name(
         base_result = passive_cost(ability_slug, 10.0, True)
     elif desc == "radio":
         base_result = 3.0
+    elif desc == "spaczenie":
+        base_result = 20.0
     else:
         tou_value = float(toughness) if toughness is not None else 1.0
         definition = ability_catalog.find_definition(slug) if slug else None

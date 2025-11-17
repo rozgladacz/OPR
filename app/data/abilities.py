@@ -334,6 +334,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         type="aura",
         description="Jeżeli model w twoim oddziale wydaje rozkaz, może wybrać oddział odległy o 24” który też ma radio.",
     ),
+    AbilityDefinition(
+        slug="spaczenie",
+        name="Spaczenie",
+        type="aura",
+        description="Teren w zasięgu 12” jest uznawany za niebezpieczny dla wrogich oddziałów.",
+    ),
     # Weapon abilities
     AbilityDefinition(
         slug="rozprysk",
