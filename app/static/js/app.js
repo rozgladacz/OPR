@@ -2507,6 +2507,15 @@ function createRosterItemElement(data, options = {}) {
 
       reorder.appendChild(form);
     });
+
+    const lockButton = document.createElement('button');
+    lockButton.type = 'button';
+    lockButton.className = 'btn btn-outline-secondary btn-sm roster-unit-lock-toggle';
+    lockButton.setAttribute('data-roster-lock-toggle', '');
+    lockButton.setAttribute('aria-label', 'Połącz z kolejnym oddziałem');
+    lockButton.title = 'Połącz z kolejnym oddziałem';
+    lockButton.textContent = '🔓';
+    reorder.appendChild(lockButton);
   }
 
   const item = document.createElement('div');
@@ -3763,6 +3772,9 @@ function initRosterEditor() {
   let rosterListEl = root.querySelector('[data-roster-list]');
   const items = [];
   const itemRegistry = new WeakSet();
+  const lockedPairs = new Map();
+  const lockedPairLookup = new Map();
+  const lockButtons = new WeakSet();
   if (warningsContainer) {
     try {
       const initialWarnings = JSON.parse(warningsContainer.dataset.warnings || '[]');
@@ -3801,26 +3813,289 @@ function initRosterEditor() {
     }
   }
 
+  function getEntryElementFromItem(item) {
+    return item ? item.closest('.roster-unit-entry') : null;
+  }
+
+  function getListItemContainer(entry) {
+    return entry ? entry.closest('.list-group-item') : null;
+  }
+
+  function getItemElementFromEntry(entry) {
+    return entry ? entry.querySelector('[data-roster-item]') : null;
+  }
+
+  function getUnitIdFromEntry(entry) {
+    const item = getItemElementFromEntry(entry);
+    return item ? item.getAttribute('data-roster-unit-id') || '' : '';
+  }
+
+  function createPairKey(firstId, secondId) {
+    const safeFirst = firstId ? String(firstId) : '';
+    const safeSecond = secondId ? String(secondId) : '';
+    if (!safeFirst || !safeSecond) {
+      return '';
+    }
+    return [safeFirst, safeSecond].sort().join('::');
+  }
+
+  function unlockPairByKey(pairKey) {
+    if (!pairKey || !lockedPairs.has(pairKey)) {
+      return;
+    }
+    const pair = lockedPairs.get(pairKey);
+    lockedPairs.delete(pairKey);
+    if (pair) {
+      lockedPairLookup.delete(pair.topId);
+      lockedPairLookup.delete(pair.bottomId);
+    }
+  }
+
+  function togglePair(topId, bottomId) {
+    const pairKey = createPairKey(topId, bottomId);
+    if (!pairKey) {
+      return;
+    }
+    const existingTop = lockedPairLookup.get(topId);
+    const existingBottom = lockedPairLookup.get(bottomId);
+    if (existingTop && existingTop !== pairKey) {
+      unlockPairByKey(existingTop);
+    }
+    if (existingBottom && existingBottom !== pairKey) {
+      unlockPairByKey(existingBottom);
+    }
+    if (lockedPairs.has(pairKey)) {
+      unlockPairByKey(pairKey);
+      return;
+    }
+    lockedPairs.set(pairKey, { topId, bottomId });
+    lockedPairLookup.set(topId, pairKey);
+    lockedPairLookup.set(bottomId, pairKey);
+  }
+
+  function getPartnerId(unitId) {
+    const pairKey = unitId ? lockedPairLookup.get(unitId) : null;
+    const pair = pairKey ? lockedPairs.get(pairKey) : null;
+    if (!pair) {
+      return '';
+    }
+    if (pair.topId === unitId) {
+      return pair.bottomId;
+    }
+    if (pair.bottomId === unitId) {
+      return pair.topId;
+    }
+    return '';
+  }
+
+  function buildEntryBlocks(entries) {
+    const blocks = [];
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index];
+      const currentId = getUnitIdFromEntry(entry);
+      const pairKey = currentId ? lockedPairLookup.get(currentId) : null;
+      const pair = pairKey ? lockedPairs.get(pairKey) : null;
+      if (pair) {
+        const nextEntry = entries[index + 1];
+        const partnerId = getPartnerId(currentId);
+        if (nextEntry && getUnitIdFromEntry(nextEntry) === partnerId) {
+          blocks.push([entry, nextEntry]);
+          index += 1;
+          continue;
+        }
+        unlockPairByKey(pairKey);
+      }
+      blocks.push([entry]);
+    }
+    return blocks;
+  }
+
+  function registerLockButton(button) {
+    if (!button || lockButtons.has(button)) {
+      return;
+    }
+    lockButtons.add(button);
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const topId = button.dataset.lockTopId || '';
+      const bottomId = button.dataset.lockBottomId || '';
+      togglePair(topId, bottomId);
+      renderLockButtons();
+      updateMoveButtonStates(rosterListEl);
+    });
+  }
+
+  function renderLockButtons() {
+    const listElement = rosterListEl || ensureRosterList();
+    if (!isEditable || !listElement) {
+      return;
+    }
+    listElement.querySelectorAll('[data-roster-lock-toggle]').forEach((button) => {
+      const topId = button.dataset.lockTopId || '';
+      const bottomId = button.dataset.lockBottomId || '';
+      const pairKey = createPairKey(topId, bottomId);
+      const isActive = pairKey ? lockedPairs.has(pairKey) : false;
+      const isVisible = Boolean(topId && bottomId);
+      button.classList.toggle('d-none', !isVisible);
+      button.disabled = !isVisible;
+      button.textContent = isActive ? '🔒' : '🔓';
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      button.title = isActive ? 'Rozłącz parę' : 'Połącz z kolejnym oddziałem';
+    });
+  }
+
+  function refreshLockTargets() {
+    const listElement = rosterListEl || ensureRosterList();
+    if (!isEditable || !listElement) {
+      return;
+    }
+    const containers = Array.from(listElement.querySelectorAll('.list-group-item'));
+    containers.forEach((container, index) => {
+      const lockButton = container.querySelector('[data-roster-lock-toggle]');
+      if (!lockButton) {
+        return;
+      }
+      const entry = container.querySelector('.roster-unit-entry');
+      const topId = getUnitIdFromEntry(entry);
+      const nextContainer = containers[index + 1];
+      const bottomEntry = nextContainer ? nextContainer.querySelector('.roster-unit-entry') : null;
+      const bottomId = bottomEntry ? getUnitIdFromEntry(bottomEntry) : '';
+      lockButton.dataset.lockTopId = topId || '';
+      lockButton.dataset.lockBottomId = bottomId || '';
+      registerLockButton(lockButton);
+    });
+    renderLockButtons();
+  }
+
+  function findMoveForm(entry, direction) {
+    const normalized = String(direction || '').trim().toLowerCase();
+    const forms = entry ? Array.from(entry.querySelectorAll('[data-roster-move-form]')) : [];
+    return forms.find((form) => {
+      const dirInput = form ? form.querySelector('input[name="direction"]') : null;
+      const value = dirInput ? String(dirInput.value || '').trim().toLowerCase() : '';
+      return value === normalized;
+    });
+  }
+
+  async function submitMoveRequest(form) {
+    if (!form) {
+      return;
+    }
+    const action = form.getAttribute('action') || '';
+    if (!action) {
+      return;
+    }
+    const payload = new FormData(form);
+    try {
+      await fetch(action, {
+        method: 'POST',
+        body: payload,
+      });
+    } catch (err) {
+      console.warn('Nie udało się przesunąć oddziału', err);
+    }
+  }
+
+  function moveEntryDom(entry, direction) {
+    const container = getListItemContainer(entry);
+    if (!container || !container.parentElement) {
+      return false;
+    }
+    if (direction === 'up') {
+      const previous = container.previousElementSibling;
+      if (!previous) {
+        return false;
+      }
+      container.parentElement.insertBefore(container, previous);
+      return true;
+    }
+    if (direction === 'down') {
+      const next = container.nextElementSibling;
+      if (!next) {
+        return false;
+      }
+      container.parentElement.insertBefore(next, container);
+      return true;
+    }
+    return false;
+  }
+
+  async function handlePairedMove(pair, direction) {
+    if (!pair || !direction) {
+      return;
+    }
+    const listElement = rosterListEl || ensureRosterList();
+    if (!listElement) {
+      return;
+    }
+    const topEntry = getEntryElementFromItem(
+      listElement.querySelector(`[data-roster-item][data-roster-unit-id="${pair.topId}"]`),
+    );
+    const bottomEntry = getEntryElementFromItem(
+      listElement.querySelector(`[data-roster-item][data-roster-unit-id="${pair.bottomId}"]`),
+    );
+    if (!topEntry || !bottomEntry) {
+      return;
+    }
+    const topContainer = getListItemContainer(topEntry);
+    const bottomContainer = getListItemContainer(bottomEntry);
+    if (!topContainer || !bottomContainer || topContainer.nextElementSibling !== bottomContainer) {
+      unlockPairByKey(createPairKey(pair.topId, pair.bottomId));
+      renderLockButtons();
+      updateMoveButtonStates(rosterListEl);
+      return;
+    }
+    const sequence = direction === 'up'
+      ? [
+          { entry: topEntry, direction: 'up' },
+          { entry: bottomEntry, direction: 'up' },
+        ]
+      : [
+          { entry: bottomEntry, direction: 'down' },
+          { entry: topEntry, direction: 'down' },
+        ];
+    /* eslint-disable no-await-in-loop */
+    for (const step of sequence) {
+      const moveForm = findMoveForm(step.entry, step.direction);
+      await submitMoveRequest(moveForm);
+      moveEntryDom(step.entry, step.direction);
+    }
+    /* eslint-enable no-await-in-loop */
+    refreshLockTargets();
+    updateMoveButtonStates(rosterListEl);
+  }
+
   function updateMoveButtonStates(listElement) {
     if (!isEditable || !listElement) {
       return;
     }
+    refreshLockTargets();
     const entries = Array.from(listElement.querySelectorAll('.roster-unit-entry'));
-    entries.forEach((entry, index) => {
-      entry.querySelectorAll('[data-roster-move-form]').forEach((form) => {
-        const directionInput = form.querySelector('input[name="direction"]');
-        const button = form.querySelector('[data-roster-move]');
-        if (!button) {
-          return;
-        }
-        const direction = directionInput ? String(directionInput.value || '') : '';
-        if (direction === 'up') {
-          button.disabled = index === 0;
-        } else if (direction === 'down') {
-          button.disabled = index === entries.length - 1;
-        }
+    const blocks = buildEntryBlocks(entries);
+    const lastBlockIndex = blocks.length - 1;
+    blocks.forEach((block, blockIndex) => {
+      const isFirstBlock = blockIndex === 0;
+      const isLastBlock = blockIndex === lastBlockIndex;
+      block.forEach((entry) => {
+        const unitId = getUnitIdFromEntry(entry);
+        const pairKey = unitId ? lockedPairLookup.get(unitId) : null;
+        const pair = pairKey ? lockedPairs.get(pairKey) : null;
+        entry.querySelectorAll('[data-roster-move-form]').forEach((form) => {
+          const directionInput = form.querySelector('input[name="direction"]');
+          const button = form.querySelector('[data-roster-move]');
+          if (!button) {
+            return;
+          }
+          const direction = directionInput ? String(directionInput.value || '') : '';
+          if (direction === 'up') {
+            button.disabled = isFirstBlock || (pair && pair.bottomId === unitId);
+          } else if (direction === 'down') {
+            button.disabled = isLastBlock || (pair && pair.topId === unitId);
+          }
+        });
       });
     });
+    renderLockButtons();
   }
 
   function registerRosterItem(item) {
@@ -3848,6 +4123,17 @@ function initRosterEditor() {
       entry.querySelectorAll('[data-roster-move-form]').forEach((form) => {
         form.addEventListener('click', (event) => {
           event.stopPropagation();
+        });
+        form.addEventListener('submit', (event) => {
+          const directionInput = form.querySelector('input[name="direction"]');
+          const direction = directionInput ? String(directionInput.value || '') : '';
+          const unitId = getUnitIdFromEntry(entry);
+          const pairKey = unitId ? lockedPairLookup.get(unitId) : null;
+          const pair = pairKey ? lockedPairs.get(pairKey) : null;
+          if (pair) {
+            event.preventDefault();
+            handlePairedMove(pair, direction === 'up' ? 'up' : 'down');
+          }
         });
       });
     }
