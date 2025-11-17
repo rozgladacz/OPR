@@ -4031,15 +4031,17 @@ function initRosterEditor() {
       const bottomEntry = nextContainer.querySelector('.roster-unit-entry');
       const bottomId = bottomEntry ? getUnitIdFromEntry(bottomEntry) : '';
 
+      const reorderColumn = entry ? entry.querySelector('.roster-unit-reorder') : null;
+      if (!reorderColumn) {
+        return;
+      }
+
       const boundary = document.createElement('div');
-      boundary.className = 'list-group-item border-0 px-0 py-0 roster-lock-boundary';
+      boundary.className = 'roster-lock-boundary';
       boundary.setAttribute('data-roster-lock-boundary', '');
 
       const lockRow = document.createElement('div');
       lockRow.className = 'roster-unit-lock-row';
-
-      const lockAnchor = document.createElement('div');
-      lockAnchor.className = 'roster-unit-reorder roster-unit-reorder--lock';
 
       const lockButton = document.createElement('button');
       lockButton.type = 'button';
@@ -4049,11 +4051,10 @@ function initRosterEditor() {
       lockButton.title = 'Połącz z kolejnym oddziałem';
       setLockButtonIcon(lockButton, false);
 
-      lockAnchor.appendChild(lockButton);
-      lockRow.appendChild(lockAnchor);
+      lockRow.appendChild(lockButton);
       boundary.appendChild(lockRow);
 
-      listElement.insertBefore(boundary, nextContainer);
+      reorderColumn.appendChild(boundary);
 
       lockButton.dataset.lockTopId = topId || '';
       lockButton.dataset.lockBottomId = bottomId || '';

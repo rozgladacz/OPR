@@ -172,7 +172,7 @@
           </div>
         </div>
         {% if roster_items %}
-        <div class="list-group roster-unit-list" data-roster-list>
+          <div class="list-group roster-unit-list" data-roster-list>
           {% for item in roster_items %}
           {% set ru = item.instance %}
           <div class="list-group-item border-0 px-0 py-2" data-roster-entry>
@@ -211,6 +211,23 @@
                     ↓
                   </button>
                 </form>
+                {% if not loop.last %}
+                <div class="roster-lock-boundary" data-roster-lock-boundary>
+                  <div class="roster-unit-lock-row">
+                    <button
+                      class="btn btn-outline-secondary btn-sm roster-unit-lock-toggle"
+                      type="button"
+                      data-roster-lock-toggle
+                      data-lock-top-id="{{ ru.id }}"
+                      data-lock-bottom-id="{{ loop.nextitem.instance.id }}"
+                      aria-label="Połącz z kolejnym oddziałem"
+                      title="Połącz z kolejnym oddziałem"
+                    >
+                      🔓
+                    </button>
+                  </div>
+                </div>
+                {% endif %}
               </div>
               {% endif %}
               <div
