@@ -116,6 +116,16 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         ),
     ),
     AbilityDefinition(
+        slug="masywny",
+        name="Masywny",
+        type="passive",
+        description=(
+            "Cały oddział reprezentowany jest przez jeden model z wydzielonymi elementami, "
+            "który może przyjmować rany ponad maksimum. Wpływ na koszt: 0, zdolności z kosztem "
+            "za model liczysz raz (np Transport)."
+        ),
+    ),
+    AbilityDefinition(
         slug="strach",
         name="Strach",
         type="passive",
