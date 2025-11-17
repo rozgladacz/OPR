@@ -1265,11 +1265,13 @@ def roster_unit_role_totals(
             unit.toughness,
             current_traits,
         )
-        base_per_model = base_value + passive_total
+        base_per_model = base_value
         passive_entries = _passive_entries(current_traits)
         weapon_costs = _weapon_cost_map(current_traits)
 
         total = base_per_model * model_count
+        if passive_total:
+            total += passive_total * (1 if total_mode else ability_multiplier)
         for weapon_id, stored_count in weapons_counts.items():
             cost_value = weapon_costs.get(weapon_id)
             if cost_value is None:
