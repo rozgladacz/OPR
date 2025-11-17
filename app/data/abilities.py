@@ -296,6 +296,14 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Oddział w zasięgu 2” odrzuca k3 znaczniki ran.",
     ),
     AbilityDefinition(
+        slug="przepowiednia",
+        name="Przepowiednia",
+        type="active",
+        description=(
+            "Wybierz oddział przeciwnika, który zostanie aktywowany jako następny, jeżeli to możliwe."
+        ),
+    ),
+    AbilityDefinition(
         slug="rozkaz",
         name="Rozkaz",
         type="active",

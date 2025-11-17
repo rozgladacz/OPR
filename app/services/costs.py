@@ -684,6 +684,8 @@ def ability_cost_from_name(
         base_result = 4.0
     elif slug == "latanie":
         base_result = 20.0
+    elif slug == "przepowiednia":
+        base_result = 45.0
     elif desc.startswith("rozkaz"):
         ability_ref = value or (desc.split(":", 1)[1].strip() if ":" in desc else "")
         ability_slug = ability_catalog.slug_for_name(ability_ref) or ability_identifier(ability_ref)
