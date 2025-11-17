@@ -195,6 +195,16 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Atakujący ma -1 do rzutów na trafienie, gdy jest dalej niż 6\".",
     ),
     AbilityDefinition(
+        slug="waagh",
+        name="Waagh!",
+        type="passive",
+        description=(
+            "Jeżeli twój oddział ma poniżej połowy początkowej wytrzymałości i nie ma innego "
+            "przyjaznego oddziału z tą zdolnością w zasięgu 12”, twoje ataki mają -1AP, a "
+            "ataki w ciebie +1AP."
+        ),
+    ),
+    AbilityDefinition(
         slug="ostrozny",
         name="Ostrożny",
         type="passive",
