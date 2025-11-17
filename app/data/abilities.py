@@ -116,6 +116,16 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         ),
     ),
     AbilityDefinition(
+        slug="masywny",
+        name="Masywny",
+        type="passive",
+        description=(
+            "Cały oddział reprezentowany jest przez jeden model z wydzielonymi elementami, "
+            "który może przyjmować rany ponad maksimum. Wpływ na koszt: 0, zdolności z kosztem "
+            "za model liczysz raz (np Transport)."
+        ),
+    ),
+    AbilityDefinition(
         slug="strach",
         name="Strach",
         type="passive",
@@ -128,6 +138,14 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Nieustraszony",
         type="passive",
         description="Wykonuje jeden test przegrupowania mniej.",
+    ),
+    AbilityDefinition(
+        slug="ucieczka",
+        name="Ucieczka",
+        type="passive",
+        description=(
+            "Zanim zaczniesz być przyszpilony lub wyczerpany, możesz wykonać ruch."
+        ),
     ),
     AbilityDefinition(
         slug="stracency",
@@ -187,6 +205,16 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Atakujący ma -1 do rzutów na trafienie, gdy jest dalej niż 6\".",
     ),
     AbilityDefinition(
+        slug="waagh",
+        name="Waagh!",
+        type="passive",
+        description=(
+            "Jeżeli twój oddział ma poniżej połowy początkowej wytrzymałości i nie ma innego "
+            "przyjaznego oddziału z tą zdolnością w zasięgu 12”, twoje ataki mają -1AP, a "
+            "ataki w ciebie +1AP."
+        ),
+    ),
+    AbilityDefinition(
         slug="ostrozny",
         name="Ostrożny",
         type="passive",
@@ -203,6 +231,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Okopany",
         type="passive",
         description="Jego premia za osłonę wzrasta do +2.",
+    ),
+    AbilityDefinition(
+        slug="zdobywca",
+        name="Zdobywca",
+        type="passive",
+        description="Możesz ignorować wrogie oddziały bez tej zdolności podczas sprawdzania celów misji.",
     ),
     AbilityDefinition(
         slug="transport",
@@ -270,6 +304,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Łatanie",
         type="active",
         description="Oddział w zasięgu 2” odrzuca k3 znaczniki ran.",
+    ),
+    AbilityDefinition(
+        slug="presja",
+        name="Presja",
+        type="active",
+        description="Odział w zasięgu 12” przestaje być wyczerpany.",
     ),
     AbilityDefinition(
         slug="rozkaz",

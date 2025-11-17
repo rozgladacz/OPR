@@ -16,7 +16,11 @@ from ..data import abilities as ability_catalog
 from .utils import passive_flags_to_payload
 
 
-MORALE_ABILITY_MULTIPLIERS = {"nieustraszony": 0.5, "stracency": 0.5}
+MORALE_ABILITY_MULTIPLIERS = {
+    "nieustraszony": 0.5,
+    "ucieczka": 0.5,
+    "stracency": 0.5,
+}
 
 DEFENSE_BASE_VALUES = {2: 2.0, 3: 1.67, 4: 1.33, 5: 1.0, 6: 0.8}
 DEFENSE_ABILITY_MODIFIERS = {
@@ -24,6 +28,7 @@ DEFENSE_ABILITY_MODIFIERS = {
     "niewrazliwy": {2: 0.05, 3: 0.1, 4: 0.2, 5: 0.3, 6: 0.35},
     "regeneracja": {2: 1.0, 3: 0.65, 4: 0.5, 5: 0.45, 6: 0.4},
     "szpica": {2: 0.1, 3: 0.17, 4: 0.17, 5: 0.17, 6: 0.1},
+    "waagh": {2: -0.03, 3: -0.03, 4: -0.03, 5: -0.02, 6: -0.01},
 }
 
 TOUGHNESS_SPECIAL = {1: 1.0, 2: 2.15, 3: 3.5}
@@ -38,6 +43,7 @@ AP_BASE = {-1: 0.8, 0: 1.0, 1: 1.5, 2: 1.9, 3: 2.25, 4: 2.5, 5: 2.65}
 AP_LANCE = {-1: 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05}
 AP_NO_COVER = {-1: 0.1, 0: 0.25, 1: 0.2, 2: 0.15, 3: 0.1, 4: 0.1, 5: 0.05}
 AP_CORROSIVE = {-1: 0.05, 0: 0.05, 1: 0.1, 2: 0.25, 3: 0.4, 4: 0.5, 5: 0.55}
+WAAGH_AP_MODIFIER = {-1: 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02}
 
 BLAST_MULTIPLIER = {2: 1.95, 3: 2.8, 6: 4.3}
 DEADLY_MULTIPLIER = {2: 1.9, 3: 2.6, 6: 3.8}
@@ -519,11 +525,13 @@ def passive_cost(ability_name: str, tou: float = 1.0, aura: bool = False) -> flo
         return 1.0 * tou
     if slug == "tarcza":
         return 1.25 * tou
+    if slug == "zdobywca":
+        return 3.0 * tou
     if slug == "straznik":
         return 3.0 * tou
 
     if aura:
-        if slug in {"nieustraszony", "stracency"}:
+        if slug in {"nieustraszony", "ucieczka", "stracency"}:
             return 1.5 * tou
         if slug == "delikatny":
             return 0.5 * tou
@@ -678,6 +686,8 @@ def ability_cost_from_name(
         base_result = 4.0
     elif slug == "latanie":
         base_result = 20.0
+    elif slug == "presja":
+        base_result = 45.0
     elif desc.startswith("rozkaz"):
         ability_ref = value or (desc.split(":", 1)[1].strip() if ":" in desc else "")
         ability_slug = ability_catalog.slug_for_name(ability_ref) or ability_identifier(ability_ref)
@@ -750,9 +760,9 @@ def _weapon_cost(
     chance = 7.0
     attacks = float(attacks if attacks is not None else 1.0)
     attacks = max(attacks, 0.0)
-    ap = int(ap or 0)
+    base_ap = int(ap or 0)
     range_mod = range_multiplier(range_value)
-    ap_mod = lookup_with_nearest(AP_BASE, ap)
+    ap_mod = lookup_with_nearest(AP_BASE, base_ap)
     mult = 1.0
     q = int(quality)
 
@@ -762,6 +772,10 @@ def _weapon_cost(
         if identifier:
             unit_set.add(identifier)
     melee = range_value == 0
+
+    waagh_penalty = 0.0
+    if "waagh" in unit_set:
+        waagh_penalty = lookup_with_nearest(WAAGH_AP_MODIFIER, base_ap)
 
     if melee and "furia" in unit_set:
         chance += 0.65
@@ -809,13 +823,13 @@ def _weapon_cost(
         elif norm in {"namierzanie", "lock on"}:
             chance += 0.35
             mult *= 1.1
-            ap_mod += lookup_with_nearest(AP_NO_COVER, ap)
+            ap_mod += lookup_with_nearest(AP_NO_COVER, base_ap)
         elif norm in {"impet", "impact"}:
-            ap_mod += lookup_with_nearest(AP_LANCE, ap)
+            ap_mod += lookup_with_nearest(AP_LANCE, base_ap)
         elif norm in {"bez oslon", "bez oslony", "no cover"}:
-            ap_mod += lookup_with_nearest(AP_NO_COVER, ap)
+            ap_mod += lookup_with_nearest(AP_NO_COVER, base_ap)
         elif norm in {"zracy", "corrosive"}:
-            ap_mod += lookup_with_nearest(AP_CORROSIVE, ap)
+            ap_mod += lookup_with_nearest(AP_CORROSIVE, base_ap)
         elif norm in {"niebezposredni", "indirect"}:
             mult *= 1.2
         elif norm in {"zuzywalny", "limited"}:
@@ -839,6 +853,9 @@ def _weapon_cost(
         elif norm in {"podkrecenie", "overcharge", "overclock"}:
             overcharge = True
 
+    if waagh_penalty:
+        ap_mod = max(ap_mod - waagh_penalty, 0.0)
+
     chance = max(chance - q, 1.0)
     cost = attacks * 2.0 * range_mod * chance * ap_mod * mult
 
@@ -850,7 +867,7 @@ def _weapon_cost(
             quality,
             0,
             attacks,
-            ap,
+            base_ap,
             weapon_traits,
             unit_traits,
             allow_assault_extra=False,
@@ -1073,6 +1090,9 @@ def roster_unit_role_totals(
     passive_state = compute_passive_state(unit, raw_data)
     base_traits = _strip_role_traits(passive_state.traits)
     default_weapons = unit_default_weapons(unit)
+    has_massive_trait = any(
+        ability_identifier(trait) == "masywny" for trait in base_traits
+    )
 
     def _parse_counts(section: str) -> dict[int, int]:
         raw_section = raw_data.get(section)
@@ -1128,9 +1148,16 @@ def roster_unit_role_totals(
     model_multiplier = max(int(getattr(roster_unit, "count", 0)), 0)
     model_count = max(model_multiplier, 1)
 
-    def _to_total(value: int) -> int:
+    ability_multiplier = (
+        0 if model_multiplier == 0 else 1 if has_massive_trait else model_count
+    )
+
+    def _to_total(value: int, *, ability: bool = False) -> int:
         safe_value = max(int(value), 0)
-        return safe_value if total_mode else safe_value * model_count
+        if total_mode:
+            return safe_value
+        multiplier = ability_multiplier if ability else model_count
+        return safe_value * multiplier
 
     def _weapon_cost_map(current_traits: Sequence[str]) -> dict[int, float]:
         results: dict[int, float] = {}
@@ -1240,7 +1267,7 @@ def roster_unit_role_totals(
             cost_value = ability_map.get(ability_id)
             if cost_value is None:
                 continue
-            total += cost_value * _to_total(stored_count)
+            total += cost_value * _to_total(stored_count, ability=True)
         passive_diff = 0.0
         for entry in passive_entries:
             slug = entry.get("slug")
@@ -1257,7 +1284,7 @@ def roster_unit_role_totals(
                 continue
             passive_diff += cost_value * diff
         if passive_diff:
-            total += passive_diff * model_multiplier
+            total += passive_diff * (1 if total_mode else ability_multiplier)
         return round(total, 2)
 
     warrior_total = _compute_total(_with_role_trait(base_traits, "wojownik"))
