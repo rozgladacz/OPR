@@ -64,6 +64,7 @@ body {
   display: flex;
   gap: 0.75rem;
   align-items: stretch;
+  position: relative;
 }
 
 .roster-unit-reorder {
@@ -72,11 +73,27 @@ body {
   gap: 0.5rem;
   align-items: center;
   justify-content: center;
+  position: relative;
+  padding-bottom: 1.5rem;
 }
 
 .roster-unit-reorder .btn {
   padding: 0.25rem 0.5rem;
   line-height: 1;
+}
+
+.roster-unit-lock-toggle {
+  position: absolute;
+  bottom: -0.75rem;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  padding: 0.25rem 0.5rem;
+  line-height: 1;
+  z-index: 2;
+}
+
+.roster-unit-entry:last-child .roster-unit-lock-toggle {
+  display: none;
 }
 
 .roster-unit-item[data-roster-item] {

@@ -525,6 +525,8 @@ def passive_cost(ability_name: str, tou: float = 1.0, aura: bool = False) -> flo
         return 1.0 * tou
     if slug == "tarcza":
         return 1.25 * tou
+    if slug == "dywersant":
+        return 10.0
     if slug == "zdobywca":
         return 3.0 * tou
     if slug == "straznik":
@@ -684,8 +686,14 @@ def ability_cost_from_name(
         base_result = 8.0 * extract_number(value or name)
     elif desc == "przekaznik":
         base_result = 4.0
+    elif desc == "koordynacja":
+        base_result = 45.0
     elif slug == "latanie":
         base_result = 20.0
+    elif slug == "mobilizacja":
+        base_result = 30.0
+    elif slug == "przepowiednia":
+        base_result = 45.0
     elif slug == "presja":
         base_result = 45.0
     elif desc.startswith("rozkaz"):
@@ -694,6 +702,10 @@ def ability_cost_from_name(
         base_result = passive_cost(ability_slug, 10.0, True)
     elif desc == "radio":
         base_result = 3.0
+    elif slug == "ociezalosc":
+        base_result = 10.0
+    elif desc == "spaczenie":
+        base_result = 20.0
     else:
         tou_value = float(toughness) if toughness is not None else 1.0
         definition = ability_catalog.find_definition(slug) if slug else None
@@ -816,7 +828,7 @@ def _weapon_cost(
                 mult *= DEADLY_MULTIPLIER[value]
                 continue
 
-        if norm in {"rozrywajacy", "rozrywajaca", "rozrwyajaca", "rending"}:
+        if norm in {"seria", "rozrywajacy", "rozrywajaca", "rozrwyajaca", "rending"}:
             chance += 1.0
         elif norm in {"lanca", "lance"}:
             chance += 0.65
@@ -1253,11 +1265,13 @@ def roster_unit_role_totals(
             unit.toughness,
             current_traits,
         )
-        base_per_model = base_value + passive_total
+        base_per_model = base_value
         passive_entries = _passive_entries(current_traits)
         weapon_costs = _weapon_cost_map(current_traits)
 
         total = base_per_model * model_count
+        if passive_total:
+            total += passive_total * (1 if total_mode else ability_multiplier)
         for weapon_id, stored_count in weapons_counts.items():
             cost_value = weapon_costs.get(weapon_id)
             if cost_value is None:

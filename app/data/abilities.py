@@ -178,6 +178,16 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Podczas obrony, za każdą naturalną 6 możesz zignorować następną ranę przydzieloną podczas tego ataku.",
     ),
     AbilityDefinition(
+        slug="dywersant",
+        name="Dywersant",
+        type="passive",
+        description=(
+            "Jeżeli oddział któremu w wyniku ataku zadałeś rany w tej aktywacji wykonuje test przegrupowania podczas "
+            "gdy znajduje się bliżej twojej strefy rozstawienia niż ten oddział lub ten odział znajduje się bliżej jego "
+            "strefy rozstawienia niż on, wykonuje on dodatkowy test przegrupowania."
+        ),
+    ),
+    AbilityDefinition(
         slug="szpica",
         name="Szpica",
         type="passive",
@@ -300,12 +310,28 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Raz na rundę, gdy Mag w zasięgu 12” rzuca czar, może go rzucić z twojej pozycji z +1 do rzutu.",
     ),
     AbilityDefinition(
+        slug="koordynacja",
+        name="Koordynacja",
+        type="active",
+        description="Przeciwnik pomija swoją następną aktywację.",
+    ),
+    AbilityDefinition(
         slug="latanie",
         name="Łatanie",
         type="active",
         description="Oddział w zasięgu 2” odrzuca k3 znaczniki ran.",
     ),
     AbilityDefinition(
+        slug="mobilizacja",
+        name="Mobilizacja",
+        type="active",
+        description="Oddział w zasięgu 12” przestaje być przyszpilony.",
+        slug="przepowiednia",
+        name="Przepowiednia",
+        type="active",
+        description=(
+            "Wybierz oddział przeciwnika, który zostanie aktywowany jako następny, jeżeli to możliwe."
+        ),
         slug="presja",
         name="Presja",
         type="active",
@@ -333,6 +359,16 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Radio",
         type="aura",
         description="Jeżeli model w twoim oddziale wydaje rozkaz, może wybrać oddział odległy o 24” który też ma radio.",
+    ),
+    AbilityDefinition(
+        slug="ociezalosc",
+        name="Ociężałość",
+        type="aura",
+        description="Teren w zasięgu 12” jest uznawany za trudny dla wrogich oddziałów.",
+        slug="spaczenie",
+        name="Spaczenie",
+        type="aura",
+        description="Teren w zasięgu 12” jest uznawany za niebezpieczny dla wrogich oddziałów.",
     ),
     # Weapon abilities
     AbilityDefinition(
@@ -385,7 +421,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
     ),
     AbilityDefinition(
         slug="rozrywajacy",
-        name="Rozrywający",
+        name="Seria",
         type="weapon",
         description="Naturalne 6 na trafienie dają dodatkowe normalne trafienie.",
     ),
