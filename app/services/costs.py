@@ -814,7 +814,7 @@ def _weapon_cost(
                 mult *= DEADLY_MULTIPLIER[value]
                 continue
 
-        if norm in {"rozrywajacy", "rozrywajaca", "rozrwyajaca", "rending"}:
+        if norm in {"seria", "rozrywajacy", "rozrywajaca", "rozrwyajaca", "rending"}:
             chance += 1.0
         elif norm in {"lanca", "lance"}:
             chance += 0.65
