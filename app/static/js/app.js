@@ -3754,6 +3754,7 @@ function initRosterEditor() {
   const auraContainer = root.querySelector('[data-roster-editor-auras]');
   const loadoutContainer = root.querySelector('[data-roster-editor-loadout]');
   const form = root.querySelector('[data-roster-editor-form]');
+  const lockPairsInput = root.querySelector('[data-roster-lock-pairs-input]');
   const duplicateForm = root.querySelector('[data-roster-editor-duplicate]');
   const deleteForm = root.querySelector('[data-roster-editor-delete]');
   const countInput = root.querySelector('[data-roster-editor-count]');
@@ -3839,6 +3840,25 @@ function initRosterEditor() {
     return [safeFirst, safeSecond].sort().join('::');
   }
 
+  function updateLockPairsInput() {
+    if (!lockPairsInput) {
+      return;
+    }
+    lockPairsInput.value = serializeLockPairs();
+  }
+
+  function serializeLockPairs() {
+    const pairs = Array.from(lockedPairs.values()).map((pair) => ({
+      top_id: pair.topId,
+      bottom_id: pair.bottomId,
+    }));
+    try {
+      return JSON.stringify(pairs);
+    } catch (error) {
+      return '[]';
+    }
+  }
+
   function unlockPairByKey(pairKey) {
     if (!pairKey || !lockedPairs.has(pairKey)) {
       return;
@@ -3849,6 +3869,7 @@ function initRosterEditor() {
       lockedPairLookup.delete(pair.topId);
       lockedPairLookup.delete(pair.bottomId);
     }
+    updateLockPairsInput();
   }
 
   function togglePair(topId, bottomId) {
@@ -3871,6 +3892,30 @@ function initRosterEditor() {
     lockedPairs.set(pairKey, { topId, bottomId });
     lockedPairLookup.set(topId, pairKey);
     lockedPairLookup.set(bottomId, pairKey);
+    updateLockPairsInput();
+  }
+
+  function applyLockPairsFromServer(pairs) {
+    lockedPairs.clear();
+    lockedPairLookup.clear();
+    const list = Array.isArray(pairs) ? pairs : [];
+    list.forEach((entry) => {
+      if (!entry) {
+        return;
+      }
+      const topId = String(entry.top_id ?? entry.topId ?? entry.top ?? '') || '';
+      const bottomId = String(entry.bottom_id ?? entry.bottomId ?? entry.bottom ?? '') || '';
+      const key = createPairKey(topId, bottomId);
+      if (!key) {
+        return;
+      }
+      lockedPairs.set(key, { topId, bottomId });
+      lockedPairLookup.set(topId, key);
+      lockedPairLookup.set(bottomId, key);
+    });
+    updateLockPairsInput();
+    refreshLockTargets();
+    updateMoveButtonStates(rosterListEl);
   }
 
   function getPartnerId(unitId) {
@@ -4852,6 +4897,7 @@ function initRosterEditor() {
     if (loadoutInput) {
       payload.set('loadout_json', loadoutInput.value || '{}');
     }
+    payload.set('lock_pairs_json', serializeLockPairs());
     const response = await fetch(action, {
       method: 'POST',
       body: payload,
@@ -5067,17 +5113,22 @@ function initRosterEditor() {
     if (!payload || typeof payload !== 'object') {
       return;
     }
-    const unitData = payload.unit || {};
-    const unitId = unitData && unitData.id !== undefined ? String(unitData.id) : '';
-    const isActiveMatch = Boolean(
-      activeItem && unitId && activeItem.getAttribute('data-roster-unit-id') === unitId,
-    );
-    const targetItem = isActiveMatch
-      ? activeItem
-      : unitId
-        ? root.querySelector(`[data-roster-item][data-roster-unit-id="${unitId}"]`)
-        : null;
-    if (unitData && targetItem) {
+    const applyUnitData = (unitData) => {
+      if (!unitData || typeof unitData !== 'object') {
+        return;
+      }
+      const unitId = unitData && unitData.id !== undefined ? String(unitData.id) : '';
+      const isActiveMatch = Boolean(
+        activeItem && unitId && activeItem.getAttribute('data-roster-unit-id') === unitId,
+      );
+      const targetItem = isActiveMatch
+        ? activeItem
+        : unitId
+          ? root.querySelector(`[data-roster-item][data-roster-unit-id="${unitId}"]`)
+          : null;
+      if (!targetItem) {
+        return;
+      }
       const unitCacheId = resolveUnitCacheId(targetItem);
       if (unitCacheId) {
         const datasetUpdates = {};
@@ -5157,6 +5208,16 @@ function initRosterEditor() {
       if (isActiveMatch) {
         syncEditorFromItem(targetItem, { preserveAutoSave: true });
       }
+    };
+
+    applyUnitData(payload.unit || {});
+    if (Array.isArray(payload.paired_units)) {
+      payload.paired_units.forEach((unitEntry) => {
+        applyUnitData(unitEntry);
+      });
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'lock_pairs')) {
+      applyLockPairsFromServer(payload.lock_pairs);
     }
     let totalCostValue = null;
     if (typeof payload.total_cost === 'number') {
@@ -5549,6 +5610,12 @@ function renderEditors(precomputedWeaponMap = null) {
   initialItems.forEach((item) => {
     registerRosterItem(item);
   });
+  try {
+    const initialPairs = JSON.parse(root.dataset.rosterLockPairs || '[]');
+    applyLockPairsFromServer(initialPairs);
+  } catch (error) {
+    applyLockPairsFromServer([]);
+  }
   if (!rosterListEl && initialItems.length) {
     const inferredList = initialItems[0].closest('[data-roster-list]');
     if (inferredList) {
