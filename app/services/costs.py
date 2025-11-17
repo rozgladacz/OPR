@@ -1073,6 +1073,9 @@ def roster_unit_role_totals(
     passive_state = compute_passive_state(unit, raw_data)
     base_traits = _strip_role_traits(passive_state.traits)
     default_weapons = unit_default_weapons(unit)
+    has_massive_trait = any(
+        ability_identifier(trait) == "masywny" for trait in base_traits
+    )
 
     def _parse_counts(section: str) -> dict[int, int]:
         raw_section = raw_data.get(section)
@@ -1128,9 +1131,16 @@ def roster_unit_role_totals(
     model_multiplier = max(int(getattr(roster_unit, "count", 0)), 0)
     model_count = max(model_multiplier, 1)
 
-    def _to_total(value: int) -> int:
+    ability_multiplier = (
+        0 if model_multiplier == 0 else 1 if has_massive_trait else model_count
+    )
+
+    def _to_total(value: int, *, ability: bool = False) -> int:
         safe_value = max(int(value), 0)
-        return safe_value if total_mode else safe_value * model_count
+        if total_mode:
+            return safe_value
+        multiplier = ability_multiplier if ability else model_count
+        return safe_value * multiplier
 
     def _weapon_cost_map(current_traits: Sequence[str]) -> dict[int, float]:
         results: dict[int, float] = {}
@@ -1240,7 +1250,7 @@ def roster_unit_role_totals(
             cost_value = ability_map.get(ability_id)
             if cost_value is None:
                 continue
-            total += cost_value * _to_total(stored_count)
+            total += cost_value * _to_total(stored_count, ability=True)
         passive_diff = 0.0
         for entry in passive_entries:
             slug = entry.get("slug")
@@ -1257,7 +1267,7 @@ def roster_unit_role_totals(
                 continue
             passive_diff += cost_value * diff
         if passive_diff:
-            total += passive_diff * model_multiplier
+            total += passive_diff * (1 if total_mode else ability_multiplier)
         return round(total, 2)
 
     warrior_total = _compute_total(_with_role_trait(base_traits, "wojownik"))
