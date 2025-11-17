@@ -326,12 +326,16 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Mobilizacja",
         type="active",
         description="Oddział w zasięgu 12” przestaje być przyszpilony.",
+    ),
+    AbilityDefinition(
         slug="przepowiednia",
         name="Przepowiednia",
         type="active",
         description=(
             "Wybierz oddział przeciwnika, który zostanie aktywowany jako następny, jeżeli to możliwe."
         ),
+    ),
+    AbilityDefinition(
         slug="presja",
         name="Presja",
         type="active",
@@ -365,6 +369,8 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Ociężałość",
         type="aura",
         description="Teren w zasięgu 12” jest uznawany za trudny dla wrogich oddziałów.",
+    ),
+    AbilityDefinition(
         slug="spaczenie",
         name="Spaczenie",
         type="aura",
