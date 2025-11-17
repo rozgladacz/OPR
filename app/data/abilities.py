@@ -296,6 +296,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Oddział w zasięgu 2” odrzuca k3 znaczniki ran.",
     ),
     AbilityDefinition(
+        slug="mobilizacja",
+        name="Mobilizacja",
+        type="active",
+        description="Oddział w zasięgu 12” przestaje być przyszpilony.",
+    ),
+    AbilityDefinition(
         slug="rozkaz",
         name="Rozkaz",
         type="active",
