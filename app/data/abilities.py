@@ -178,6 +178,16 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Podczas obrony, za każdą naturalną 6 możesz zignorować następną ranę przydzieloną podczas tego ataku.",
     ),
     AbilityDefinition(
+        slug="dywersant",
+        name="Dywersant",
+        type="passive",
+        description=(
+            "Jeżeli oddział któremu w wyniku ataku zadałeś rany w tej aktywacji wykonuje test przegrupowania podczas "
+            "gdy znajduje się bliżej twojej strefy rozstawienia niż ten oddział lub ten odział znajduje się bliżej jego "
+            "strefy rozstawienia niż on, wykonuje on dodatkowy test przegrupowania."
+        ),
+    ),
+    AbilityDefinition(
         slug="szpica",
         name="Szpica",
         type="passive",
