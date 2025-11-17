@@ -269,3 +269,7 @@ def test_instynkt_cost_scaling_with_toughness() -> None:
 def test_instynkt_aura_and_order_costs() -> None:
     assert costs.passive_cost("instynkt", 8, True) == pytest.approx(8)
     assert costs.passive_cost("instynkt", 10, True) == pytest.approx(10)
+
+
+def test_dywersant_aura_cost() -> None:
+    assert costs.passive_cost("dywersant", 8, True) == pytest.approx(10)

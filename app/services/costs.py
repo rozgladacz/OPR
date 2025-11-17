@@ -525,6 +525,8 @@ def passive_cost(ability_name: str, tou: float = 1.0, aura: bool = False) -> flo
         return 1.0 * tou
     if slug == "tarcza":
         return 1.25 * tou
+    if slug == "dywersant":
+        return 10.0
     if slug == "zdobywca":
         return 3.0 * tou
     if slug == "straznik":
