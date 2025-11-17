@@ -306,6 +306,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Oddział w zasięgu 2” odrzuca k3 znaczniki ran.",
     ),
     AbilityDefinition(
+        slug="presja",
+        name="Presja",
+        type="active",
+        description="Odział w zasięgu 12” przestaje być wyczerpany.",
+    ),
+    AbilityDefinition(
         slug="rozkaz",
         name="Rozkaz",
         type="active",
