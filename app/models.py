@@ -432,6 +432,10 @@ class Roster(TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="RosterUnit.position",
     )
+    roster_unit_pairs: Mapped[List["RosterUnitPair"]] = relationship(
+        back_populates="roster",
+        cascade="all, delete-orphan",
+    )
 
 
 class RosterUnit(TimestampMixin, Base):
@@ -450,6 +454,27 @@ class RosterUnit(TimestampMixin, Base):
     unit: Mapped[Unit] = relationship(back_populates="roster_units")
 
 
+class RosterUnitPair(TimestampMixin, Base):
+    __tablename__ = "roster_unit_pairs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    roster_id: Mapped[int] = mapped_column(ForeignKey("rosters.id"), nullable=False)
+    first_roster_unit_id: Mapped[int] = mapped_column(
+        ForeignKey("roster_units.id"), nullable=False
+    )
+    second_roster_unit_id: Mapped[int] = mapped_column(
+        ForeignKey("roster_units.id"), nullable=False
+    )
+
+    roster: Mapped[Roster] = relationship(back_populates="roster_unit_pairs")
+    first_roster_unit: Mapped[RosterUnit] = relationship(
+        foreign_keys=[first_roster_unit_id]
+    )
+    second_roster_unit: Mapped[RosterUnit] = relationship(
+        foreign_keys=[second_roster_unit_id]
+    )
+
+
 for cls in [
     User,
     RuleSet,
@@ -462,6 +487,7 @@ for cls in [
     UnitAbility,
     Roster,
     RosterUnit,
+    RosterUnitPair,
     ArmySpell,
 ]:
     event.listen(cls, "before_insert", touch_timestamps)
