@@ -205,6 +205,16 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Atakujący ma -1 do rzutów na trafienie, gdy jest dalej niż 6\".",
     ),
     AbilityDefinition(
+        slug="waagh",
+        name="Waagh!",
+        type="passive",
+        description=(
+            "Jeżeli twój oddział ma poniżej połowy początkowej wytrzymałości i nie ma innego "
+            "przyjaznego oddziału z tą zdolnością w zasięgu 12”, twoje ataki mają -1AP, a "
+            "ataki w ciebie +1AP."
+        ),
+    ),
+    AbilityDefinition(
         slug="ostrozny",
         name="Ostrożny",
         type="passive",
@@ -290,6 +300,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Raz na rundę, gdy Mag w zasięgu 12” rzuca czar, może go rzucić z twojej pozycji z +1 do rzutu.",
     ),
     AbilityDefinition(
+        slug="koordynacja",
+        name="Koordynacja",
+        type="active",
+        description="Przeciwnik pomija swoją następną aktywację.",
+    ),
+    AbilityDefinition(
         slug="latanie",
         name="Łatanie",
         type="active",
@@ -302,6 +318,10 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description=(
             "Wybierz oddział przeciwnika, który zostanie aktywowany jako następny, jeżeli to możliwe."
         ),
+        slug="presja",
+        name="Presja",
+        type="active",
+        description="Odział w zasięgu 12” przestaje być wyczerpany.",
     ),
     AbilityDefinition(
         slug="rozkaz",
@@ -325,6 +345,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Radio",
         type="aura",
         description="Jeżeli model w twoim oddziale wydaje rozkaz, może wybrać oddział odległy o 24” który też ma radio.",
+    ),
+    AbilityDefinition(
+        slug="spaczenie",
+        name="Spaczenie",
+        type="aura",
+        description="Teren w zasięgu 12” jest uznawany za niebezpieczny dla wrogich oddziałów.",
     ),
     # Weapon abilities
     AbilityDefinition(
@@ -377,7 +403,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
     ),
     AbilityDefinition(
         slug="rozrywajacy",
-        name="Rozrywający",
+        name="Seria",
         type="weapon",
         description="Naturalne 6 na trafienie dają dodatkowe normalne trafienie.",
     ),
