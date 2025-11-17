@@ -680,6 +680,8 @@ def ability_cost_from_name(
         base_result = 8.0 * extract_number(value or name)
     elif desc == "przekaznik":
         base_result = 4.0
+    elif desc == "koordynacja":
+        base_result = 45.0
     elif slug == "latanie":
         base_result = 20.0
     elif desc.startswith("rozkaz"):
