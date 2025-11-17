@@ -2470,6 +2470,7 @@ function createRosterItemElement(data, options = {}) {
 
   const outer = document.createElement('div');
   outer.className = 'list-group-item border-0 px-0 py-2';
+  outer.setAttribute('data-roster-entry', '');
 
   const entry = document.createElement('div');
   entry.className = 'roster-unit-entry';
@@ -2507,15 +2508,6 @@ function createRosterItemElement(data, options = {}) {
 
       reorder.appendChild(form);
     });
-
-    const lockButton = document.createElement('button');
-    lockButton.type = 'button';
-    lockButton.className = 'btn btn-outline-secondary btn-sm roster-unit-lock-toggle';
-    lockButton.setAttribute('data-roster-lock-toggle', '');
-    lockButton.setAttribute('aria-label', 'Połącz z kolejnym oddziałem');
-    lockButton.title = 'Połącz z kolejnym oddziałem';
-    lockButton.textContent = '🔓';
-    reorder.appendChild(lockButton);
   }
 
   const item = document.createElement('div');
@@ -3821,6 +3813,14 @@ function initRosterEditor() {
     return entry ? entry.closest('.list-group-item') : null;
   }
 
+  function getEntryContainers(listElement = null) {
+    const targetList = listElement || rosterListEl || ensureRosterList();
+    if (!targetList) {
+      return [];
+    }
+    return Array.from(targetList.querySelectorAll('[data-roster-entry]'));
+  }
+
   function getItemElementFromEntry(entry) {
     return entry ? entry.querySelector('[data-roster-item]') : null;
   }
@@ -3952,17 +3952,45 @@ function initRosterEditor() {
     if (!isEditable || !listElement) {
       return;
     }
-    const containers = Array.from(listElement.querySelectorAll('.list-group-item'));
+    listElement.querySelectorAll('[data-roster-lock-boundary]').forEach((boundary) => {
+      boundary.remove();
+    });
+
+    const containers = getEntryContainers(listElement);
     containers.forEach((container, index) => {
-      const lockButton = container.querySelector('[data-roster-lock-toggle]');
-      if (!lockButton) {
+      const nextContainer = containers[index + 1];
+      if (!nextContainer) {
         return;
       }
       const entry = container.querySelector('.roster-unit-entry');
       const topId = getUnitIdFromEntry(entry);
-      const nextContainer = containers[index + 1];
-      const bottomEntry = nextContainer ? nextContainer.querySelector('.roster-unit-entry') : null;
+      const bottomEntry = nextContainer.querySelector('.roster-unit-entry');
       const bottomId = bottomEntry ? getUnitIdFromEntry(bottomEntry) : '';
+
+      const boundary = document.createElement('div');
+      boundary.className = 'list-group-item border-0 px-0 py-0 roster-lock-boundary';
+      boundary.setAttribute('data-roster-lock-boundary', '');
+
+      const lockRow = document.createElement('div');
+      lockRow.className = 'roster-unit-lock-row';
+
+      const lockAnchor = document.createElement('div');
+      lockAnchor.className = 'roster-unit-reorder roster-unit-reorder--lock';
+
+      const lockButton = document.createElement('button');
+      lockButton.type = 'button';
+      lockButton.className = 'btn btn-outline-secondary btn-sm roster-unit-lock-toggle';
+      lockButton.setAttribute('data-roster-lock-toggle', '');
+      lockButton.setAttribute('aria-label', 'Połącz z kolejnym oddziałem');
+      lockButton.title = 'Połącz z kolejnym oddziałem';
+      lockButton.textContent = '🔓';
+
+      lockAnchor.appendChild(lockButton);
+      lockRow.appendChild(lockAnchor);
+      boundary.appendChild(lockRow);
+
+      listElement.insertBefore(boundary, nextContainer);
+
       lockButton.dataset.lockTopId = topId || '';
       lockButton.dataset.lockBottomId = bottomId || '';
       registerLockButton(lockButton);
@@ -3999,13 +4027,22 @@ function initRosterEditor() {
     }
   }
 
+  function findSiblingEntryContainer(container, direction) {
+    const step = direction === 'up' ? 'previousElementSibling' : 'nextElementSibling';
+    let sibling = container ? container[step] : null;
+    while (sibling && !sibling.hasAttribute('data-roster-entry')) {
+      sibling = sibling[step];
+    }
+    return sibling;
+  }
+
   function moveEntryDom(entry, direction) {
     const container = getListItemContainer(entry);
     if (!container || !container.parentElement) {
       return false;
     }
     if (direction === 'up') {
-      const previous = container.previousElementSibling;
+      const previous = findSiblingEntryContainer(container, 'up');
       if (!previous) {
         return false;
       }
@@ -4013,11 +4050,11 @@ function initRosterEditor() {
       return true;
     }
     if (direction === 'down') {
-      const next = container.nextElementSibling;
+      const next = findSiblingEntryContainer(container, 'down');
       if (!next) {
         return false;
       }
-      container.parentElement.insertBefore(next, container);
+      container.parentElement.insertBefore(container, next.nextElementSibling);
       return true;
     }
     return false;
@@ -4042,7 +4079,17 @@ function initRosterEditor() {
     }
     const topContainer = getListItemContainer(topEntry);
     const bottomContainer = getListItemContainer(bottomEntry);
-    if (!topContainer || !bottomContainer || topContainer.nextElementSibling !== bottomContainer) {
+    const areAdjacent = (() => {
+      if (!topContainer || !bottomContainer) {
+        return false;
+      }
+      let cursor = topContainer.nextElementSibling;
+      while (cursor && !cursor.hasAttribute('data-roster-entry')) {
+        cursor = cursor.nextElementSibling;
+      }
+      return cursor === bottomContainer;
+    })();
+    if (!areAdjacent) {
       unlockPairByKey(createPairKey(pair.topId, pair.bottomId));
       renderLockButtons();
       updateMoveButtonStates(rosterListEl);

@@ -74,7 +74,7 @@ body {
   align-items: center;
   justify-content: center;
   position: relative;
-  padding-bottom: 1.5rem;
+  padding-bottom: 0;
 }
 
 .roster-unit-reorder .btn {
@@ -83,17 +83,26 @@ body {
 }
 
 .roster-unit-lock-toggle {
-  position: absolute;
-  bottom: -0.75rem;
-  left: 50%;
-  transform: translate(-50%, 50%);
+  position: static;
+  transform: none;
   padding: 0.25rem 0.5rem;
   line-height: 1;
   z-index: 2;
 }
 
-.roster-unit-entry:last-child .roster-unit-lock-toggle {
-  display: none;
+.roster-lock-boundary {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.roster-unit-lock-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.roster-unit-reorder--lock {
+  padding-bottom: 0;
 }
 
 .roster-unit-item[data-roster-item] {
