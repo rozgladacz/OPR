@@ -130,6 +130,14 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Wykonuje jeden test przegrupowania mniej.",
     ),
     AbilityDefinition(
+        slug="ucieczka",
+        name="Ucieczka",
+        type="passive",
+        description=(
+            "Zanim zaczniesz być przyszpilony lub wyczerpany, możesz wykonać ruch."
+        ),
+    ),
+    AbilityDefinition(
         slug="stracency",
         name="Straceńcy",
         type="passive",

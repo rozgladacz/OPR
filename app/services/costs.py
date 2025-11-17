@@ -16,7 +16,11 @@ from ..data import abilities as ability_catalog
 from .utils import passive_flags_to_payload
 
 
-MORALE_ABILITY_MULTIPLIERS = {"nieustraszony": 0.5, "stracency": 0.5}
+MORALE_ABILITY_MULTIPLIERS = {
+    "nieustraszony": 0.5,
+    "ucieczka": 0.5,
+    "stracency": 0.5,
+}
 
 DEFENSE_BASE_VALUES = {2: 2.0, 3: 1.67, 4: 1.33, 5: 1.0, 6: 0.8}
 DEFENSE_ABILITY_MODIFIERS = {
@@ -523,7 +527,7 @@ def passive_cost(ability_name: str, tou: float = 1.0, aura: bool = False) -> flo
         return 3.0 * tou
 
     if aura:
-        if slug in {"nieustraszony", "stracency"}:
+        if slug in {"nieustraszony", "ucieczka", "stracency"}:
             return 1.5 * tou
         if slug == "delikatny":
             return 0.5 * tou
