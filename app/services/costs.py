@@ -690,6 +690,8 @@ def ability_cost_from_name(
         base_result = 45.0
     elif slug == "latanie":
         base_result = 20.0
+    elif slug == "mobilizacja":
+        base_result = 30.0
     elif slug == "przepowiednia":
         base_result = 45.0
     elif slug == "presja":
