@@ -83,8 +83,6 @@ body {
 }
 
 .roster-unit-lock-toggle {
-  position: static;
-  transform: none;
   padding: 0.25rem 0.5rem;
   line-height: 1;
   width: 2.25rem;
@@ -92,7 +90,9 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  z-index: 2;
+  transform: none;
+  position: relative;
+  z-index: 3;
 }
 
 .roster-unit-lock-toggle svg {
@@ -101,13 +101,31 @@ body {
   fill: currentColor;
 }
 
+
 .roster-lock-boundary {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  position: relative;
   pointer-events: none;
   width: 100%;
+  isolation: isolate;
+  z-index: 2;
+}
+
+.roster-unit-reorder > .roster-lock-boundary {
+  position: absolute;
+  top: calc(100% - 0.375rem);
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.list-group-item[data-roster-lock-boundary] {
+  position: relative;
+}
+
+.list-group-item[data-roster-lock-boundary] .roster-lock-boundary {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .roster-unit-lock-row {
