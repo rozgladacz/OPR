@@ -202,23 +202,6 @@
                     ↓
                   </button>
                 </form>
-                {% if not loop.last %}
-                <div class="roster-lock-boundary" data-roster-lock-boundary>
-                  <div class="roster-unit-lock-row">
-                    <button
-                      class="btn btn-outline-secondary btn-sm roster-unit-lock-toggle"
-                      type="button"
-                      data-roster-lock-toggle
-                      data-lock-top-id="{{ ru.id }}"
-                      data-lock-bottom-id="{{ loop.nextitem.instance.id }}"
-                      aria-label="Połącz z kolejnym oddziałem"
-                      title="Połącz z kolejnym oddziałem"
-                    >
-                      🔓
-                    </button>
-                  </div>
-                </div>
-                {% endif %}
               </div>
               {% endif %}
               <div

@@ -4003,48 +4003,29 @@ function initRosterEditor() {
     if (!isEditable || !listElement) {
       return;
     }
+    const findAdjacentEntry = (boundary, direction) => {
+      const prop = direction === 'next' ? 'nextElementSibling' : 'previousElementSibling';
+      let sibling = boundary ? boundary[prop] : null;
+      while (sibling) {
+        if (sibling.hasAttribute && sibling.hasAttribute('data-roster-entry')) {
+          return sibling;
+        }
+        sibling = sibling[prop];
+      }
+      return null;
+    };
+
     listElement.querySelectorAll('[data-roster-lock-boundary]').forEach((boundary) => {
-      boundary.remove();
-    });
-
-    const containers = getEntryContainers(listElement);
-    containers.forEach((container, index) => {
-      const nextContainer = containers[index + 1];
-      if (!nextContainer) {
+      const lockButton = boundary.querySelector('[data-roster-lock-toggle]');
+      if (!lockButton) {
         return;
       }
-      const entry = container.querySelector('.roster-unit-entry');
-      const topId = getUnitIdFromEntry(entry);
-      const bottomEntry = nextContainer.querySelector('.roster-unit-entry');
-      const bottomId = bottomEntry ? getUnitIdFromEntry(bottomEntry) : '';
-
-      const reorderColumn = entry ? entry.querySelector('.roster-unit-reorder') : null;
-      if (!reorderColumn) {
-        return;
-      }
-
-      const boundary = document.createElement('div');
-      boundary.className = 'roster-lock-boundary';
-      boundary.setAttribute('data-roster-lock-boundary', '');
-
-      const lockRow = document.createElement('div');
-      lockRow.className = 'roster-unit-lock-row';
-
-      const lockButton = document.createElement('button');
-      lockButton.type = 'button';
-      lockButton.className = 'btn btn-outline-secondary btn-sm roster-unit-lock-toggle';
-      lockButton.setAttribute('data-roster-lock-toggle', '');
-      lockButton.setAttribute('aria-label', 'Połącz z kolejnym oddziałem');
-      lockButton.title = 'Połącz z kolejnym oddziałem';
-      setLockButtonIcon(lockButton, false);
-
-      lockRow.appendChild(lockButton);
-      boundary.appendChild(lockRow);
-
-      reorderColumn.appendChild(boundary);
-
-      lockButton.dataset.lockTopId = topId || '';
-      lockButton.dataset.lockBottomId = bottomId || '';
+      const topContainer = findAdjacentEntry(boundary, 'previous');
+      const bottomContainer = findAdjacentEntry(boundary, 'next');
+      const topEntry = topContainer ? topContainer.querySelector('.roster-unit-entry') : null;
+      const bottomEntry = bottomContainer ? bottomContainer.querySelector('.roster-unit-entry') : null;
+      lockButton.dataset.lockTopId = topEntry ? getUnitIdFromEntry(topEntry) || '' : '';
+      lockButton.dataset.lockBottomId = bottomEntry ? getUnitIdFromEntry(bottomEntry) || '' : '';
       registerLockButton(lockButton);
     });
     renderLockButtons();
