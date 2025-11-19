@@ -23,7 +23,13 @@ from ..db import get_db
 from ..security import get_current_user
 from ..pdf_font_data import PDF_FONT_DATA
 from ..services import costs, utils
-from .rosters import _ensure_roster_view_access, _roster_unit_export_data
+from .rosters import (
+    _classification_map_with_pairs,
+    _ensure_roster_view_access,
+    _lock_pairs_for_roster,
+    _roster_unit_export_data,
+    _roster_unit_loadout,
+)
 
 router = APIRouter(prefix="/rosters", tags=["export"])
 templates = Jinja2Templates(directory="app/templates")
@@ -155,6 +161,34 @@ def _load_roster_for_export(db: Session, roster_id: int) -> models.Roster | None
     return db.scalars(stmt).one_or_none()
 
 
+def _export_roster_unit_entries(
+    db: Session, roster: models.Roster
+) -> list[dict[str, Any]]:
+    unit_cache: dict[int, dict[str, Any]] = {}
+    lock_pairs = _lock_pairs_for_roster(db, roster)
+    loadouts: dict[int, dict[str, Any]] = {}
+    for roster_unit in roster.roster_units:
+        unit_id = getattr(roster_unit, "id", None)
+        if unit_id is None:
+            continue
+        loadouts[unit_id] = _roster_unit_loadout(roster_unit)
+    classifications, _totals = _classification_map_with_pairs(
+        roster.roster_units, loadouts, lock_pairs
+    )
+    entries: list[dict[str, Any]] = []
+    for roster_unit in roster.roster_units:
+        unit_id = getattr(roster_unit, "id", None)
+        entries.append(
+            _roster_unit_export_data(
+                roster_unit,
+                unit_cache=unit_cache,
+                loadout_override=loadouts.get(unit_id),
+                classification=classifications.get(unit_id),
+            )
+        )
+    return entries
+
+
 @router.get("/{roster_id}/print", response_class=HTMLResponse)
 def roster_print(
     roster_id: int,
@@ -172,11 +206,7 @@ def roster_print(
     costs.ensure_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
     total_cost_rounded = utils.round_points(total_cost)
-    unit_cache: dict[int, dict[str, Any]] = {}
-    roster_items = [
-        _roster_unit_export_data(ru, unit_cache=unit_cache)
-        for ru in roster.roster_units
-    ]
+    roster_items = _export_roster_unit_entries(db, roster)
     spell_entries = _army_spell_entries(roster, roster_items)
     army_rules = _army_rule_labels(getattr(roster, "army", None))
     army_rules = _army_rule_labels(getattr(roster, "army", None))
@@ -214,11 +244,7 @@ def roster_export_list(
     total_cost = costs.roster_total(roster)
     total_cost_rounded = utils.round_points(total_cost)
 
-    unit_cache: dict[int, dict[str, Any]] = {}
-    entries = [
-        _roster_unit_export_data(ru, unit_cache=unit_cache)
-        for ru in roster.roster_units
-    ]
+    entries = _export_roster_unit_entries(db, roster)
     spell_entries = _army_spell_entries(roster, entries)
     army_rules = _army_rule_labels(getattr(roster, "army", None))
 
@@ -255,11 +281,7 @@ def roster_pdf(
     costs.ensure_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
     total_cost_rounded = utils.round_points(total_cost)
-    unit_cache: dict[int, dict[str, Any]] = {}
-    roster_items = [
-        _roster_unit_export_data(ru, unit_cache=unit_cache)
-        for ru in roster.roster_units
-    ]
+    roster_items = _export_roster_unit_entries(db, roster)
     spell_entries = _army_spell_entries(roster, roster_items)
 
     _ensure_pdf_fonts()
