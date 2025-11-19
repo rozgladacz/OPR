@@ -3704,32 +3704,6 @@ function initRosterAdders(root) {
   });
 }
 
-function renderWarningsList(container, warnings) {
-  if (!container) {
-    return;
-  }
-  container.innerHTML = '';
-  const list = Array.isArray(warnings) ? warnings : [];
-  container.dataset.warnings = JSON.stringify(list);
-  if (!list.length) {
-    return;
-  }
-  const alertBox = document.createElement('div');
-  alertBox.className = 'alert alert-warning mb-0';
-  const strong = document.createElement('strong');
-  strong.textContent = 'Ostrzeżenia:';
-  alertBox.appendChild(strong);
-  const listEl = document.createElement('ul');
-  listEl.className = 'mb-0';
-  list.forEach((warning) => {
-    const item = document.createElement('li');
-    item.textContent = String(warning || '');
-    listEl.appendChild(item);
-  });
-  alertBox.appendChild(listEl);
-  container.appendChild(alertBox);
-}
-
 function initRosterEditor() {
   const root = document.querySelector('[data-roster-root]');
   if (!root) {
@@ -3759,7 +3733,6 @@ function initRosterEditor() {
   const saveStateEl = root.querySelector('[data-roster-editor-save-state]');
   const totalContainer = root.querySelector('[data-roster-total-container]');
   const totalValueEl = root.querySelector('[data-roster-total]');
-  const warningsContainer = document.querySelector('[data-roster-warnings]');
   const isEditable = Boolean(form && countInput && loadoutInput);
   const listWrapper = root.querySelector('[data-roster-items-container]') || null;
   let rosterListEl = root.querySelector('[data-roster-list]');
@@ -3768,15 +3741,6 @@ function initRosterEditor() {
   const lockedPairs = new Map();
   const lockedPairLookup = new Map();
   const lockButtons = new WeakSet();
-  if (warningsContainer) {
-    try {
-      const initialWarnings = JSON.parse(warningsContainer.dataset.warnings || '[]');
-      renderWarningsList(warningsContainer, Array.isArray(initialWarnings) ? initialWarnings : []);
-    } catch (err) {
-      renderWarningsList(warningsContainer, []);
-    }
-  }
-
   function ensureRosterList() {
     if (rosterListEl && rosterListEl.isConnected) {
       return rosterListEl;
@@ -5294,9 +5258,6 @@ function initRosterEditor() {
     }
     if (Number.isFinite(totalCostValue)) {
       updateTotalSummary(totalCostValue);
-    }
-    if (Array.isArray(payload.warnings)) {
-      renderWarningsList(warningsContainer, payload.warnings);
     }
   }
 
