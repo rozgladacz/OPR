@@ -25,6 +25,11 @@
     Suma: {{ total_cost_rounded }} pkt{% if generated_at %} ·
     Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC{% endif %}
   </p>
+  {% if army_rules %}
+  <p class="meta">
+    Zasady armii: {{ army_rules | join(', ') }}
+  </p>
+  {% endif %}
 
   <table>
     <thead>
