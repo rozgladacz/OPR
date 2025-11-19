@@ -37,7 +37,37 @@ def _unit_eager_options() -> tuple:
         .selectinload(models.Weapon.parent)
         .selectinload(models.Weapon.parent),
         selectinload(models.Unit.abilities).selectinload(models.UnitAbility.ability),
+        selectinload(models.Unit.army),
     )
+
+
+def _unit_army_flags(unit: models.Unit | None) -> dict:
+    flags = utils.parse_flags(getattr(unit, "flags", None))
+    if unit is None:
+        return flags
+    army = getattr(unit, "army", None)
+    if army is None:
+        return flags
+    army_flags = utils.parse_flags(getattr(army, "passive_rules", None))
+    for key, value in army_flags.items():
+        if key is None or key in flags:
+            continue
+        flags[key] = value
+    return flags
+
+
+def _unit_flag_string_with_army(unit: models.Unit | None) -> str:
+    parts: list[str] = []
+    for source in (
+        getattr(unit, "flags", None),
+        getattr(getattr(unit, "army", None), "passive_rules", None),
+    ):
+        if not source:
+            continue
+        text = str(source).strip()
+        if text:
+            parts.append(text)
+    return ", ".join(parts)
 
 
 def _normalized_trait_identifier(slug: str | None) -> str | None:
@@ -107,7 +137,7 @@ def _ordered_roster_units(db: Session, roster: models.Roster) -> list[models.Ros
 def _available_role_slugs(unit: models.Unit | None) -> set[str]:
     if unit is None:
         return set()
-    flags = utils.parse_flags(getattr(unit, "flags", None))
+    flags = _unit_army_flags(unit)
     traits = costs.flags_to_ability_list(flags)
     return {costs.ability_identifier(trait) for trait in traits}
 
@@ -498,6 +528,7 @@ def edit_roster(
             "active_items": active_items,
             "aura_items": aura_items,
             "default_summary": default_summary,
+            "unit_flags": _unit_flag_string_with_army(unit),
         }
         unit_payloads[unit.id] = payload
         return payload
@@ -612,6 +643,7 @@ def edit_roster(
                 ),
                 "classification": classification,
                 "is_hero": is_hero,
+                "unit_flags": _unit_flag_string_with_army(unit),
             }
         )
     non_hero_unit_count = sum(
@@ -788,7 +820,7 @@ def add_roster_unit(
             "unit_quality": unit.quality,
             "unit_defense": unit.defense,
             "unit_toughness": unit.toughness,
-            "unit_flags": unit.flags or "",
+            "unit_flags": _unit_flag_string_with_army(unit),
             "default_summary": default_summary,
             "loadout_summary": loadout_summary,
             "weapon_options": weapon_options,
@@ -1185,7 +1217,7 @@ def _default_loadout_summary(unit: models.Unit) -> str:
 def _unit_weapon_options(unit: models.Unit) -> list[dict]:
     options: list[dict] = []
     seen: set[int] = set()
-    flags = utils.parse_flags(unit.flags)
+    flags = _unit_army_flags(unit)
     primary_id: int | None = None
     if getattr(unit, "default_weapon_id", None):
         primary_id = unit.default_weapon_id
@@ -1252,20 +1284,68 @@ def _unit_weapon_options(unit: models.Unit) -> list[dict]:
 def _passive_entries(unit: models.Unit) -> list[dict]:
     payload = utils.passive_flags_to_payload(unit.flags)
     entries: list[dict] = []
-    flags = utils.parse_flags(unit.flags)
+    flags = _unit_army_flags(unit)
     unit_traits = costs.flags_to_ability_list(flags)
     default_weapons = costs.unit_default_weapons(unit)
+    seen_slugs: set[str] = set()
+    prefix = utils.ARMY_RULE_OFF_PREFIX
+    army_rule_entries = costs.army_rules(unit)
+    army_rule_map: dict[str, dict[str, Any]] = {}
+    army_rule_costs: dict[str, float] = {}
+    army_disable_defaults: dict[str, int] = {}
+
+    for rule in army_rule_entries:
+        slug = str(rule.get("slug") or "").strip()
+        if not slug or _is_hidden_trait(slug):
+            continue
+        identifier = costs.ability_identifier(slug) or slug.casefold()
+        if slug.startswith(prefix):
+            base_slug = slug[len(prefix) :].strip()
+            base_ident = costs.ability_identifier(base_slug) or base_slug.casefold()
+            if base_ident:
+                default_count = int(rule.get("default_count") or 0)
+                army_disable_defaults[base_ident] = 1 if default_count > 0 else 0
+            continue
+        try:
+            cost_value = float(
+                costs.ability_cost_from_name(
+                    rule.get("label") or slug,
+                    rule.get("value"),
+                    unit_traits,
+                    toughness=unit.toughness,
+                    quality=unit.quality,
+                    defense=unit.defense,
+                    weapons=default_weapons,
+                )
+            )
+        except Exception:  # pragma: no cover - fallback for unexpected input
+            cost_value = float(
+                costs.ability_cost_from_name(
+                    slug,
+                    rule.get("value"),
+                    unit_traits,
+                    toughness=unit.toughness,
+                    quality=unit.quality,
+                    defense=unit.defense,
+                    weapons=default_weapons,
+                )
+            )
+        key = identifier or slug.casefold()
+        army_rule_costs[key] = cost_value
+        army_rule_map[key] = rule
+
     for item in payload:
         if not item:
             continue
         slug = str(item.get("slug") or "").strip()
-        if _is_hidden_trait(slug):
+        if not slug or _is_hidden_trait(slug):
             continue
         label = item.get("label") or slug
         value = item.get("value")
         description = item.get("description") or ""
         is_mandatory = bool(item.get("is_mandatory", False))
         is_default = bool(item.get("is_default", False)) or is_mandatory
+        default_count = 1 if is_default else 0
         try:
             cost_value = float(
                 costs.ability_cost_from_name(
@@ -1290,6 +1370,34 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
                     weapons=default_weapons,
                 )
             )
+        if slug.startswith(prefix):
+            base_slug = slug[len(prefix) :].strip()
+            cost_source = item.get("value") or base_slug or label
+            try:
+                disable_cost = float(
+                    costs.ability_cost_from_name(
+                        cost_source or base_slug,
+                        None,
+                        unit_traits,
+                        toughness=unit.toughness,
+                        quality=unit.quality,
+                        defense=unit.defense,
+                        weapons=default_weapons,
+                    )
+                )
+            except Exception:  # pragma: no cover - defensive
+                disable_cost = float(
+                    costs.ability_cost_from_name(
+                        base_slug or slug,
+                        None,
+                        unit_traits,
+                        toughness=unit.toughness,
+                        quality=unit.quality,
+                        defense=unit.defense,
+                        weapons=default_weapons,
+                    )
+                )
+            cost_value = -disable_cost
         entries.append(
             {
                 "slug": slug,
@@ -1298,10 +1406,37 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
                 "description": description,
                 "cost": cost_value,
                 "is_default": is_default,
-                "default_count": 1 if is_default else 0,
+                "default_count": default_count,
                 "is_mandatory": is_mandatory,
             }
         )
+        seen_slugs.add(slug)
+
+    for key, rule in army_rule_map.items():
+        slug = str(rule.get("slug") or "").strip()
+        if not slug:
+            continue
+        disable_slug = f"{prefix}{slug}"
+        if disable_slug in seen_slugs:
+            continue
+        base_label, display_label, default_description = utils.army_rule_disabled_texts(
+            slug, rule.get("label")
+        )
+        default_count = army_disable_defaults.get(key, 0)
+        entries.append(
+            {
+                "slug": disable_slug,
+                "value": base_label,
+                "label": display_label,
+                "description": default_description,
+                "cost": -army_rule_costs.get(key, 0.0),
+                "is_default": bool(default_count),
+                "default_count": default_count,
+                "is_mandatory": False,
+            }
+        )
+        seen_slugs.add(disable_slug)
+
     return entries
 
 
@@ -1420,6 +1555,12 @@ def _selected_passive_entries(
         slug = str(entry.get("slug") or "").strip()
         if not slug:
             continue
+        if entry.get("is_army_rule"):
+            seen_slugs.add(slug)
+            identifier = costs.ability_identifier(slug)
+            if identifier:
+                seen_identifiers.add(identifier)
+            continue
         identifier = costs.ability_identifier(slug)
         if _is_hidden_trait(slug):
             seen_slugs.add(slug)
@@ -1505,7 +1646,7 @@ def _role_slug_map(unit: models.Unit | None) -> dict[str, str]:
     if unit is None:
         return {}
     mapping: dict[str, str] = {}
-    flags = utils.parse_flags(getattr(unit, "flags", None))
+    flags = _unit_army_flags(unit)
     for raw_key in flags.keys():
         if raw_key is None:
             continue
@@ -1672,7 +1813,7 @@ def _ability_entries(unit: models.Unit, ability_type: str) -> list[dict]:
         except (TypeError, ValueError):  # pragma: no cover - defensive
             continue
         payload_by_id.setdefault(key, []).append(item)
-    flags = utils.parse_flags(unit.flags)
+    flags = _unit_army_flags(unit)
     unit_traits = costs.flags_to_ability_list(flags)
     ability_links = [
         link
@@ -2337,7 +2478,7 @@ def _roster_unit_classification(
     available_slugs: set[str] = set()
     unit = getattr(roster_unit, "unit", None)
     if unit is not None:
-        flags = utils.parse_flags(getattr(unit, "flags", None))
+        flags = _unit_army_flags(unit)
         traits = costs.flags_to_ability_list(flags)
         available_slugs = {
             costs.ability_identifier(trait) for trait in traits

@@ -72,6 +72,21 @@ def _army_spell_entries(
     return result
 
 
+def _army_rule_labels(army: models.Army | None) -> list[str]:
+    labels: list[str] = []
+    for entry in costs.army_rules(army=army):
+        if not isinstance(entry, dict):
+            continue
+        slug = str(entry.get("slug") or "").strip()
+        if not slug or slug.startswith(utils.ARMY_RULE_OFF_PREFIX):
+            continue
+        label = entry.get("label") or entry.get("value") or slug
+        text = str(label).strip()
+        if text:
+            labels.append(text)
+    return labels
+
+
 def _ensure_pdf_fonts() -> None:
     global _PDF_FONTS_REGISTERED
     if _PDF_FONTS_REGISTERED:
@@ -131,6 +146,7 @@ def _load_roster_for_export(db: Session, roster_id: int) -> models.Roster | None
                     selectinload(models.Unit.abilities).selectinload(
                         models.UnitAbility.ability
                     ),
+                    selectinload(models.Unit.army),
                 )
             ),
             selectinload(models.Roster.army).selectinload(models.Army.spells),
@@ -162,6 +178,8 @@ def roster_print(
         for ru in roster.roster_units
     ]
     spell_entries = _army_spell_entries(roster, roster_items)
+    army_rules = _army_rule_labels(getattr(roster, "army", None))
+    army_rules = _army_rule_labels(getattr(roster, "army", None))
     return templates.TemplateResponse(
         "roster_print.html",
         {
@@ -173,6 +191,7 @@ def roster_print(
             "total_cost_rounded": total_cost_rounded,
             "generated_at": datetime.utcnow(),
             "spell_entries": spell_entries,
+            "army_rules": army_rules,
         },
     )
 
@@ -201,6 +220,7 @@ def roster_export_list(
         for ru in roster.roster_units
     ]
     spell_entries = _army_spell_entries(roster, entries)
+    army_rules = _army_rule_labels(getattr(roster, "army", None))
 
     return templates.TemplateResponse(
         "export/lista.html",
@@ -213,6 +233,7 @@ def roster_export_list(
             "total_cost_rounded": total_cost_rounded,
             "generated_at": datetime.utcnow(),
             "spell_entries": spell_entries,
+            "army_rules": army_rules,
         },
     )
 
@@ -271,7 +292,13 @@ def roster_pdf(
         pdf.drawString(40, y, f"Suma punktów: {total_cost_rounded} pkt")
         y -= 14
         pdf.drawString(40, y, f"Wygenerowano: {generated_at.strftime('%Y-%m-%d %H:%M')} UTC")
-        y -= 18
+        y -= 14
+        if army_rules:
+            rule_line = f"Zasady armii: {', '.join(army_rules)}"
+            for segment in wrap_line(rule_line):
+                pdf.drawString(40, y, segment)
+                y -= 14
+        y -= 4
         pdf.setFont(PDF_BASE_FONT, 10)
 
     draw_page_header()

@@ -234,7 +234,7 @@
                 data-unit-defense="{{ ru.unit.defense }}"
                 data-unit-toughness="{{ ru.unit.toughness }}"
                 data-unit-custom-name="{{ ru.custom_name or '' }}"
-                data-unit-flags='{{ ru.unit.flags | default('', true) | e }}'
+                data-unit-flags='{{ item.unit_flags | default('', true) | e }}'
                 data-selected-passives='{{ item.selected_passive_items | tojson | e }}'
                 data-selected-actives='{{ item.selected_active_items | tojson | e }}'
                 data-selected-auras='{{ item.selected_aura_items | tojson | e }}'
@@ -255,8 +255,8 @@
                 {% set selected_actives = item.selected_active_items or [] %}
                 {% set selected_auras = item.selected_aura_items or [] %}
                 <div class="d-flex flex-wrap gap-1 mt-2" data-roster-unit-abilities>
-                  {% for ability in selected_passives %}
-                  {% set base_label = ability.label or ability.raw or ability.slug %}
+                {% for ability in selected_passives if not ability.get('is_army_rule') %}
+                {% set base_label = ability.label or ability.raw or ability.slug %}
                   {% if ability.custom_name %}
                   {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
                   {% else %}

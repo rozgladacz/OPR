@@ -18,6 +18,17 @@ if not hasattr(service_utils, "HIDDEN_TRAIT_SLUGS"):
 from app.routers import rosters
 
 
+def _make_army(passive_rules: str) -> models.Army:
+    return models.Army(
+        name="Test Army",
+        parent_id=None,
+        owner_id=None,
+        ruleset_id=1,
+        armory_id=1,
+        passive_rules=passive_rules,
+    )
+
+
 def _make_unit_with_default_passive() -> models.Unit:
     ability = models.Ability(name="Nieustraszony", type="passive", description="")
     link = models.UnitAbility(position=0)
@@ -35,6 +46,79 @@ def _make_unit_with_default_passive() -> models.Unit:
     unit.default_weapon = None
     unit.default_weapon_id = None
     return unit
+
+
+def test_army_rules_included_in_passive_state() -> None:
+    army = _make_army("Nieustraszony")
+    army.id = 1
+    unit = models.Unit(
+        name="Infantry",
+        quality=4,
+        defense=4,
+        toughness=6,
+        flags=None,
+        army_id=army.id,
+    )
+    unit.army = army
+    unit.abilities = []
+    unit.weapon_links = []
+    unit.default_weapon = None
+    unit.default_weapon_id = None
+    passive_state = costs.compute_passive_state(unit)
+    assert any(
+        entry.get("slug") == "Nieustraszony" and entry.get("is_army_rule")
+        for entry in passive_state.payload
+    )
+    assert "nieustraszony" in passive_state.traits
+
+
+def test_army_rule_can_be_disabled_via_brak_option() -> None:
+    army = _make_army("Nieustraszony")
+    army.id = 2
+    unit = models.Unit(
+        name="Guard",
+        quality=4,
+        defense=4,
+        toughness=6,
+        flags=None,
+        army_id=army.id,
+    )
+    unit.army = army
+    unit.abilities = []
+    unit.weapon_links = []
+    unit.default_weapon = None
+    unit.default_weapon_id = None
+    roster_unit = models.RosterUnit(unit=unit, count=1)
+    totals_default = costs.roster_unit_role_totals(roster_unit)
+    loadout = {"passive": {"__army_off__Nieustraszony": 1}}
+    totals_disabled = costs.roster_unit_role_totals(roster_unit, loadout)
+    assert totals_disabled["wojownik"] < totals_default["wojownik"]
+    passive_state = costs.compute_passive_state(unit, loadout)
+    assert "nieustraszony" not in passive_state.traits
+
+
+def test_passive_entries_include_army_disable_entry() -> None:
+    army = _make_army("Nieustraszony")
+    army.id = 3
+    unit = models.Unit(
+        name="Veterans",
+        quality=4,
+        defense=4,
+        toughness=6,
+        flags=None,
+        army_id=army.id,
+    )
+    unit.army = army
+    unit.abilities = []
+    unit.weapon_links = []
+    unit.default_weapon = None
+    unit.default_weapon_id = None
+    entries = rosters._passive_entries(unit)
+    assert not any(entry.get("slug") == "Nieustraszony" for entry in entries)
+    assert any(
+        entry.get("slug") == "__army_off__Nieustraszony" and entry.get("cost") <= 0
+        for entry in entries
+    )
 
 
 def test_disabling_default_passive_reduces_cost() -> None:

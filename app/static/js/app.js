@@ -704,6 +704,9 @@ function abilityIdentifier(text) {
   if (!base) {
     return '';
   }
+  if (base.startsWith(ARMY_RULE_OFF_PREFIX)) {
+    base = base.slice(ARMY_RULE_OFF_PREFIX.length).trim();
+  }
   ['(', '=', ':'].forEach((separator) => {
     if (base.includes(separator)) {
       base = base.split(separator, 1)[0].trim();
@@ -903,6 +906,21 @@ function buildWeaponFlags(baseFlags, passiveItems, passiveState) {
           : 0
         : defaultFlag;
     const enabled = selectedFlag > 0;
+    if (slug.startsWith(ARMY_RULE_OFF_PREFIX)) {
+      if (enabled) {
+        const targetSlug = slug.slice(ARMY_RULE_OFF_PREFIX.length).trim();
+        const targetIdent = passiveIdentifier(targetSlug);
+        const targetKeys = targetIdent ? identifierKeys.get(targetIdent) || [] : [];
+        if (targetKeys.length) {
+          targetKeys.forEach((key) => {
+            delete result[key];
+          });
+        } else if (targetSlug) {
+          delete result[targetSlug];
+        }
+      }
+      return;
+    }
     const keys = identifierKeys.get(ident) || [];
     if (enabled) {
       if (keys.length) {
@@ -2623,7 +2641,9 @@ function renderPassiveEditor(
     return false;
   }
   container.innerHTML = '';
-  const safeItems = Array.isArray(items) ? items : [];
+  const safeItems = (Array.isArray(items) ? items : []).filter(
+    (entry) => entry && !entry.is_army_rule,
+  );
   if (!safeItems.length) {
     return false;
   }
@@ -3599,7 +3619,7 @@ function computeTotalCost(
   const passiveState = state && state.passive instanceof Map ? state.passive : new Map();
   if (passiveList.length) {
     passiveList.forEach((item) => {
-      if (!item || !item.slug) {
+      if (!item || !item.slug || item.is_army_rule) {
         return;
       }
       const key = String(item.slug);
@@ -4887,7 +4907,7 @@ function initRosterEditor() {
       }
     });
     (Array.isArray(passiveItems) ? passiveItems : []).forEach((item) => {
-      if (!item || !item.slug) {
+      if (!item || !item.slug || item.is_army_rule) {
         return;
       }
       const costValue = Number(item.cost);

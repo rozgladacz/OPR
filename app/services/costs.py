@@ -13,7 +13,7 @@ from typing import Any, Iterable, Sequence
 
 from .. import models
 from ..data import abilities as ability_catalog
-from .utils import passive_flags_to_payload
+from .utils import ARMY_RULE_OFF_PREFIX, passive_flags_to_payload
 
 
 MORALE_ABILITY_MULTIPLIERS = {
@@ -27,6 +27,7 @@ DEFENSE_ABILITY_MODIFIERS = {
     "delikatny": {2: -0.05, 3: -0.07, 4: -0.08, 5: -0.1, 6: -0.13},
     "niewrazliwy": {2: 0.05, 3: 0.1, 4: 0.2, 5: 0.3, 6: 0.35},
     "regeneracja": {2: 1.0, 3: 0.65, 4: 0.5, 5: 0.45, 6: 0.4},
+    "szpica": {2: 0.15, 3: 0.12, 4: 0.1, 5: 0.08, 6: 0.06},
     "waagh": {2: -0.03, 3: -0.03, 4: -0.03, 5: -0.02, 6: -0.01},
 }
 
@@ -119,6 +120,39 @@ def _ensure_extra_data(extra: Any) -> dict[str, Any] | None:
     return None
 
 
+def _army_rule_entries(army: models.Army | None) -> list[dict[str, Any]]:
+    if army is None:
+        return []
+    payload: list[dict[str, Any]] = []
+    for entry in passive_flags_to_payload(getattr(army, "passive_rules", None)):
+        if not isinstance(entry, dict):
+            continue
+        slug = str(entry.get("slug") or "").strip()
+        if not slug:
+            continue
+        is_default = bool(entry.get("is_default", True))
+        payload.append(
+            {
+                "slug": slug,
+                "label": entry.get("label") or slug,
+                "value": entry.get("value"),
+                "description": entry.get("description") or "",
+                "is_default": is_default,
+                "default_count": 1 if is_default else 0,
+                "is_mandatory": bool(entry.get("is_mandatory", False)),
+                "is_army_rule": not slug.startswith(ARMY_RULE_OFF_PREFIX),
+            }
+        )
+    return payload
+
+
+def army_rules(
+    unit: models.Unit | None = None, army: models.Army | None = None
+) -> list[dict[str, Any]]:
+    source_army = army or getattr(unit, "army", None)
+    return [dict(entry) for entry in _army_rule_entries(source_army)]
+
+
 def _passive_payload(unit: models.Unit | None) -> list[dict[str, Any]]:
     if unit is None:
         return []
@@ -139,6 +173,14 @@ def _passive_payload(unit: models.Unit | None) -> list[dict[str, Any]]:
                 "default_count": 1 if is_default else 0,
             }
         )
+    return payload
+
+
+def _passive_payload_with_army(unit: models.Unit | None) -> list[dict[str, Any]]:
+    payload = _passive_payload(unit)
+    if unit is None:
+        return payload
+    payload.extend(_army_rule_entries(getattr(unit, "army", None)))
     return payload
 
 
@@ -179,6 +221,58 @@ def _parse_passive_counts(extra: dict[str, Any] | None) -> dict[str, int]:
     return result
 
 
+def _apply_army_rule_overrides(
+    payload: Sequence[dict[str, Any]],
+    counts: dict[str, int],
+    prefix: str = ARMY_RULE_OFF_PREFIX,
+) -> dict[str, int]:
+    disabled_slugs: set[str] = set()
+    disabled_identifiers: set[str] = set()
+
+    def _register_disabled(base_slug: str) -> None:
+        if not base_slug:
+            return
+        disabled_slugs.add(base_slug)
+        identifier = ability_identifier(base_slug)
+        if identifier:
+            disabled_identifiers.add(identifier)
+
+    for entry in payload:
+        slug = str(entry.get("slug") or "").strip()
+        if not slug or not slug.startswith(prefix):
+            continue
+        default_count = int(entry.get("default_count") or 0)
+        selected = counts.get(slug, default_count)
+        if selected <= 0:
+            continue
+        _register_disabled(slug[len(prefix) :].strip())
+
+    for slug, value in counts.items():
+        text = str(slug).strip()
+        if not text.startswith(prefix) or value <= 0:
+            continue
+        _register_disabled(text[len(prefix) :].strip())
+
+    if not disabled_slugs and not disabled_identifiers:
+        return counts
+
+    updated = dict(counts)
+    for entry in payload:
+        slug = str(entry.get("slug") or "").strip()
+        if not slug or slug.startswith(prefix):
+            continue
+        identifier = ability_identifier(slug)
+        if slug in disabled_slugs or (identifier and identifier in disabled_identifiers):
+            updated[slug] = 0
+
+    for slug in disabled_slugs:
+        updated.setdefault(slug, 0)
+    for identifier in disabled_identifiers:
+        updated.setdefault(identifier, 0)
+
+    return updated
+
+
 def _active_traits_from_payload(
     payload: Sequence[dict[str, Any]], counts: dict[str, int]
 ) -> list[str]:
@@ -187,6 +281,10 @@ def _active_traits_from_payload(
         slug = str(entry.get("slug") or "").strip()
         if not slug:
             continue
+        if slug.startswith(ARMY_RULE_OFF_PREFIX):
+            continue
+        identifier = ability_identifier(slug)
+        target_slug = identifier or slug
         default_count = int(entry.get("default_count") or 0)
         selected = counts.get(str(slug), default_count)
         if selected <= 0:
@@ -194,27 +292,28 @@ def _active_traits_from_payload(
         value = entry.get("value")
         if isinstance(value, bool):
             if value:
-                traits.append(slug)
+                traits.append(target_slug)
             continue
         if value is None:
-            traits.append(slug)
+            traits.append(target_slug)
             continue
         value_str = str(value).strip()
         if not value_str or value_str.casefold() in {"true", "yes"}:
-            traits.append(slug)
+            traits.append(target_slug)
         elif value_str.casefold() in {"false", "no", "0"}:
             continue
         else:
-            traits.append(f"{slug}({value_str})")
+            traits.append(f"{target_slug}({value_str})")
     return traits
 
 
 def compute_passive_state(
     unit: models.Unit | None, extra: dict[str, Any] | str | None = None
 ) -> PassiveState:
-    payload = _passive_payload(unit)
+    payload = _passive_payload_with_army(unit)
     extra_data = _ensure_extra_data(extra)
     counts = _parse_passive_counts(extra_data)
+    counts = _apply_army_rule_overrides(payload, counts)
     traits = _active_traits_from_payload(payload, counts)
     return PassiveState(payload=payload, counts=counts, traits=traits)
 
@@ -225,6 +324,8 @@ def _passive_flag_maps(passive_state: PassiveState) -> tuple[dict[str, int], dic
     for entry in passive_state.payload:
         slug = str(entry.get("slug") or "").strip()
         if not slug:
+            continue
+        if slug.startswith(ARMY_RULE_OFF_PREFIX):
             continue
         try:
             default_count = int(entry.get("default_count") or 0)
@@ -323,6 +424,8 @@ def flags_to_ability_list(flags: dict | None) -> list[str]:
             continue
         raw_name = str(key).strip()
         if not raw_name:
+            continue
+        if raw_name.startswith(ARMY_RULE_OFF_PREFIX):
             continue
         is_optional = False
         name = raw_name
@@ -472,6 +575,8 @@ def ability_identifier(text: str | None) -> str:
     if text is None:
         return ""
     raw = str(text).strip()
+    if raw.startswith(ARMY_RULE_OFF_PREFIX):
+        raw = raw[len(ARMY_RULE_OFF_PREFIX) :].strip()
     if not raw:
         return ""
     base = raw
@@ -702,7 +807,7 @@ def ability_cost_from_name(
     elif desc == "radio":
         base_result = 3.0
     elif slug == "ociezalosc":
-        base_result = 20.0
+        base_result = 10.0
     elif desc == "spaczenie":
         base_result = 30.0
     else:
@@ -1198,7 +1303,7 @@ def roster_unit_role_totals(
         entries: list[dict[str, Any]] = []
         for entry in passive_state.payload:
             slug = str(entry.get("slug") or "").strip()
-            if not slug or slug in ROLE_SLUGS:
+            if not slug or slug in ROLE_SLUGS or slug.startswith(ARMY_RULE_OFF_PREFIX):
                 continue
             label = entry.get("label") or slug
             value = entry.get("value")
