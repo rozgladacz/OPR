@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Zasady armii – {{ army.name }} - OPR{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap gap-2 gap-md-3 justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="mb-1">Zasady armii: {{ army.name }}</h2>
+    <p class="text-muted mb-0">Zdefiniuj wspólne zdolności, które będą obowiązywać całą armię.</p>
+  </div>
+  <div class="btn-group">
+    <a class="btn btn-outline-primary" href="/armies/{{ army.id }}/spells">Lista zaklęć</a>
+    <a class="btn btn-outline-secondary" href="/armies/{{ army.id }}">Wróć do armii</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <h5 class="card-title">Konfiguracja zasad</h5>
+    <form method="post" action="/armies/{{ army.id }}/rules" class="vstack gap-3">
+      <div>
+        <label class="form-label" for="army-rule-picker">Zdolności</label>
+        <div
+          id="army-rule-picker"
+          class="ability-picker"
+          data-ability-picker
+          data-definitions='{{ passive_definitions | tojson }}'
+          data-target-input="army-rules-input"
+          data-default-toggle="true"
+          data-default-initial="true"
+          data-mandatory-toggle="true"
+          data-mandatory-initial="false"
+          data-allow-custom-name="true"
+          data-hide-owned-abilities="true"
+        >
+          <div class="row g-2 align-items-end">
+            <div class="col-sm-6">
+              <select class="form-select ability-picker-select">
+                <option value="">Wybierz zdolność</option>
+                {% for ability in passive_definitions %}
+                <option
+                  value="{{ ability.slug }}"
+                  data-requires-value="{{ 'true' if ability.requires_value else 'false' }}"
+                  data-value-type="{{ ability.value_type or '' }}"
+                  title="{{ ability.description }}"
+                >
+                  {{ ability.display_name }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-4 ability-picker-value d-none">
+              <select class="form-select ability-picker-value-select d-none"></select>
+              <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
+            </div>
+            <div class="col-sm-auto">
+              <div class="d-grid">
+                <button class="btn btn-outline-primary ability-picker-add text-nowrap" type="button">Dodaj</button>
+              </div>
+            </div>
+          </div>
+          <div class="ability-picker-list mt-2"></div>
+        </div>
+        <input type="hidden" id="army-rules-input" name="rules" value='{{ rules | tojson }}' />
+        <div class="form-text">Te zdolności będą widoczne w widoku armii oraz podczas tworzenia rozpisek.</div>
+      </div>
+      <div>
+        <button class="btn btn-primary" type="submit">Zapisz zasady</button>
+        <a class="btn btn-outline-secondary" href="/armies/{{ army.id }}">Anuluj</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
