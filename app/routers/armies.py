@@ -99,17 +99,63 @@ def _parse_bool(value: str | None) -> bool:
     return value.lower() in {"1", "true", "on", "yes"}
 
 
-PASSIVE_DEFINITIONS = sorted(
-    (
-        entry
-        for entry in (
-            ability_catalog.to_dict(definition)
-            for definition in ability_catalog.definitions_by_type("passive")
+def _base_passive_definitions() -> list[dict]:
+    return sorted(
+        (
+            entry
+            for entry in (
+                ability_catalog.to_dict(definition)
+                for definition in ability_catalog.definitions_by_type("passive")
+            )
+            if not _is_hidden_trait(entry.get("slug"))
+        ),
+        key=lambda entry: entry.get("display_name", "").casefold(),
+    )
+
+
+_BASE_PASSIVE_DEFINITIONS = _base_passive_definitions()
+
+
+def passive_definitions_for_army(army: models.Army | None) -> list[dict]:
+    definitions = [dict(entry) for entry in _BASE_PASSIVE_DEFINITIONS]
+    if army is None:
+        return definitions
+    seen_slugs = {
+        entry.get("slug")
+        for entry in definitions
+        if isinstance(entry.get("slug"), str) and entry.get("slug")
+    }
+    dynamic_entries: list[dict] = []
+    for rule in army_rule_service.parse_rules(army.passive_rules):
+        rule_slug = str(rule.get("slug") or "").strip()
+        if not rule_slug:
+            continue
+        disabled_slug = f"{utils.ARMY_RULE_OFF_PREFIX}{rule_slug}"
+        if disabled_slug in seen_slugs:
+            continue
+        label_hint = rule.get("label") or rule.get("base_label") or rule_slug
+        _, display_label, description = utils.army_rule_disabled_texts(
+            disabled_slug,
+            label_hint,
         )
-        if not _is_hidden_trait(entry.get("slug"))
-    ),
-    key=lambda entry: entry.get("display_name", "").casefold(),
-)
+        dynamic_entries.append(
+            {
+                "slug": disabled_slug,
+                "name": display_label,
+                "display_name": display_label,
+                "description": description,
+                "requires_value": False,
+                "value_type": None,
+                "value_choices": [],
+            }
+        )
+        seen_slugs.add(disabled_slug)
+    if dynamic_entries:
+        dynamic_entries.sort(
+            key=lambda entry: entry.get("display_name", "").casefold()
+        )
+        definitions.extend(dynamic_entries)
+    return definitions
 
 
 def _ensure_army_view_access(army: models.Army, user: models.User) -> None:
@@ -637,7 +683,7 @@ def _spell_page_context(
         "ability_options": ability_options,
         "remaining_slots": remaining_slots,
         "name_max_length": models.ARMY_SPELL_NAME_MAX_LENGTH,
-        "passive_definitions": PASSIVE_DEFINITIONS,
+        "passive_definitions": passive_definitions_for_army(army),
         "error": error,
         "info": info,
     }
@@ -663,7 +709,31 @@ def _parse_selection_payload(text: str | None) -> list[dict]:
         data = json.loads(text)
     except json.JSONDecodeError:
         return []
-    return data if isinstance(data, list) else []
+    if not isinstance(data, list):
+        return []
+    parsed: list[dict] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        slug_text = str(item.get("slug") or "").strip()
+        if not slug_text:
+            continue
+        entry = dict(item)
+        entry["slug"] = slug_text
+        if slug_text.startswith(utils.ARMY_RULE_OFF_PREFIX):
+            label_hint = (
+                entry.get("value")
+                or entry.get("label")
+                or entry.get("base_label")
+                or entry.get("raw")
+            )
+            base_label, _, _ = utils.army_rule_disabled_texts(
+                slug_text,
+                label_hint,
+            )
+            entry["value"] = base_label
+        parsed.append(entry)
+    return parsed
 
 
 def _spell_parse_optional_float(value: str | None) -> float | None:
@@ -1133,6 +1203,18 @@ def _apply_unit_form_data(
             continue
         entry = dict(item)
         entry["slug"] = slug_text
+        if slug_text.startswith(utils.ARMY_RULE_OFF_PREFIX):
+            label_hint = (
+                entry.get("value")
+                or entry.get("label")
+                or entry.get("base_label")
+                or entry.get("raw")
+            )
+            base_label, _, _ = utils.army_rule_disabled_texts(
+                slug_text,
+                label_hint,
+            )
+            entry["value"] = base_label
         sanitized_passives.append(entry)
 
     unit.name = name
@@ -2219,7 +2301,7 @@ def edit_unit_form(
             "weapon_choices": weapon_choices,
             "weapon_tree": weapon_tree,
             "weapon_payload": _unit_weapon_payload(unit),
-            "passive_definitions": PASSIVE_DEFINITIONS,
+            "passive_definitions": passive_definitions_for_army(army),
             "passive_selected": _passive_payload(unit),
             "active_definitions": active_definitions,
             "active_selected": ability_registry.unit_ability_payload(unit, "active"),
@@ -2660,7 +2742,7 @@ def _render_army_edit(
             "error": error,
             "can_edit": can_edit,
             "can_delete": can_delete,
-            "passive_definitions": PASSIVE_DEFINITIONS,
+            "passive_definitions": passive_definitions_for_army(army),
             "active_definitions": active_definitions,
             "aura_definitions": aura_definitions,
             "army_rules": army_rule_entries,
@@ -2679,7 +2761,7 @@ def _army_rules_context(
         "user": current_user,
         "army": army,
         "rules": rules,
-        "passive_definitions": PASSIVE_DEFINITIONS,
+        "passive_definitions": passive_definitions_for_army(None),
     }
 
 
