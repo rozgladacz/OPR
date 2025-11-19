@@ -1,4 +1,5 @@
 const abilityDefinitionsCache = new Map();
+const ARMY_RULE_OFF_PREFIX = '__army_off__';
 
 function initAbilityPicker(root) {
   const definitionsData = root.dataset.definitions || '';
@@ -154,13 +155,29 @@ function initAbilityPicker(root) {
       return;
     }
     const safeItems = items.map((entry) => {
+      const slugValue =
+        entry && entry.slug !== undefined && entry.slug !== null
+          ? String(entry.slug)
+          : '';
+      const labelValue = (() => {
+        if (entry && typeof entry.label === 'string' && entry.label) {
+          return entry.label;
+        }
+        if (entry && typeof entry.base_label === 'string' && entry.base_label) {
+          return entry.base_label;
+        }
+        if (entry && typeof entry.raw === 'string' && entry.raw) {
+          return entry.raw;
+        }
+        return slugValue;
+      })();
       const payload = {
-        slug: entry.slug,
+        slug: slugValue,
         value: entry.value,
-        label: entry.label,
+        label: labelValue,
         raw: entry.raw,
         ability_id: entry.ability_id ?? null,
-        is_default: entry.is_default ?? false,
+        is_default: Boolean(entry.is_default),
       };
       if (allowMandatoryToggle || entry.is_mandatory) {
         payload.is_mandatory = Boolean(entry.is_mandatory);
@@ -418,6 +435,12 @@ function initAbilityPicker(root) {
         return;
       }
       const definition = getDefinition(option.value);
+      const optionSlug = definition && definition.slug ? String(definition.slug) : option.value;
+      if (optionSlug && optionSlug.startsWith(ARMY_RULE_OFF_PREFIX)) {
+        option.hidden = false;
+        option.disabled = false;
+        return;
+      }
       const optionKey = abilityKey({
         slug: definition ? definition.slug : option.value,
       });

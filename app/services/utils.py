@@ -20,6 +20,8 @@ HIDDEN_TRAIT_SLUGS: set[str] = set()
 # filtered out anywhere `_is_hidden_trait` is used.
 HIDDEN_TRAIT_SLUGS: set[str] = {"wojownik", "strzelec"}
 
+ARMY_RULE_OFF_PREFIX = "__army_off__"
+
 
 class WeaponTreeNode(TypedDict):
     id: int
@@ -270,6 +272,44 @@ def parse_flags(text: str | None) -> dict:
     return result
 
 
+def _strip_army_rule_label(label_hint: str | None) -> str:
+    if label_hint is None:
+        return ""
+    text = str(label_hint).strip()
+    if not text:
+        return ""
+    text = text.strip("-–—: ")
+    lowered = text.casefold()
+    if lowered.startswith("brak"):
+        colon_index = text.find(":")
+        if colon_index >= 0:
+            text = text[colon_index + 1 :].strip()
+        else:
+            text = text[4:].strip()
+    return text.strip("-–—: ")
+
+
+def army_rule_base_label(slug: str, label_hint: str | None = None) -> str:
+    cleaned_hint = _strip_army_rule_label(label_hint)
+    if cleaned_hint:
+        return cleaned_hint
+    slug_text = str(slug or "").strip()
+    if slug_text.startswith(ARMY_RULE_OFF_PREFIX):
+        slug_text = slug_text[len(ARMY_RULE_OFF_PREFIX) :]
+    fallback = slug_text or "zasada armii"
+    normalized = fallback.replace("_", " ").strip()
+    return normalized or fallback
+
+
+def army_rule_disabled_texts(
+    slug: str, label_hint: str | None = None
+) -> tuple[str, str, str]:
+    base_label = army_rule_base_label(slug, label_hint)
+    display_label = f"Brak: {base_label}"
+    description = f"Wyłącza zasadę armii „{base_label}” dla tej jednostki."
+    return base_label, display_label, description
+
+
 @functools.lru_cache(maxsize=None)
 def _cached_passive_payload(text: str | None) -> tuple[tuple[Any, ...], ...]:
     flags = parse_flags(text)
@@ -330,12 +370,24 @@ def passive_flags_to_payload(text: str | None) -> list[dict]:
     cached_payload = _cached_passive_payload(text)
     payload: list[dict] = []
     for slug, value, label, description, is_default, is_mandatory in cached_payload:
+        normalized_value = value
+        normalized_label = label
+        normalized_description = description
+        if slug.startswith(ARMY_RULE_OFF_PREFIX):
+            base_label, display_label, default_description = army_rule_disabled_texts(
+                slug,
+                value or label,
+            )
+            normalized_value = base_label
+            normalized_label = display_label
+            if not normalized_description:
+                normalized_description = default_description
         payload.append(
             {
                 "slug": slug,
-                "value": value,
-                "label": label,
-                "description": description,
+                "value": normalized_value,
+                "label": normalized_label,
+                "description": normalized_description,
                 "is_default": is_default,
                 "is_mandatory": is_mandatory,
             }
