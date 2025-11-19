@@ -2536,6 +2536,8 @@ def _roster_unit_export_data(
     roster_unit: models.RosterUnit,
     *,
     unit_cache: dict[int, dict[str, Any]] | None = None,
+    loadout_override: dict[str, Any] | None = None,
+    classification: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     unit = roster_unit.unit
     if unit is None:  # pragma: no cover - defensive fallback
@@ -2596,14 +2598,22 @@ def _roster_unit_export_data(
                 "aura_items": aura_items,
                 "default_summary": default_summary,
             }
-    loadout = _roster_unit_loadout(
-        roster_unit,
-        weapon_options=weapon_options,
-        active_items=active_items,
-        aura_items=aura_items,
-        passive_items=passive_items,
+    loadout = (
+        loadout_override
+        if loadout_override is not None
+        else _roster_unit_loadout(
+            roster_unit,
+            weapon_options=weapon_options,
+            active_items=active_items,
+            aura_items=aura_items,
+            passive_items=passive_items,
+        )
     )
-    classification = _roster_unit_classification(roster_unit, loadout)
+    classification_data = (
+        classification
+        if classification is not None
+        else _roster_unit_classification(roster_unit, loadout)
+    )
     weapon_details = _loadout_weapon_details(roster_unit, loadout, weapon_options)
     weapon_summary = _loadout_display_summary(roster_unit, loadout, weapon_options)
     if not weapon_summary:
@@ -2617,7 +2627,7 @@ def _roster_unit_export_data(
             elif unit_cache is not None and cache_key is not None:
                 unit_cache.setdefault(cache_key, {})["default_summary"] = default_summary
     selected_passives = _selected_passive_entries(
-        roster_unit, loadout, passive_items, classification
+        roster_unit, loadout, passive_items, classification_data
     )
     selected_actives = _selected_ability_entries(loadout, active_items, "active")
     selected_auras = _selected_ability_entries(loadout, aura_items, "aura")
@@ -2670,7 +2680,7 @@ def _roster_unit_export_data(
         "default_summary": default_summary,
         "total_cost": total_value,
         "rounded_total_cost": rounded_total,
-        "classification": classification,
+        "classification": classification_data,
         "active_slugs": active_slugs,
     }
 
