@@ -17,7 +17,7 @@ from .. import models
 from ..db import get_db
 from ..security import get_current_user
 from ..services import ability_registry, costs, utils
-from ..services.rules import collect_roster_warnings, unit_is_hero
+from ..services.rules import unit_is_hero
 
 logger = logging.getLogger(__name__)
 
@@ -621,9 +621,6 @@ def edit_roster(
         and not item.get("is_hero", False)
     )
     total_cost = costs.roster_total(roster)
-    warnings = collect_roster_warnings(
-        roster, total_cost=total_cost, loadouts=sanitized_loadouts
-    )
     can_edit = current_user.is_admin or roster.owner_id == current_user.id
     can_delete = can_edit
 
@@ -640,7 +637,7 @@ def edit_roster(
             "error": None,
             "can_edit": can_edit,
             "can_delete": can_delete,
-            "warnings": warnings,
+            "warnings": [],
             "selected_id": selected_id,
             "unit_payloads": unit_payloads,
             "lock_pairs": _lock_pairs_payload(lock_pairs, roster.roster_units),
@@ -773,9 +770,6 @@ def add_roster_unit(
         loadout_mapping = (
             {roster_unit.id: loadout_payload} if roster_unit.id is not None else None
         )
-        warnings = collect_roster_warnings(
-            roster, total_cost=total_cost, loadouts=loadout_mapping
-        )
         loadout_json = json.dumps(loadout_payload, ensure_ascii=False)
         default_summary = _default_loadout_summary(unit)
         loadout_summary = _loadout_display_summary(
@@ -825,7 +819,7 @@ def add_roster_unit(
                 "unit_cache_id": unit.id,
             },
             "roster_item": roster_item,
-            "warnings": warnings,
+            "warnings": [],
             "total_cost": total_cost,
             "lock_pairs": _lock_pairs_payload(
                 _lock_pairs_for_roster(db, roster),
@@ -1037,9 +1031,6 @@ def update_roster_unit(
     accept_header = (request.headers.get("accept") or "").lower()
     if "application/json" in accept_header:
         total_cost = costs.roster_total(roster)
-        warnings = collect_roster_warnings(
-            roster, total_cost=total_cost, loadouts=loadout_mapping
-        )
 
         def _unit_payload_for_response(target: models.RosterUnit) -> dict[str, Any]:
             payload = payload_cache.get(target.id) or _unit_payload(target.unit)
@@ -1097,7 +1088,7 @@ def update_roster_unit(
         payload = {
             "unit": unit_payload,
             "paired_units": paired_units,
-            "warnings": warnings,
+            "warnings": [],
             "total_cost": total_cost,
             "lock_pairs": _lock_pairs_payload(lock_pairs, roster_units),
         }
