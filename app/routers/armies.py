@@ -2271,7 +2271,7 @@ def edit_unit_form(
         raise HTTPException(status_code=404)
     _ensure_army_edit_access(army, current_user)
     weapon_collection = _armory_weapons(db, army.armory)
-    weapons = _armory_weapons(db, army.armory)
+    weapons = weapon_collection.items
     weapon_tree = _weapon_tree_payload(weapons)
 
     weapon_choices = []
@@ -2672,7 +2672,7 @@ def _render_army_edit(
         can_delete = not bool(has_rosters)
 
     weapon_collection = _armory_weapons(db, army.armory)
-    weapons = _armory_weapons(db, army.armory)
+    weapons = weapon_collection.items
     weapon_tree = _weapon_tree_payload(weapons)
     weapon_choices = []
     for weapon in weapons:
