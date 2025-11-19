@@ -103,18 +103,17 @@ body {
 
 
 .roster-lock-boundary {
-  position: relative;
+  position: absolute;
   pointer-events: none;
-  width: 100%;
-  isolation: isolate;
-  z-index: 2;
+  display: flex;
+  justify-content: center;
+  width: auto;
 }
 
 .roster-unit-reorder > .roster-lock-boundary {
-  position: absolute;
-  top: calc(100% - 0.375rem);
+  top: 100%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -0.75rem);
 }
 
 .list-group-item[data-roster-lock-boundary] {
