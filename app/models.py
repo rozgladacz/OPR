@@ -193,6 +193,7 @@ class Army(TimestampMixin, Base):
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     ruleset_id: Mapped[int] = mapped_column(ForeignKey("rulesets.id"), nullable=False)
     armory_id: Mapped[int] = mapped_column(ForeignKey("armories.id"), nullable=False)
+    passive_rules: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     parent: Mapped[Optional["Army"]] = relationship(remote_side="Army.id")
     owner: Mapped[Optional[User]] = relationship(back_populates="armies")

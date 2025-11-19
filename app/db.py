@@ -88,7 +88,12 @@ def _rebuild_weapons_table(connection, default_armory_id: int) -> None:
         connection.execute(text("PRAGMA foreign_keys=ON"))
 
 
-def _rebuild_armies_table(connection, default_armory_id: int) -> None:
+def _rebuild_armies_table(
+    connection,
+    default_armory_id: int,
+    *,
+    has_passive_rules: bool = False,
+) -> None:
     from . import models
 
     logger.info("Migrating armies table to link armories")
@@ -97,14 +102,23 @@ def _rebuild_armies_table(connection, default_armory_id: int) -> None:
         connection.execute(text("DROP TABLE IF EXISTS armies_old"))
         connection.execute(text("ALTER TABLE armies RENAME TO armies_old"))
         models.Army.__table__.create(connection)
+        passive_rule_column = "passive_rules" if has_passive_rules else "NULL"
         connection.execute(
             text(
-                """
+                f"""
                 INSERT INTO armies (
-                    id, name, parent_id, owner_id, ruleset_id, armory_id, created_at, updated_at
+                    id, name, parent_id, owner_id, ruleset_id, armory_id, passive_rules, created_at, updated_at
                 )
                 SELECT
-                    id, name, parent_id, owner_id, ruleset_id, :armory_id, created_at, updated_at
+                    id,
+                    name,
+                    parent_id,
+                    owner_id,
+                    ruleset_id,
+                    :armory_id,
+                    {passive_rule_column},
+                    created_at,
+                    updated_at
                 FROM armies_old
                 """
             ),
@@ -303,8 +317,21 @@ def _migrate_schema() -> None:
 
         if "armies" in table_names:
             columns = inspector.get_columns("armies")
-            if "armory_id" not in {column["name"] for column in columns}:
-                _rebuild_armies_table(connection, default_armory_id)
+            column_names = {column["name"] for column in columns}
+            has_passive_rules = "passive_rules" in column_names
+            if "armory_id" not in column_names:
+                _rebuild_armies_table(
+                    connection,
+                    default_armory_id,
+                    has_passive_rules=has_passive_rules,
+                )
+                columns = inspector.get_columns("armies")
+                column_names = {column["name"] for column in columns}
+            if "passive_rules" not in column_names:
+                logger.info("Adding passive_rules column to armies table")
+                connection.execute(
+                    text("ALTER TABLE armies ADD COLUMN passive_rules TEXT")
+                )
 
         if "unit_weapons" in table_names:
             columns = inspector.get_columns("unit_weapons")

@@ -19,6 +19,7 @@
   <div class="btn-group">
     {% if can_edit %}
     <a class="btn btn-outline-primary" href="/armies/{{ army.id }}/spells">Lista zaklęć</a>
+    <a class="btn btn-outline-primary" href="/armies/{{ army.id }}/rules">Zasady armii</a>
     {% endif %}
     <a class="btn btn-secondary" href="/armies">Wróć</a>
   </div>
@@ -121,7 +122,21 @@
   </div>
 </div>
 
-<h4>Jednostki</h4>
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+  <h4 class="mb-0">Jednostki</h4>
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <span class="text-muted small">Zasady armii:</span>
+    {% if army_rules %}
+    <div class="d-flex flex-wrap gap-1">
+      {% for rule in army_rules %}
+      <span class="badge text-bg-secondary" title="{{ rule.description }}">{{ rule.label or rule.slug }}</span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <span class="text-muted small">Brak</span>
+    {% endif %}
+  </div>
+</div>
 <div class="table-responsive">
   <table class="table table-striped align-middle">
     <thead>

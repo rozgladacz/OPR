@@ -15,7 +15,7 @@ from .. import models
 from ..data import abilities as ability_catalog
 from ..db import get_db
 from ..security import get_current_user
-from ..services import ability_registry, costs, utils
+from ..services import ability_registry, army_rules as army_rule_service, costs, utils
 
 MAX_ARMY_SPELLS = 6
 FORBIDDEN_SPELL_SLUGS = {"mag", "przekaznik"}
@@ -1456,6 +1456,7 @@ def copy_army(
         owner_id=owner_id,
         ruleset=source.ruleset,
         armory=source.armory,
+        passive_rules=source.passive_rules,
     )
     db.add(new_army)
     db.flush()
@@ -1517,6 +1518,7 @@ def create_army_variant(
         ruleset=base_army.ruleset,
         armory=base_army.armory,
         parent=base_army,
+        passive_rules=base_army.passive_rules,
     )
     db.add(variant)
     db.flush()
@@ -2641,6 +2643,8 @@ def _render_army_edit(
     if selected_armory_id is None:
         selected_armory_id = army.armory_id
 
+    army_rule_entries = army_rule_service.parse_rules(army.passive_rules)
+
     return templates.TemplateResponse(
         "army_edit.html",
         {
@@ -2659,8 +2663,24 @@ def _render_army_edit(
             "passive_definitions": PASSIVE_DEFINITIONS,
             "active_definitions": active_definitions,
             "aura_definitions": aura_definitions,
+            "army_rules": army_rule_entries,
         },
     )
+
+
+def _army_rules_context(
+    request: Request,
+    army: models.Army,
+    current_user: models.User,
+) -> dict[str, object]:
+    rules = army_rule_service.parse_rules(army.passive_rules)
+    return {
+        "request": request,
+        "user": current_user,
+        "army": army,
+        "rules": rules,
+        "passive_definitions": PASSIVE_DEFINITIONS,
+    }
 
 
 @router.get("/{army_id}", response_class=HTMLResponse)
@@ -2745,3 +2765,40 @@ def update_army(
 
     db.commit()
     return RedirectResponse(url=f"/armies/{army.id}", status_code=303)
+
+
+@router.get("/{army_id}/rules", response_class=HTMLResponse)
+def edit_army_rules(
+    army_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    _ensure_army_edit_access(army, current_user)
+    return templates.TemplateResponse(
+        "army_rules.html",
+        _army_rules_context(request, army, current_user),
+    )
+
+
+@router.post("/{army_id}/rules")
+def update_army_rules(
+    army_id: int,
+    request: Request,
+    rules: str = Form("[]"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    _ensure_army_edit_access(army, current_user)
+
+    selected_rules = _parse_selection_payload(rules)
+    serialized_rules = army_rule_service.serialize_rules(selected_rules) or None
+    army.passive_rules = serialized_rules
+    db.commit()
+    return RedirectResponse(url=f"/armies/{army.id}/rules", status_code=303)
