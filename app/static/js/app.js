@@ -4159,8 +4159,9 @@ function initRosterEditor() {
       }
       const boundaryBefore = findAdjacentBoundary(container, 'previous');
       const boundaryAfter = findAdjacentBoundary(container, 'next');
+      const placeholder = document.createElement('div');
+      container.parentElement.insertBefore(placeholder, previous);
       const fragment = document.createDocumentFragment();
-      const insertionPoint = boundaryAfter ? boundaryAfter.nextElementSibling : container.nextElementSibling;
       fragment.appendChild(container);
       if (boundaryBefore) {
         fragment.appendChild(boundaryBefore);
@@ -4169,7 +4170,8 @@ function initRosterEditor() {
       if (boundaryAfter) {
         fragment.appendChild(boundaryAfter);
       }
-      container.parentElement.insertBefore(fragment, insertionPoint);
+      container.parentElement.insertBefore(fragment, placeholder);
+      container.parentElement.removeChild(placeholder);
       return true;
     }
     if (direction === 'down') {
@@ -4178,14 +4180,21 @@ function initRosterEditor() {
         return false;
       }
       const boundaryAfter = findAdjacentBoundary(container, 'next');
-      const targetBoundaryAfter = findAdjacentBoundary(next, 'next');
+      const boundaryBefore = findAdjacentBoundary(container, 'previous');
+      const placeholder = document.createElement('div');
+      const insertionPoint = boundaryAfter ? boundaryAfter.nextElementSibling : next.nextElementSibling;
+      container.parentElement.insertBefore(placeholder, insertionPoint);
       const fragment = document.createDocumentFragment();
+      if (boundaryBefore) {
+        fragment.appendChild(boundaryBefore);
+      }
+      fragment.appendChild(next);
       if (boundaryAfter) {
         fragment.appendChild(boundaryAfter);
       }
       fragment.appendChild(container);
-      const insertionPoint = targetBoundaryAfter || next.nextElementSibling;
-      container.parentElement.insertBefore(fragment, insertionPoint);
+      container.parentElement.insertBefore(fragment, placeholder);
+      container.parentElement.removeChild(placeholder);
       return true;
     }
     return false;
