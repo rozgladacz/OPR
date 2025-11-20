@@ -12,7 +12,11 @@ from .. import models
 from ..db import get_db
 from ..security import get_current_user
 from ..services import costs, utils
-from .export import _army_spell_entries, _load_roster_for_export
+from .export import (
+    _army_rule_labels,
+    _army_spell_entries,
+    _load_roster_for_export,
+)
 from .rosters import _ensure_roster_view_access, _roster_unit_export_data
 
 
@@ -51,6 +55,7 @@ def _append_roster_sheet(
     workbook: Workbook,
     entries: list[dict[str, Any]],
     spells: list[dict[str, Any]] | None = None,
+    army_rules: list[str] | None = None,
 ) -> float:
     sheet = workbook.active
     sheet.title = "Lista"
@@ -65,8 +70,16 @@ def _append_roster_sheet(
         "Uzbrojenie",
         "Suma [pkt]",
     ]
-    sheet.append(header)
     column_widths = [len(str(value)) for value in header]
+
+    if army_rules:
+        rule_text = ", ".join(army_rules)
+        header_row = [f"Zasady armii: {rule_text}"]
+        sheet.append(header_row)
+        column_widths[0] = max(column_widths[0], len(header_row[0]))
+        sheet.append([])
+
+    sheet.append(header)
 
     total_cost = 0.0
     for entry in entries:
@@ -134,11 +147,20 @@ def _append_roster_sheet(
     return total_cost
 
 
-def _append_weapons_sheet(workbook: Workbook, entries: list[dict[str, Any]]) -> None:
+def _append_weapons_sheet(
+    workbook: Workbook, entries: list[dict[str, Any]], army_rules: list[str] | None = None
+) -> None:
     sheet = workbook.create_sheet("Zbrojownia")
     header = ["Nazwa", "Ilość", "Zasięg", "Ataki", "AP", "Cechy"]
-    sheet.append(header)
     column_widths = [len(str(value)) for value in header]
+
+    if army_rules:
+        rule_header = [f"Zasady armii: {', '.join(army_rules)}"]
+        sheet.append(rule_header)
+        column_widths[0] = max(column_widths[0], len(rule_header[0]))
+        sheet.append([])
+
+    sheet.append(header)
     aggregated: dict[tuple[str, str, str, str, str], int] = {}
     for entry in entries:
         for weapon in entry.get("weapon_details", []):
@@ -183,8 +205,11 @@ def export_xlsx(
         for ru in roster.roster_units
     ]
     spell_entries = _army_spell_entries(roster, entries)
-    total_cost = _append_roster_sheet(workbook, entries, spell_entries)
-    _append_weapons_sheet(workbook, entries)
+    army_rules = _army_rule_labels(getattr(roster, "army", None))
+    total_cost = _append_roster_sheet(
+        workbook, entries, spell_entries, army_rules=army_rules
+    )
+    _append_weapons_sheet(workbook, entries, army_rules=army_rules)
 
     buffer = BytesIO()
     workbook.save(buffer)
