@@ -2883,4 +2883,4 @@ def update_army_rules(
     serialized_rules = army_rule_service.serialize_rules(selected_rules) or None
     army.passive_rules = serialized_rules
     db.commit()
-    return RedirectResponse(url=f"/armies/{army.id}/rules", status_code=303)
+    return RedirectResponse(url=f"/armies/{army.id}", status_code=303)
