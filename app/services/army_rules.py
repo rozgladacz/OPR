@@ -36,8 +36,9 @@ def parse_rules(text: str | None) -> list[dict]:
                 "base_label": label,
                 "raw": label,
                 "description": item.get("description") or "",
-                "is_default": bool(item.get("is_default", True)),
-                "is_mandatory": bool(item.get("is_mandatory", False)),
+                # Army rules should not carry default/mandatory flags
+                "is_default": True,
+                "is_mandatory": False,
             }
         )
     return entries
@@ -73,8 +74,9 @@ def serialize_rules(items: Iterable[dict] | None) -> str:
             {
                 "slug": slug_text,
                 "value": normalized_value,
-                "is_default": bool(item.get("is_default", True)),
-                "is_mandatory": bool(item.get("is_mandatory", False)),
+                # Default/mandatory markers are not relevant for army rules
+                "is_default": True,
+                "is_mandatory": False,
             }
         )
     return passive_payload_to_flags(payload)
