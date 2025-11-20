@@ -4089,6 +4089,18 @@ function initRosterEditor() {
     return sibling;
   }
 
+  function findAdjacentBoundary(container, direction) {
+    const step = direction === 'previous' ? 'previousElementSibling' : 'nextElementSibling';
+    let sibling = container ? container[step] : null;
+    while (sibling) {
+      if (sibling.hasAttribute && sibling.hasAttribute('data-roster-lock-boundary')) {
+        return sibling;
+      }
+      sibling = sibling[step];
+    }
+    return null;
+  }
+
   function moveEntryDom(entry, direction) {
     const container = getListItemContainer(entry);
     if (!container || !container.parentElement) {
@@ -4099,7 +4111,13 @@ function initRosterEditor() {
       if (!previous) {
         return false;
       }
-      container.parentElement.insertBefore(container, previous);
+      const boundaryBefore = findAdjacentBoundary(container, 'previous');
+      const fragment = document.createDocumentFragment();
+      fragment.appendChild(container);
+      if (boundaryBefore) {
+        fragment.appendChild(boundaryBefore);
+      }
+      container.parentElement.insertBefore(fragment, previous);
       return true;
     }
     if (direction === 'down') {
@@ -4107,7 +4125,14 @@ function initRosterEditor() {
       if (!next) {
         return false;
       }
-      container.parentElement.insertBefore(container, next.nextElementSibling);
+      const boundaryAfter = findAdjacentBoundary(container, 'next');
+      const insertionPoint = boundaryAfter ? boundaryAfter.nextElementSibling : next.nextElementSibling;
+      const fragment = document.createDocumentFragment();
+      if (boundaryAfter) {
+        fragment.appendChild(boundaryAfter);
+      }
+      fragment.appendChild(container);
+      container.parentElement.insertBefore(fragment, insertionPoint);
       return true;
     }
     return false;
