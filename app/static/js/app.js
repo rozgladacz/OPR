@@ -4051,6 +4051,52 @@ function initRosterEditor() {
     renderLockButtons();
   }
 
+  function createLockBoundaryElement() {
+    const boundary = (() => {
+      const template = root.querySelector('[data-roster-lock-boundary]');
+      if (template) {
+        return template.cloneNode(true);
+      }
+      const boundaryElement = document.createElement('div');
+      boundaryElement.className = 'list-group-item border-0 px-0 py-0';
+      boundaryElement.setAttribute('data-roster-lock-boundary', '');
+
+      const boundaryContent = document.createElement('div');
+      boundaryContent.className = 'roster-lock-boundary';
+      boundaryElement.appendChild(boundaryContent);
+
+      const lockRow = document.createElement('div');
+      lockRow.className = 'roster-unit-lock-row';
+      boundaryContent.appendChild(lockRow);
+
+      const reorderWrapper = document.createElement('div');
+      reorderWrapper.className = 'roster-unit-reorder roster-unit-reorder--lock';
+      lockRow.appendChild(reorderWrapper);
+
+      const button = document.createElement('button');
+      button.className = 'btn btn-outline-secondary btn-sm roster-unit-lock-toggle';
+      button.type = 'button';
+      button.setAttribute('data-roster-lock-toggle', '');
+      button.setAttribute('aria-label', 'Połącz z kolejnym oddziałem');
+      button.title = 'Połącz z kolejnym oddziałem';
+      reorderWrapper.appendChild(button);
+
+      return boundaryElement;
+    })();
+
+    const lockButton = boundary ? boundary.querySelector('[data-roster-lock-toggle]') : null;
+    if (lockButton) {
+      lockButton.dataset.lockTopId = '';
+      lockButton.dataset.lockBottomId = '';
+      lockButton.classList.remove('d-none');
+      lockButton.disabled = false;
+      lockButton.setAttribute('aria-pressed', 'false');
+      setLockButtonIcon(lockButton, false);
+    }
+
+    return boundary;
+  }
+
   function findMoveForm(entry, direction) {
     const normalized = String(direction || '').trim().toLowerCase();
     const forms = entry ? Array.from(entry.querySelectorAll('[data-roster-move-form]')) : [];
@@ -4296,12 +4342,28 @@ function initRosterEditor() {
     if (!listItemElement) {
       return;
     }
+    const existingEntries = getEntryContainers(listElement);
+    const lastEntryContainer = existingEntries.length ? existingEntries[existingEntries.length - 1] : null;
+    if (isEditable && lastEntryContainer) {
+      let lockBoundary = findAdjacentBoundary(lastEntryContainer, 'next');
+      if (lockBoundary) {
+        lockBoundary.remove();
+      } else {
+        lockBoundary = createLockBoundaryElement();
+      }
+      if (lockBoundary) {
+        listElement.appendChild(lockBoundary);
+      }
+    }
     listElement.appendChild(listItemElement);
     const rosterItemElement = listItemElement.querySelector('[data-roster-item]');
     if (rosterItemElement) {
       registerRosterItem(rosterItemElement);
     }
     applyServerUpdate(payload);
+    if (isEditable) {
+      refreshLockTargets();
+    }
     if (rosterItemElement) {
       selectItem(rosterItemElement);
       if (typeof listItemElement.scrollIntoView === 'function') {
