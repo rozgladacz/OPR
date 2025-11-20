@@ -289,6 +289,21 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         type="passive",
         description="Atakuje na dystans z jakością 5.",
     ),
+    AbilityDefinition(
+        slug="cierpliwy",
+        name="Cierpliwy",
+        type="passive",
+        description="Masz +1 do rzutów obrony, jeżeli nie rozpocząłeś swojej aktywacji w tej rundzie.",
+    ),
+    AbilityDefinition(
+        slug="odrodzenie",
+        name="Odrodzenie",
+        type="passive",
+        description=(
+            "Na koniec swojej aktywacji odzyskujesz połowę, zaokrąglając w górę, utraconych punktów wytrzymałości oddziału."
+            "Możesz je wykorzystać, aby przywrócić do gry pokonane model z tego oddziału, jeżeli możesz jej poprawnie rozstawić."
+        ),
+    ),
     # Active abilities
     AbilityDefinition(
         slug="mag",

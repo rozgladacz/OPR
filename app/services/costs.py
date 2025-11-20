@@ -1,5 +1,3 @@
-"""Kalkulator kosztów jednostek zgodny z arkuszem VBA."""
-
 from __future__ import annotations
 
 import json
@@ -29,6 +27,7 @@ DEFENSE_ABILITY_MODIFIERS = {
     "regeneracja": {2: 1.0, 3: 0.65, 4: 0.5, 5: 0.45, 6: 0.4},
     "szpica": {2: 0.15, 3: 0.12, 4: 0.1, 5: 0.08, 6: 0.06},
     "waagh": {2: -0.03, 3: -0.03, 4: -0.03, 5: -0.02, 6: -0.01},
+    "odrodzenie": {2: 0.3, 3: 0.38, 4: 0.5, 5: 0.62, 6: 0.75},
 }
 
 TOUGHNESS_SPECIAL = {1: 1.0, 2: 2.15, 3: 3.5}
@@ -634,6 +633,8 @@ def passive_cost(ability_name: str, tou: float = 1.0, aura: bool = False) -> flo
     if slug == "zdobywca":
         return 3.0 * tou
     if slug == "straznik":
+        return 3.0 * tou
+    if slug == "cierpliwy":
         return 3.0 * tou
 
     if aura:

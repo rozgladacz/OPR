@@ -21,6 +21,8 @@ EXCLUDED_AURA_AND_ORDER_SLUGS: set[str] = {
     "bohater",
     "transport",
     "strach",
+    "waagh",
+    "odrodzenie",
 }
 
 
