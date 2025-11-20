@@ -4158,12 +4158,18 @@ function initRosterEditor() {
         return false;
       }
       const boundaryBefore = findAdjacentBoundary(container, 'previous');
+      const boundaryAfter = findAdjacentBoundary(container, 'next');
       const fragment = document.createDocumentFragment();
+      const insertionPoint = boundaryAfter ? boundaryAfter.nextElementSibling : container.nextElementSibling;
       fragment.appendChild(container);
       if (boundaryBefore) {
         fragment.appendChild(boundaryBefore);
       }
-      container.parentElement.insertBefore(fragment, previous);
+      fragment.appendChild(previous);
+      if (boundaryAfter) {
+        fragment.appendChild(boundaryAfter);
+      }
+      container.parentElement.insertBefore(fragment, insertionPoint);
       return true;
     }
     if (direction === 'down') {
@@ -4172,12 +4178,13 @@ function initRosterEditor() {
         return false;
       }
       const boundaryAfter = findAdjacentBoundary(container, 'next');
-      const insertionPoint = boundaryAfter ? boundaryAfter.nextElementSibling : next.nextElementSibling;
+      const targetBoundaryAfter = findAdjacentBoundary(next, 'next');
       const fragment = document.createDocumentFragment();
       if (boundaryAfter) {
         fragment.appendChild(boundaryAfter);
       }
       fragment.appendChild(container);
+      const insertionPoint = targetBoundaryAfter || next.nextElementSibling;
       container.parentElement.insertBefore(fragment, insertionPoint);
       return true;
     }
