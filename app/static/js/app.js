@@ -4226,6 +4226,19 @@ function initRosterEditor() {
       updateMoveButtonStates(rosterListEl);
       return;
     }
+    const boundaryBetween = (() => {
+      if (!topContainer || !bottomContainer || topContainer.parentElement !== bottomContainer.parentElement) {
+        return null;
+      }
+      let cursor = topContainer.nextElementSibling;
+      while (cursor && cursor !== bottomContainer) {
+        if (cursor.hasAttribute && cursor.hasAttribute('data-roster-lock-boundary')) {
+          return cursor;
+        }
+        cursor = cursor.nextElementSibling;
+      }
+      return null;
+    })();
     const sequence = direction === 'up'
       ? [
           { entry: topEntry, direction: 'up' },
@@ -4242,6 +4255,25 @@ function initRosterEditor() {
       moveEntryDom(step.entry, step.direction);
     }
     /* eslint-enable no-await-in-loop */
+    if (boundaryBetween && boundaryBetween.parentElement) {
+      const currentTopContainer = getListItemContainer(topEntry);
+      const currentBottomContainer = getListItemContainer(bottomEntry);
+      if (currentTopContainer && currentBottomContainer) {
+        const sameParent = currentTopContainer.parentElement === currentBottomContainer.parentElement;
+        if (sameParent) {
+          const isTopFirst = !(currentTopContainer.compareDocumentPosition(currentBottomContainer)
+            & Node.DOCUMENT_POSITION_PRECEDING);
+          const upperContainer = isTopFirst ? currentTopContainer : currentBottomContainer;
+          const lowerContainer = isTopFirst ? currentBottomContainer : currentTopContainer;
+          const isAlreadyBetween = boundaryBetween.previousElementSibling === upperContainer
+            && boundaryBetween.nextElementSibling === lowerContainer;
+          if (!isAlreadyBetween) {
+            boundaryBetween.remove();
+            upperContainer.parentElement.insertBefore(boundaryBetween, lowerContainer);
+          }
+        }
+      }
+    }
     refreshLockTargets();
     updateMoveButtonStates(rosterListEl);
   }
