@@ -209,7 +209,6 @@ def roster_print(
     roster_items = _export_roster_unit_entries(db, roster)
     spell_entries = _army_spell_entries(roster, roster_items)
     army_rules = _army_rule_labels(getattr(roster, "army", None))
-    army_rules = _army_rule_labels(getattr(roster, "army", None))
     return templates.TemplateResponse(
         "roster_print.html",
         {
