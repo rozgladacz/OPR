@@ -1144,6 +1144,23 @@ def update_weapon(
         weapon.notes = cleaned_notes
 
     _update_weapon_cost(weapon)
+
+    if weapon.id is not None:
+        from .armies import _weapon_spell_details
+
+        base_label, description, cost = _weapon_spell_details(weapon)
+        linked_spells = (
+            db.execute(
+                select(models.ArmySpell).where(models.ArmySpell.weapon_id == weapon.id)
+            )
+            .scalars()
+            .all()
+        )
+        for spell in linked_spells:
+            spell.base_label = base_label
+            spell.description = description
+            spell.cost = cost
+
     db.commit()
     selected_param = f"?selected_weapon={weapon.id}" if weapon.id is not None else ""
     return RedirectResponse(
