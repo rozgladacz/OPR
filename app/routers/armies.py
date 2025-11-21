@@ -922,6 +922,38 @@ def _spell_weapon_form_values(weapon: models.Weapon | None) -> dict:
     }
 
 
+def _spell_weapon_cost(
+    weapon: models.Weapon | None, form_values: dict | None
+) -> int | None:
+    if weapon:
+        _, _, cost = _weapon_spell_details(weapon)
+        return cost
+
+    if not form_values:
+        return None
+
+    try:
+        attacks_value = _spell_parse_optional_float(form_values.get("attacks"))
+        ap_value = _spell_parse_optional_int(form_values.get("ap"))
+    except ValueError:
+        return None
+
+    attacks = 1.0 if attacks_value is None else attacks_value
+    ap = 0 if ap_value is None else ap_value
+    weapon_tags = _serialize_spell_weapon_tags(form_values.get("abilities") or [])
+
+    temp_weapon = models.Weapon(
+        name=form_values.get("name", ""),
+        range=str(form_values.get("range", "") or "").strip(),
+        attacks=attacks,
+        ap=ap,
+        tags=weapon_tags or None,
+        notes=str(form_values.get("notes") or "").strip() or None,
+    )
+    cost_value = costs.weapon_cost(temp_weapon, unit_quality=4)
+    return int(math.ceil(max(cost_value, 0.0) / 7.0))
+
+
 def _spell_weapon_form_context(
     request: Request,
     army: models.Army,
@@ -949,6 +981,7 @@ def _spell_weapon_form_context(
         "custom_name_field": allow_custom_name,
         "custom_name_value": custom_name,
         "custom_name_max_length": models.ARMY_SPELL_NAME_MAX_LENGTH,
+        "spell_cost": _spell_weapon_cost(weapon, form_values),
     }
 
 
