@@ -962,8 +962,6 @@ def _spell_weapon_form_context(
     weapon: models.Weapon | None,
     form_values: dict,
     error: str | None = None,
-    custom_name: str = "",
-    allow_custom_name: bool = False,
 ) -> dict:
     return {
         "request": request,
@@ -978,9 +976,6 @@ def _spell_weapon_form_context(
         "error": error,
         "cancel_url": f"/armies/{army.id}/spells",
         "allow_variants": False,
-        "custom_name_field": allow_custom_name,
-        "custom_name_value": custom_name,
-        "custom_name_max_length": models.ARMY_SPELL_NAME_MAX_LENGTH,
         "spell_cost": _spell_weapon_cost(weapon, form_values),
     }
 
@@ -1702,7 +1697,6 @@ def new_spell_weapon_form(
             current_user,
             weapon=None,
             form_values=_spell_weapon_form_values(None),
-            allow_custom_name=True,
         ),
     )
 
@@ -1717,7 +1711,6 @@ def create_spell_weapon(
     ap: str = Form("0"),
     abilities: str | None = Form(None),
     notes: str | None = Form(None),
-    custom_name: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -1752,8 +1745,6 @@ def create_spell_weapon(
                 weapon=None,
                 form_values=form_values,
                 error="Nazwa broni jest wymagana.",
-                custom_name=custom_name or "",
-                allow_custom_name=True,
             ),
             status_code=400,
         )
@@ -1771,8 +1762,6 @@ def create_spell_weapon(
                 weapon=None,
                 form_values=form_values,
                 error=str(exc),
-                custom_name=custom_name or "",
-                allow_custom_name=True,
             ),
             status_code=400,
         )
@@ -1801,7 +1790,7 @@ def create_spell_weapon(
     db.add(weapon)
 
     base_label, description, cost = _weapon_spell_details(weapon)
-    custom_text = _normalized_custom_name(custom_name)
+    custom_text = _normalized_custom_name(cleaned_name)
     spell = models.ArmySpell(
         army=army,
         kind="weapon",
@@ -1943,6 +1932,7 @@ def update_spell_weapon(
     weapon.cached_cost = costs.weapon_cost(weapon)
 
     base_label, description, cost = _weapon_spell_details(weapon)
+    normalized_name = _normalized_custom_name(cleaned_name)
     linked_spells = (
         db.execute(
             select(models.ArmySpell)
@@ -1953,6 +1943,7 @@ def update_spell_weapon(
         .all()
     )
     for spell in linked_spells:
+        spell.custom_name = normalized_name or None
         spell.base_label = base_label
         spell.description = description
         spell.cost = cost
