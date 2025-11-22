@@ -2058,7 +2058,6 @@ def add_army_spell_weapon(
     army_id: int,
     request: Request,
     weapon_id: int = Form(...),
-    custom_name: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -2083,7 +2082,7 @@ def add_army_spell_weapon(
         return templates.TemplateResponse("army_spells.html", context, status_code=400)
 
     base_label, description, cost = _weapon_spell_details(weapon)
-    custom_text = _normalized_custom_name(custom_name)
+    custom_text = _normalized_custom_name(weapon.effective_name)
     spell = models.ArmySpell(
         army=army,
         kind="weapon",
@@ -2121,7 +2120,10 @@ def update_army_spell(
     if not spell or spell.army_id != army.id:
         raise HTTPException(status_code=404)
 
-    custom_text = _normalized_custom_name(custom_name)
+    if spell.kind == "weapon" and spell.weapon:
+        custom_text = _normalized_custom_name(spell.weapon.effective_name)
+    else:
+        custom_text = _normalized_custom_name(custom_name)
     spell.custom_name = custom_text or None
     _resequence_spells(army)
     db.commit()
