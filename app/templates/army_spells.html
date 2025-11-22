@@ -31,7 +31,7 @@
             <th>Nazwa i opis</th>
             <th style="width: 8rem;">Rodzaj</th>
             <th style="width: 6rem;">Koszt</th>
-            <th style="width: 16rem;">Nazwa własna</th>
+            <th style="width: 16rem;">Nazwa</th>
             <th style="width: 6rem;"></th>
           </tr>
         </thead>
@@ -59,6 +59,9 @@
             </td>
             <td>{{ spell.cost }}</td>
             <td>
+              {% if spell.kind == 'weapon' %}
+              <div class="form-control form-control-sm bg-light">{{ spell.display_label or spell.base_display_label }}</div>
+              {% else %}
               <form class="d-flex gap-2" method="post" action="/armies/{{ army.id }}/spells/{{ spell.id }}/update">
                 <input
                   class="form-control form-control-sm"
@@ -70,6 +73,7 @@
                 />
                 <button class="btn btn-outline-primary btn-sm" type="submit">Zapisz</button>
               </form>
+              {% endif %}
             </td>
             <td>
               <div class="d-flex justify-content-end gap-2">
