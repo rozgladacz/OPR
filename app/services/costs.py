@@ -613,6 +613,8 @@ def passive_cost(
             identifier = ability_identifier(ability)
             if identifier:
                 ability_slugs.add(identifier)
+        if "rezerwa" in ability_slugs:
+            return 0
         if "zwiadowca" in ability_slugs:
             return -2.5 * tou
         if "zasadzka" in ability_slugs:
@@ -652,7 +654,9 @@ def passive_cost(
         return 3.0 * tou
     if slug == "cierpliwy":
         return 3.0 * tou
-
+    if slug == "rezerwa":
+        return -2.0 * tou
+        
     if aura:
         if slug in {"nieustraszony", "ucieczka", "stracency"}:
             return 1.5 * tou

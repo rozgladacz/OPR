@@ -60,7 +60,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Odwody",
         type="passive",
         description=(
-            "Przed rozstawieniem podziel swoją armię na dwie grupy. Przeciwnik wybiera jedną z nich, a oddziały w niej tracą "
+            "Przed rozstawieniem podziel odziały z tą zdolnośćią na dwie grupy. Przeciwnik wybiera jedną z nich, a oddziały w niej tracą "
             "zdolność Zwiadowca, a zyskują Rezerwa, ale wciąż mogą skorzystać z Zasadzka, jeżeli posiadają."
         ),
     ),
@@ -311,6 +311,14 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description=(
             "Na koniec swojej aktywacji odzyskujesz połowę, zaokrąglając w górę, utraconych punktów wytrzymałości oddziału."
             "Możesz je wykorzystać, aby przywrócić do gry pokonane model z tego oddziału, jeżeli możesz jej poprawnie rozstawić."
+        ),
+    ),
+    AbilityDefinition(
+        slug="rezerwa",
+        name="Rezerwa",
+        type="passive",
+        description=(
+            "Ten odział jest wystawiany na początku drugiej tury, 12” od krawędzi stołu wybranej przez przeciwnika."
         ),
     ),
     # Active abilities
