@@ -589,7 +589,12 @@ def ability_identifier(text: str | None) -> str:
     return normalize_name(base)
 
 
-def passive_cost(ability_name: str, tou: float = 1.0, aura: bool = False) -> float:
+def passive_cost(
+    ability_name: str,
+    tou: float = 1.0,
+    aura: bool = False,
+    abilities: Sequence[str] | None = None,
+) -> float:
     slug = ability_identifier(ability_name)
     norm = normalize_name(ability_name)
     key = slug or norm
@@ -602,6 +607,17 @@ def passive_cost(ability_name: str, tou: float = 1.0, aura: bool = False) -> flo
         return 2.0 * tou
     if slug == "zwiadowca":
         return 2.0 * tou
+    if slug == "odwody":
+        ability_slugs = set()
+        for ability in abilities or []:
+            identifier = ability_identifier(ability)
+            if identifier:
+                ability_slugs.add(identifier)
+        if "zwiadowca" in ability_slugs:
+            return -2.5 * tou
+        if "zasadzka" in ability_slugs:
+            return -0.25 * tou
+        return -1.5 * tou
     if slug == "szybki":
         return 1.0 * tou
     if slug == "wolny":
@@ -817,9 +833,9 @@ def ability_cost_from_name(
         if slug == "przygotowanie":
             base_result = 0.0
         elif definition and definition.type == "passive":
-            base_result = passive_cost(name, tou_value)
+            base_result = passive_cost(name, tou_value, abilities=abilities)
         elif slug and not definition:
-            base_result = passive_cost(name, tou_value)
+            base_result = passive_cost(name, tou_value, abilities=abilities)
         else:
             base_result = 0.0
 
@@ -854,7 +870,7 @@ def base_model_cost(
         if slug in DEFENSE_ABILITY_SLUGS:
             defense_abilities.append(slug)
             continue
-        passive_total += passive_cost(ability, float(toughness))
+        passive_total += passive_cost(ability, float(toughness), abilities=ability_list)
 
     morale_value = morale_modifier(int(quality), morale_multiplier)
     defense_value = defense_modifier(int(defense), defense_abilities)
