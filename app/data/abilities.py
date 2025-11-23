@@ -442,7 +442,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
     ),
     AbilityDefinition(
         slug="rozrywajacy",
-        name="Seria",
+        name="Podwójny",
         type="weapon",
         description="Naturalne 6 na trafienie dają dodatkowe normalne trafienie.",
     ),
