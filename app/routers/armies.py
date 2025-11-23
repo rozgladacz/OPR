@@ -922,6 +922,38 @@ def _spell_weapon_form_values(weapon: models.Weapon | None) -> dict:
     }
 
 
+def _spell_weapon_cost(
+    weapon: models.Weapon | None, form_values: dict | None
+) -> int | None:
+    if weapon:
+        _, _, cost = _weapon_spell_details(weapon)
+        return cost
+
+    if not form_values:
+        return None
+
+    try:
+        attacks_value = _spell_parse_optional_float(form_values.get("attacks"))
+        ap_value = _spell_parse_optional_int(form_values.get("ap"))
+    except ValueError:
+        return None
+
+    attacks = 1.0 if attacks_value is None else attacks_value
+    ap = 0 if ap_value is None else ap_value
+    weapon_tags = _serialize_spell_weapon_tags(form_values.get("abilities") or [])
+
+    temp_weapon = models.Weapon(
+        name=form_values.get("name", ""),
+        range=str(form_values.get("range", "") or "").strip(),
+        attacks=attacks,
+        ap=ap,
+        tags=weapon_tags or None,
+        notes=str(form_values.get("notes") or "").strip() or None,
+    )
+    cost_value = costs.weapon_cost(temp_weapon, unit_quality=4)
+    return int(math.ceil(max(cost_value, 0.0) / 7.0))
+
+
 def _spell_weapon_form_context(
     request: Request,
     army: models.Army,
@@ -930,8 +962,6 @@ def _spell_weapon_form_context(
     weapon: models.Weapon | None,
     form_values: dict,
     error: str | None = None,
-    custom_name: str = "",
-    allow_custom_name: bool = False,
 ) -> dict:
     return {
         "request": request,
@@ -946,9 +976,7 @@ def _spell_weapon_form_context(
         "error": error,
         "cancel_url": f"/armies/{army.id}/spells",
         "allow_variants": False,
-        "custom_name_field": allow_custom_name,
-        "custom_name_value": custom_name,
-        "custom_name_max_length": models.ARMY_SPELL_NAME_MAX_LENGTH,
+        "spell_cost": _spell_weapon_cost(weapon, form_values),
     }
 
 
@@ -1669,7 +1697,6 @@ def new_spell_weapon_form(
             current_user,
             weapon=None,
             form_values=_spell_weapon_form_values(None),
-            allow_custom_name=True,
         ),
     )
 
@@ -1684,7 +1711,6 @@ def create_spell_weapon(
     ap: str = Form("0"),
     abilities: str | None = Form(None),
     notes: str | None = Form(None),
-    custom_name: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -1719,8 +1745,6 @@ def create_spell_weapon(
                 weapon=None,
                 form_values=form_values,
                 error="Nazwa broni jest wymagana.",
-                custom_name=custom_name or "",
-                allow_custom_name=True,
             ),
             status_code=400,
         )
@@ -1738,8 +1762,6 @@ def create_spell_weapon(
                 weapon=None,
                 form_values=form_values,
                 error=str(exc),
-                custom_name=custom_name or "",
-                allow_custom_name=True,
             ),
             status_code=400,
         )
@@ -1768,7 +1790,7 @@ def create_spell_weapon(
     db.add(weapon)
 
     base_label, description, cost = _weapon_spell_details(weapon)
-    custom_text = _normalized_custom_name(custom_name)
+    custom_text = _normalized_custom_name(cleaned_name)
     spell = models.ArmySpell(
         army=army,
         kind="weapon",
@@ -1910,6 +1932,7 @@ def update_spell_weapon(
     weapon.cached_cost = costs.weapon_cost(weapon)
 
     base_label, description, cost = _weapon_spell_details(weapon)
+    normalized_name = _normalized_custom_name(cleaned_name)
     linked_spells = (
         db.execute(
             select(models.ArmySpell)
@@ -1920,6 +1943,7 @@ def update_spell_weapon(
         .all()
     )
     for spell in linked_spells:
+        spell.custom_name = normalized_name or None
         spell.base_label = base_label
         spell.description = description
         spell.cost = cost
@@ -2034,7 +2058,6 @@ def add_army_spell_weapon(
     army_id: int,
     request: Request,
     weapon_id: int = Form(...),
-    custom_name: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -2059,7 +2082,7 @@ def add_army_spell_weapon(
         return templates.TemplateResponse("army_spells.html", context, status_code=400)
 
     base_label, description, cost = _weapon_spell_details(weapon)
-    custom_text = _normalized_custom_name(custom_name)
+    custom_text = _normalized_custom_name(weapon.effective_name)
     spell = models.ArmySpell(
         army=army,
         kind="weapon",
@@ -2097,7 +2120,10 @@ def update_army_spell(
     if not spell or spell.army_id != army.id:
         raise HTTPException(status_code=404)
 
-    custom_text = _normalized_custom_name(custom_name)
+    if spell.kind == "weapon" and spell.weapon:
+        custom_text = _normalized_custom_name(spell.weapon.effective_name)
+    else:
+        custom_text = _normalized_custom_name(custom_name)
     spell.custom_name = custom_text or None
     _resequence_spells(army)
     db.commit()

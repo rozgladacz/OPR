@@ -143,25 +143,15 @@
             <input type="hidden" id="weapon-abilities" name="abilities" value='{{ form_values.abilities | tojson }}' />
             <div class="form-text">Dodaj zdolności z listy. Wpisz wartość dla pozycji oznaczonych (X).</div>
           </div>
+          {% if spell_cost is not none %}
+          <div class="alert alert-info" role="alert">
+            Aktualny koszt zaklęcia broni: <strong>{{ spell_cost }}</strong> pkt.
+          </div>
+          {% endif %}
           <div class="mb-3">
             <label class="form-label" for="notes">Notatki</label>
             <textarea class="form-control" id="notes" name="notes" rows="3">{{ form_values.notes }}</textarea>
           </div>
-          {% if custom_name_field %}
-          <div class="mb-3">
-            <label class="form-label" for="spell-custom-name">Nazwa własna (opcjonalnie)</label>
-            <input
-              class="form-control"
-              id="spell-custom-name"
-              name="custom_name"
-              type="text"
-              value="{{ custom_name_value | default('', true) }}"
-              maxlength="{{ custom_name_max_length | default(120, true) }}"
-              placeholder="Np. Cios"
-            />
-            <div class="form-text">Nazwa pojawi się na liście mocy armii.</div>
-          </div>
-          {% endif %}
           <div class="d-flex flex-wrap justify-content-end gap-2">
             {% if parent_defaults %}
             <button class="btn btn-outline-secondary" type="button" data-weapon-reset>Przywróć wartości domyślne</button>
