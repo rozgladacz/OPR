@@ -41,6 +41,50 @@ def _unit_eager_options() -> tuple:
     )
 
 
+def _unit_payload_cached(
+    unit: models.Unit,
+    unit_data_cache: dict[int, dict[str, Any]],
+    unit_payloads: dict[int, dict[str, Any]],
+) -> dict[str, Any]:
+    def _unit_cache_value(key: str, factory: Callable[[], Any]) -> Any:
+        store = unit_data_cache.setdefault(unit.id, {})
+        if key in store:
+            logger.debug("Reusing cached value for unit_id=%s key=%s", unit.id, key)
+            return store[key]
+        value = factory()
+        store[key] = value
+        logger.debug("Caching value for unit_id=%s key=%s", unit.id, key)
+        return value
+
+    if unit.id in unit_payloads:
+        return unit_payloads[unit.id]
+    weapon_options = _unit_cache_value(
+        "weapon_options", lambda: _unit_weapon_options(unit)
+    )
+    passive_items = _unit_cache_value(
+        "passive_entries", lambda: _passive_entries(unit)
+    )
+    active_items = _unit_cache_value(
+        "ability_active", lambda: _ability_entries(unit, "active")
+    )
+    aura_items = _unit_cache_value(
+        "ability_aura", lambda: _ability_entries(unit, "aura")
+    )
+    default_summary = _unit_cache_value(
+        "default_summary", lambda: _default_loadout_summary(unit)
+    )
+    payload = {
+        "weapon_options": weapon_options,
+        "passive_items": passive_items,
+        "active_items": active_items,
+        "aura_items": aura_items,
+        "default_summary": default_summary,
+        "unit_flags": _unit_flag_string_with_army(unit),
+    }
+    unit_payloads[unit.id] = payload
+    return payload
+
+
 def _unit_army_flags(unit: models.Unit | None) -> dict:
     flags = utils.parse_flags(getattr(unit, "flags", None))
     if unit is None:
@@ -490,48 +534,8 @@ def edit_roster(
     unit_data_cache: dict[int, dict[str, Any]] = {}
     unit_payloads: dict[int, dict[str, Any]] = {}
 
-    def _unit_cache_value(unit: models.Unit, key: str, factory: Callable[[], Any]) -> Any:
-        store = unit_data_cache.setdefault(unit.id, {})
-        if key in store:
-            logger.debug(
-                "Reusing cached value for unit_id=%s key=%s", unit.id, key
-            )
-            return store[key]
-        value = factory()
-        store[key] = value
-        logger.debug("Caching value for unit_id=%s key=%s", unit.id, key)
-        return value
-
     def _unit_payload(unit: models.Unit) -> dict[str, Any]:
-        if unit.id in unit_payloads:
-            return unit_payloads[unit.id]
-        weapon_options = _unit_cache_value(
-            unit, "weapon_options", lambda: _unit_weapon_options(unit)
-        )
-        passive_items = _unit_cache_value(
-            unit, "passive_entries", lambda: _passive_entries(unit)
-        )
-        active_items = _unit_cache_value(
-            unit, "ability_active", lambda: _ability_entries(unit, "active")
-        )
-        aura_items = _unit_cache_value(
-            unit, "ability_aura", lambda: _ability_entries(unit, "aura")
-        )
-        default_summary = _unit_cache_value(
-            unit,
-            "default_summary",
-            lambda: _default_loadout_summary(unit),
-        )
-        payload = {
-            "weapon_options": weapon_options,
-            "passive_items": passive_items,
-            "active_items": active_items,
-            "aura_items": aura_items,
-            "default_summary": default_summary,
-            "unit_flags": _unit_flag_string_with_army(unit),
-        }
-        unit_payloads[unit.id] = payload
-        return payload
+        return _unit_payload_cached(unit, unit_data_cache, unit_payloads)
 
     available_unit_options = []
     for unit in available_units:
@@ -996,6 +1000,12 @@ def update_roster_unit(
         _update_lock_pairs(db, roster, lock_pairs)
 
     roster_unit.count = max(int(count), 1)
+    unit_data_cache: dict[int, dict[str, Any]] = {}
+    unit_payloads: dict[int, dict[str, Any]] = {}
+
+    def _unit_payload(unit: models.Unit) -> dict[str, Any]:
+        return _unit_payload_cached(unit, unit_data_cache, unit_payloads)
+
     payload_cache: dict[int, dict[str, Any]] = {}
     loadout_map: dict[int, dict[str, Any]] = {}
     role_slug_maps: dict[int, dict[str, str]] = {}
