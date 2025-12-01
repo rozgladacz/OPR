@@ -5,6 +5,7 @@ import logging
 import math
 from collections.abc import Mapping, Sequence, Set as AbstractSet
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -977,31 +978,56 @@ def update_roster_unit(
     current_user: models.User = Depends(get_current_user()),
 ):
     roster = db.get(models.Roster, roster_id)
-    roster_units = (
+    roster_unit_rows = db.execute(
+        select(
+            models.RosterUnit.id,
+            models.RosterUnit.position,
+            models.RosterUnit.cached_cost,
+        )
+        .where(models.RosterUnit.roster_id == roster_id)
+        .order_by(models.RosterUnit.position, models.RosterUnit.id)
+    ).all()
+    valid_ids = {row.id for row in roster_unit_rows if row.id is not None}
+    roster_unit = (
         db.execute(
             select(models.RosterUnit)
             .options(
                 selectinload(models.RosterUnit.unit).options(*_unit_eager_options())
             )
-            .where(models.RosterUnit.roster_id == roster_id)
-            .order_by(models.RosterUnit.position, models.RosterUnit.id)
+            .where(models.RosterUnit.id == roster_unit_id)
         )
         .scalars()
-        .unique()
-        .all()
+        .first()
     )
-    roster_unit_map = {ru.id: ru for ru in roster_units}
-    roster_unit = roster_unit_map.get(roster_unit_id)
     if not roster or roster_unit is None or roster_unit.roster_id != roster.id:
         raise HTTPException(status_code=404)
     _ensure_roster_edit_access(roster, current_user)
 
-    valid_ids = {ru.id for ru in roster_units if ru.id is not None}
     if lock_pairs_json is None:
         lock_pairs = _lock_pairs_for_roster(db, roster)
     else:
         lock_pairs = _parse_lock_pairs(lock_pairs_json, valid_ids)
         _update_lock_pairs(db, roster, lock_pairs)
+
+    partner_id = _lock_partner_id(lock_pairs, roster_unit.id or 0)
+    roster_partner = None
+    if partner_id:
+        roster_partner = (
+            db.execute(
+                select(models.RosterUnit)
+                .options(
+                    selectinload(models.RosterUnit.unit).options(*_unit_eager_options())
+                )
+                .where(models.RosterUnit.id == partner_id)
+            )
+            .scalars()
+            .first()
+        )
+    roster_unit_map = {
+        ru.id: ru
+        for ru in [roster_unit, roster_partner]
+        if ru is not None and ru.id is not None
+    }
 
     roster_unit.count = max(int(count), 1)
     unit_data_cache: dict[int, dict[str, Any]] = {}
@@ -1013,7 +1039,9 @@ def update_roster_unit(
     payload_cache: dict[int, dict[str, Any]] = {}
     loadout_map: dict[int, dict[str, Any]] = {}
     role_slug_maps: dict[int, dict[str, str]] = {}
-    for ru in roster_units:
+    affected_units = [ru for ru in (roster_unit, roster_partner) if ru is not None]
+
+    for ru in affected_units:
         payload = _unit_payload(ru.unit)
         payload_cache[ru.id] = payload
         role_slug_maps[ru.id] = _role_slug_map(ru.unit)
@@ -1042,12 +1070,18 @@ def update_roster_unit(
             )
         loadout_map[ru.id] = loadout
 
+    relevant_lock_pairs = [
+        pair
+        for pair in lock_pairs
+        if pair[0] in loadout_map and pair[1] in loadout_map
+    ]
+
     classifications, totals_by_id = _classification_map_with_pairs(
-        roster_units, loadout_map, lock_pairs
+        affected_units, loadout_map, relevant_lock_pairs
     )
 
     applied_loadouts: dict[int, dict[str, Any]] = {}
-    for ru in roster_units:
+    for ru in affected_units:
         classification = classifications.get(ru.id)
         role_slug_map = role_slug_maps.get(ru.id) or {}
         loadout = loadout_map.get(ru.id)
@@ -1058,7 +1092,7 @@ def update_roster_unit(
             or loadout
         )
 
-    for ru in roster_units:
+    for ru in affected_units:
         totals = totals_by_id.get(ru.id, {}) if isinstance(totals_by_id, dict) else {}
         warrior_total = float(totals.get("wojownik") or 0.0)
         shooter_total = float(totals.get("strzelec") or 0.0)
@@ -1076,7 +1110,16 @@ def update_roster_unit(
     }
     accept_header = (request.headers.get("accept") or "").lower()
     if "application/json" in accept_header:
-        total_cost = costs.roster_total(roster)
+        cached_cost_map = {
+            row.id: float(row.cached_cost)
+            for row in roster_unit_rows
+            if row.cached_cost is not None and row.id is not None
+        }
+        base_total = sum(cached_cost_map.values())
+        for ru in affected_units:
+            base_total -= cached_cost_map.get(ru.id, 0.0)
+            base_total += float(ru.cached_cost or 0.0)
+        total_cost = round(base_total, 2)
 
         def _unit_payload_for_response(target: models.RosterUnit) -> dict[str, Any]:
             payload = payload_cache.get(target.id) or _unit_payload(target.unit)
@@ -1131,12 +1174,18 @@ def update_roster_unit(
             if partner:
                 paired_units.append(_unit_payload_for_response(partner))
 
+        lock_pair_ids = {id_ for pair in lock_pairs for id_ in pair}
+        payload_roster_units = [
+            SimpleNamespace(id=row.id, position=row.position)
+            for row in roster_unit_rows
+            if row.id in lock_pair_ids
+        ]
         payload = {
             "unit": unit_payload,
             "paired_units": paired_units,
             "warnings": [],
             "total_cost": total_cost,
-            "lock_pairs": _lock_pairs_payload(lock_pairs, roster_units),
+            "lock_pairs": _lock_pairs_payload(lock_pairs, payload_roster_units),
         }
         return JSONResponse(_json_safe(payload))
     return RedirectResponse(
