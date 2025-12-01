@@ -484,6 +484,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Atakujący rozdziela rany.",
     ),
     AbilityDefinition(
+        slug="przebijajaca",
+        name="Przebijająca",
+        type="weapon",
+        description="Każde trafienie zadaje liczbę ran równą wynikowi kostki obrony.",
+    ),
+    AbilityDefinition(
         slug="zracy",
         name="Żrący",
         type="weapon",

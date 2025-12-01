@@ -642,6 +642,7 @@ const AP_BASE = { '-1': 0.8, 0: 1.0, 1: 1.5, 2: 1.9, 3: 2.25, 4: 2.5, 5: 2.65 };
 const AP_NO_COVER = { '-1': 0.1, 0: 0.25, 1: 0.2, 2: 0.15, 3: 0.1, 4: 0.1, 5: 0.05 };
 const AP_LANCE = { '-1': 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05 };
 const AP_CORROSIVE = { '-1': 0.05, 0: 0.05, 1: 0.1, 2: 0.25, 3: 0.4, 4: 0.5, 5: 0.55 };
+const PENETRATING_MULTIPLIER = { '-1': 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2.9, 5: 3.0 };
 const BLAST_MULTIPLIER = { 2: 1.95, 3: 2.8, 6: 4.3 };
 const DEADLY_MULTIPLIER = { 2: 1.9, 3: 2.6, 6: 3.8 };
 const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
@@ -1018,6 +1019,8 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
       apMod += lookupWithNearest(AP_LANCE, apValue);
     } else if (['bez oslon', 'bez oslony', 'no cover'].includes(norm)) {
       apMod += lookupWithNearest(AP_NO_COVER, apValue);
+    } else if (['przebijajaca', 'przebijajacy', 'penetrating'].includes(norm)) {
+      mult *= lookupWithNearest(PENETRATING_MULTIPLIER, apValue);
     } else if (['zracy', 'corrosive'].includes(norm)) {
       apMod += lookupWithNearest(AP_CORROSIVE, apValue);
     } else if (['niebezposredni', 'indirect'].includes(norm)) {
