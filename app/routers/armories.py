@@ -821,8 +821,8 @@ def create_weapon(
     request: Request,
     name: str = Form(...),
     range: str = Form(""),
-    attacks: str = Form("1"),
-    ap: str = Form("0"),
+    attacks: str = Form(""),
+    ap: str = Form(""),
 
     abilities: str | None = Form(None),
 
@@ -960,8 +960,8 @@ def update_weapon(
     request: Request,
     name: str = Form(...),
     range: str = Form(""),
-    attacks: str = Form("1"),
-    ap: str = Form("0"),
+    attacks: str = Form(""),
+    ap: str = Form(""),
 
     abilities: str | None = Form(None),
 
