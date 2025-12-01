@@ -58,6 +58,7 @@ AP_BASE = {-1: 0.8, 0: 1.0, 1: 1.5, 2: 1.9, 3: 2.25, 4: 2.5, 5: 2.65}
 AP_LANCE = {-1: 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05}
 AP_NO_COVER = {-1: 0.1, 0: 0.25, 1: 0.2, 2: 0.15, 3: 0.1, 4: 0.1, 5: 0.05}
 AP_CORROSIVE = {-1: 0.05, 0: 0.05, 1: 0.1, 2: 0.25, 3: 0.4, 4: 0.5, 5: 0.55}
+PENETRATING_MULTIPLIER = {-1: 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2.9, 5: 3.0}
 WAAGH_AP_MODIFIER = {-1: 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02}
 
 BLAST_MULTIPLIER = {2: 1.95, 3: 2.8, 6: 4.3}
@@ -663,7 +664,7 @@ def passive_cost(
     if slug == "tarcza":
         return 1.25 * tou
     if slug == "dywersant":
-        return 1.25
+        return 1.25 * (tou if aura else 1.0)
     if slug == "zdobywca":
         return 3.0 * tou
     if slug == "straznik":
@@ -983,6 +984,8 @@ def _weapon_cost(
             ap_mod += lookup_with_nearest(AP_LANCE, base_ap)
         elif norm in {"bez oslon", "bez oslony", "no cover"}:
             ap_mod += lookup_with_nearest(AP_NO_COVER, base_ap)
+        elif norm in {"przebijajaca", "przebijajacy", "penetrating"}:
+            mult *= lookup_with_nearest(PENETRATING_MULTIPLIER, base_ap)
         elif norm in {"zracy", "corrosive"}:
             ap_mod += lookup_with_nearest(AP_CORROSIVE, base_ap)
         elif norm in {"niebezposredni", "indirect"}:
