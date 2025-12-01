@@ -35,6 +35,22 @@ TOUGHNESS_SPECIAL = {1: 1.0, 2: 2.15, 3: 3.5}
 DEFENSE_ABILITY_SLUGS = set(DEFENSE_ABILITY_MODIFIERS)
 
 RANGE_TABLE = {0: 0.6, 12: 0.65, 18: 1.0, 24: 1.25, 30: 1.45, 36: 1.55}
+ARTILLERY_RANGE_BONUS = {
+    0: 0.0,
+    12: 0.85,
+    18: 0.55,
+    24: 0.35,
+    30: 0.2,
+    36: 0.15,
+}
+UNWIELDY_RANGE_PENALTY = {
+    0: 0.0,
+    12: 0.6,
+    18: 0.4,
+    24: 0.4,
+    30: 0.3,
+    36: 0.15,
+}
 
 CAUTIOUS_HIT_BONUS = {0: 0.0, 12: 0.0, 18: 0.5, 24: 0.7, 30: 0.8, 36: 0.9}
 
@@ -902,6 +918,8 @@ def _weapon_cost(
     ap_mod = lookup_with_nearest(AP_BASE, base_ap)
     mult = 1.0
     q = int(quality)
+    range_bonus = 0.0
+    range_penalty = 0.0
 
     unit_set: set[str] = set()
     for trait in unit_traits:
@@ -977,6 +995,10 @@ def _weapon_cost(
             q = 2
         elif norm in {"szturmowy", "szturmowa", "assault"}:
             assault = True
+        elif norm in {"artyleria", "artillery"}:
+            range_bonus += lookup_with_nearest(ARTILLERY_RANGE_BONUS, range_value)
+        elif norm in {"nieporeczny", "unwieldy"}:
+            range_penalty += lookup_with_nearest(UNWIELDY_RANGE_PENALTY, range_value)
         elif norm in {
             "brutalny",
             "brutalna",
@@ -993,6 +1015,7 @@ def _weapon_cost(
     if waagh_penalty:
         ap_mod = max(ap_mod - waagh_penalty, 0.0)
 
+    range_mod = max(range_mod + range_bonus - range_penalty, 0.0)
     chance = max(chance - q, 1.0)
     cost = attacks * 2.0 * range_mod * chance * ap_mod * mult
 
