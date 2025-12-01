@@ -4442,6 +4442,10 @@ function initRosterEditor() {
   let saveTimer = null;
   let isSaving = false;
   let pendingSave = false;
+  let pendingSaveVersion = null;
+  let latestEditVersion = 0;
+  let latestRequestVersion = 0;
+  let activeSaveController = null;
   const SAVE_MESSAGES = {
     idle: '',
     dirty: 'Niezapisane zmiany',
@@ -5042,10 +5046,12 @@ function initRosterEditor() {
     totalValueEl.textContent = formatPoints(total);
   }
 
-  function scheduleSave() {
+  function scheduleSave(requestVersion) {
     if (!isEditable || !form || !autoSaveEnabled) {
       return;
     }
+    const version = typeof requestVersion === 'number' ? requestVersion : ++latestEditVersion;
+    latestEditVersion = Math.max(latestEditVersion, version);
     if (saveTimer) {
       window.clearTimeout(saveTimer);
     }
@@ -5053,26 +5059,39 @@ function initRosterEditor() {
       saveTimer = null;
       if (isSaving) {
         pendingSave = true;
+        pendingSaveVersion = Math.max(pendingSaveVersion ?? 0, version);
+        if (activeSaveController) {
+          activeSaveController.abort();
+        }
         return;
       }
       setSaveStatus('saving');
       isSaving = true;
-      submitChanges()
+      latestRequestVersion = version;
+      activeSaveController = new AbortController();
+      submitChanges(version, activeSaveController.signal)
         .catch((error) => {
+          if (error && error.name === 'AbortError') {
+            return;
+          }
           console.error('Nie udało się zapisać zmian oddziału', error);
           setSaveStatus('error');
         })
         .finally(() => {
           isSaving = false;
+          activeSaveController = null;
           if (pendingSave) {
             pendingSave = false;
-            scheduleSave();
+            const nextVersion =
+              pendingSaveVersion && pendingSaveVersion > version ? pendingSaveVersion : latestEditVersion;
+            pendingSaveVersion = null;
+            scheduleSave(nextVersion);
           }
         });
     }, 400);
   }
 
-  async function submitChanges() {
+  async function submitChanges(requestVersion, signal) {
     if (!form || !activeItem) {
       throw new Error('Brak aktywnego oddziału');
     }
@@ -5089,15 +5108,20 @@ function initRosterEditor() {
       payload.set('loadout_json', loadoutInput.value || '{}');
     }
     payload.set('lock_pairs_json', serializeLockPairs());
+    payload.set('request_id', String(requestVersion));
     const response = await fetch(action, {
       method: 'POST',
       body: payload,
       headers: { Accept: 'application/json' },
+      signal,
     });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data = await response.json();
+    if (requestVersion !== latestEditVersion || requestVersion !== latestRequestVersion) {
+      return;
+    }
     applyServerUpdate(data || {});
     setSaveStatus('saved');
   }
