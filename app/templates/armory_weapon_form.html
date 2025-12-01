@@ -9,8 +9,9 @@
         <h5 class="card-title">{% if weapon %}Edycja broni{% else %}Nowa broń{% endif %}</h5>
         {% if armory.parent %}
         <div class="alert alert-info">
-          Ten wariant dziedziczy wartości z listy bazowej. Wprowadź nowe wartości, aby je nadpisać – pozostawienie wartości
-          zgodnych z bazą spowoduje korzystanie z oryginału.
+          Ten wariant dziedziczy wartości z listy bazowej
+          {% if weapon and weapon.parent %}<strong>{{ weapon.parent.effective_name }}</strong>{% endif %}. Wprowadź nowe wartości,
+          aby je nadpisać – pozostawienie wartości zgodnych z bazą spowoduje korzystanie z oryginału.
         </div>
         {% endif %}
         {% if error %}
