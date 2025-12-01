@@ -4062,16 +4062,12 @@ function initRosterEditor() {
       boundaryElement.setAttribute('data-roster-lock-boundary', '');
 
       const boundaryContent = document.createElement('div');
-      boundaryContent.className = 'roster-lock-boundary';
+      boundaryContent.className = 'roster-lock-boundary roster-unit-entry';
       boundaryElement.appendChild(boundaryContent);
-
-      const lockRow = document.createElement('div');
-      lockRow.className = 'roster-unit-lock-row';
-      boundaryContent.appendChild(lockRow);
 
       const reorderWrapper = document.createElement('div');
       reorderWrapper.className = 'roster-unit-reorder roster-unit-reorder--lock';
-      lockRow.appendChild(reorderWrapper);
+      boundaryContent.appendChild(reorderWrapper);
 
       const button = document.createElement('button');
       button.className = 'btn btn-outline-secondary btn-sm roster-unit-lock-toggle';
@@ -4080,6 +4076,11 @@ function initRosterEditor() {
       button.setAttribute('aria-label', 'Połącz z kolejnym oddziałem');
       button.title = 'Połącz z kolejnym oddziałem';
       reorderWrapper.appendChild(button);
+
+      const spacer = document.createElement('div');
+      spacer.className = 'flex-grow-1 roster-lock-spacer';
+      spacer.setAttribute('aria-hidden', 'true');
+      boundaryContent.appendChild(spacer);
 
       return boundaryElement;
     })();

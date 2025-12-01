@@ -103,17 +103,9 @@ body {
 
 
 .roster-lock-boundary {
-  position: absolute;
-  pointer-events: none;
   display: flex;
-  justify-content: center;
-  width: auto;
-}
-
-.roster-unit-reorder > .roster-lock-boundary {
-  top: 100%;
-  left: 50%;
-  transform: translate(-50%, -0.75rem);
+  align-items: center;
+  pointer-events: none;
 }
 
 .list-group-item[data-roster-lock-boundary] {
@@ -121,20 +113,27 @@ body {
 }
 
 .list-group-item[data-roster-lock-boundary] .roster-lock-boundary {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.roster-unit-lock-row {
+  pointer-events: none;
   display: flex;
   align-items: center;
-  justify-content: center;
-  pointer-events: none;
+  gap: 0.75rem;
+  padding: 0.25rem 0;
 }
 
-.roster-unit-lock-row .roster-unit-lock-toggle {
+.roster-lock-spacer {
+  pointer-events: none;
+  min-height: 0.5rem;
+}
+
+.roster-unit-reorder--lock {
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.roster-unit-reorder--lock .roster-unit-lock-toggle {
   pointer-events: auto;
 }
 
