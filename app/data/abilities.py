@@ -434,6 +434,14 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Nie wymaga linii wzroku.",
     ),
     AbilityDefinition(
+        slug="artyleria",
+        name="Artyleria",
+        type="weapon",
+        description=(
+            "Każdy oddział w zasięgu 12” od sojuszniczego oddziału jest w zasięgu tej broni."
+        ),
+    ),
+    AbilityDefinition(
         slug="impet",
         name="Impet",
         type="weapon",
@@ -456,6 +464,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Niezawodny",
         type="weapon",
         description="Atakuje z jakością 2+.",
+    ),
+    AbilityDefinition(
+        slug="nieporeczny",
+        name="Nieporęczny",
+        type="weapon",
+        description="Nie może atakować oddziałów w zasięgu 12”.",
     ),
     AbilityDefinition(
         slug="rozrywajacy",

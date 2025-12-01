@@ -77,3 +77,24 @@ def test_weapon_cost_falls_back_when_modifiers_present(monkeypatch):
     result = costs.weapon_cost(weapon, unit_quality=4, unit_flags=["Wojownik"])
     assert recorded_calls  # traits present trigger recomputation
     assert result == pytest.approx(7.0)
+
+
+def test_artillery_increases_ranged_weapon_cost():
+    base_weapon = _weapon("24\"")
+    artillery_weapon = _weapon("24\"", tags="Artyleria")
+
+    base_cost = costs.weapon_cost(base_weapon, unit_quality=4, unit_flags=[])
+    artillery_cost = costs.weapon_cost(artillery_weapon, unit_quality=4, unit_flags=[])
+
+    assert artillery_cost > base_cost
+
+
+def test_unwieldy_reduces_ranged_weapon_cost():
+    base_weapon = _weapon("24\"")
+    unwieldy_weapon = _weapon("24\"", tags="Nieporęczny")
+
+    base_cost = costs.weapon_cost(base_weapon, unit_quality=4, unit_flags=[])
+    unwieldy_cost = costs.weapon_cost(unwieldy_weapon, unit_quality=4, unit_flags=[])
+
+    assert unwieldy_cost < base_cost
+    assert unwieldy_cost > 0

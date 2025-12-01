@@ -27,6 +27,19 @@ templates = Jinja2Templates(directory="app/templates")
 ABILITY_NAME_MAX_LENGTH = 60
 
 
+def _unit_cache_value(
+    unit: models.Unit, unit_data_cache: dict[int, dict[str, Any]], key: str, factory: Callable[[], Any]
+) -> Any:
+    store = unit_data_cache.setdefault(unit.id, {})
+    if key in store:
+        logger.debug("Reusing cached value for unit_id=%s key=%s", unit.id, key)
+        return store[key]
+    value = factory()
+    store[key] = value
+    logger.debug("Caching value for unit_id=%s key=%s", unit.id, key)
+    return value
+
+
 def _unit_eager_options() -> tuple:
     return (
         selectinload(models.Unit.weapon_links)
@@ -46,32 +59,22 @@ def _unit_payload_cached(
     unit_data_cache: dict[int, dict[str, Any]],
     unit_payloads: dict[int, dict[str, Any]],
 ) -> dict[str, Any]:
-    def _unit_cache_value(key: str, factory: Callable[[], Any]) -> Any:
-        store = unit_data_cache.setdefault(unit.id, {})
-        if key in store:
-            logger.debug("Reusing cached value for unit_id=%s key=%s", unit.id, key)
-            return store[key]
-        value = factory()
-        store[key] = value
-        logger.debug("Caching value for unit_id=%s key=%s", unit.id, key)
-        return value
-
     if unit.id in unit_payloads:
         return unit_payloads[unit.id]
     weapon_options = _unit_cache_value(
-        "weapon_options", lambda: _unit_weapon_options(unit)
+        unit, unit_data_cache, "weapon_options", lambda: _unit_weapon_options(unit)
     )
     passive_items = _unit_cache_value(
-        "passive_entries", lambda: _passive_entries(unit)
+        unit, unit_data_cache, "passive_entries", lambda: _passive_entries(unit)
     )
     active_items = _unit_cache_value(
-        "ability_active", lambda: _ability_entries(unit, "active")
+        unit, unit_data_cache, "ability_active", lambda: _ability_entries(unit, "active")
     )
     aura_items = _unit_cache_value(
-        "ability_aura", lambda: _ability_entries(unit, "aura")
+        unit, unit_data_cache, "ability_aura", lambda: _ability_entries(unit, "aura")
     )
     default_summary = _unit_cache_value(
-        "default_summary", lambda: _default_loadout_summary(unit)
+        unit, unit_data_cache, "default_summary", lambda: _default_loadout_summary(unit)
     )
     payload = {
         "weapon_options": weapon_options,
@@ -642,6 +645,7 @@ def edit_roster(
                 ),
                 "base_cost_per_model": _unit_cache_value(
                     unit,
+                    unit_data_cache,
                     f"base_cost::{class_slug}",
                     lambda: _base_cost_per_model(unit, classification),
                 ),
