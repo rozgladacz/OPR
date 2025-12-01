@@ -321,6 +321,14 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
             "Ten odział jest wystawiany na początku drugiej tury, 12” od krawędzi stołu wybranej przez przeciwnika."
         ),
     ),
+    AbilityDefinition(
+        slug="wrak",
+        name="Wrak",
+        type="passive",
+        description=(
+            "Gdy zostaniesz pokonany teren który zajmujesz do końca bitwy uznawany jest za osłonę oraz niebezpieczny i trudny tere."
+        ),
+    ),
     # Active abilities
     AbilityDefinition(
         slug="mag",

@@ -25,6 +25,7 @@ EXCLUDED_AURA_AND_ORDER_SLUGS: set[str] = {
     "odrodzenie",
     "odwody",
     "rezerwa",
+    "wrak",
 }
 
 
