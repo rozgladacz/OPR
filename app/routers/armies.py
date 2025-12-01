@@ -51,6 +51,7 @@ SPELL_WEAPON_SYNONYMS = {
     "reliable": "niezawodny",
     "rending": "rozrywajacy",
     "precise": "precyzyjny",
+    "penetrating": "przebijajaca",
     "corrosive": "zracy",
     "assault": "szturmowa",
     "no cover": "bez_oslon",
