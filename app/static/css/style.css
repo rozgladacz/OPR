@@ -104,7 +104,7 @@ body {
 
 .roster-lock-boundary {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   pointer-events: none;
 }
 
@@ -115,22 +115,22 @@ body {
 .list-group-item[data-roster-lock-boundary] .roster-lock-boundary {
   pointer-events: none;
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  align-items: stretch;
   padding: 0.25rem 0;
 }
 
-.roster-lock-spacer {
-  pointer-events: none;
-  min-height: 0.5rem;
+.roster-lock-reorder {
+  flex: 0 0 auto;
+  width: 2.75rem;
 }
 
 .roster-unit-reorder--lock {
   pointer-events: none;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
+  width: 100%;
 }
 
 .roster-unit-reorder--lock .roster-unit-lock-toggle {
