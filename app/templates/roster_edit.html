@@ -283,24 +283,25 @@
           {% if can_edit and not loop.last %}
           <div class="list-group-item border-0 px-0 py-0" data-roster-lock-boundary>
             <div class="roster-lock-boundary roster-unit-entry">
-              <div class="roster-unit-reorder roster-unit-reorder--lock">
-                <button
-                  class="btn btn-outline-secondary btn-sm roster-unit-lock-toggle"
-                  type="button"
-                  data-roster-lock-toggle
-                  aria-label="Połącz z kolejnym oddziałem"
-                  title="Połącz z kolejnym oddziałem"
-                >
-                  <svg aria-hidden="true" class="roster-lock-icon" viewBox="0 0 16 16">
-                    <path
-                      fill="currentColor"
-                      d="M11 1a2 2 0 0 1 2 2v2h-1V3a1 1 0 0 0-2 0v2H6.5A1.5 1.5 0 0 0 5 6.5v6A1.5 1.5 0 0 0 6.5 14h6A1.5 1.5 0 0 0 14 12.5V9h1v3.5A2.5 2.5 0 0 1 12.5 15h-6A2.5 2.5 0 0 1 4 12.5v-6A2.5 2.5 0 0 1 6.5 4H10V3a2 2 0 0 1 2-2z"
-                    />
-                    <path fill="currentColor" d="M10 8a2 2 0 1 0-4 0v4a2 2 0 1 0 4 0z" />
-                  </svg>
-                </button>
+              <div class="roster-lock-reorder">
+                <div class="roster-unit-reorder roster-unit-reorder--lock">
+                  <button
+                    class="btn btn-outline-secondary btn-sm roster-unit-lock-toggle"
+                    type="button"
+                    data-roster-lock-toggle
+                    aria-label="Połącz z kolejnym oddziałem"
+                    title="Połącz z kolejnym oddziałem"
+                  >
+                    <svg aria-hidden="true" class="roster-lock-icon" viewBox="0 0 16 16">
+                      <path
+                        fill="currentColor"
+                        d="M11 1a2 2 0 0 1 2 2v2h-1V3a1 1 0 0 0-2 0v2H6.5A1.5 1.5 0 0 0 5 6.5v6A1.5 1.5 0 0 0 6.5 14h6A1.5 1.5 0 0 0 14 12.5V9h1v3.5A2.5 2.5 0 0 1 12.5 15h-6A2.5 2.5 0 0 1 4 12.5v-6A2.5 2.5 0 0 1 6.5 4H10V3a2 2 0 0 1 2-2z"
+                      />
+                      <path fill="currentColor" d="M10 8a2 2 0 1 0-4 0v4a2 2 0 1 0 4 0z" />
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <div class="flex-grow-1 roster-lock-spacer" aria-hidden="true"></div>
             </div>
           </div>
           {% endif %}
