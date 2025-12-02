@@ -98,3 +98,13 @@ def test_unwieldy_reduces_ranged_weapon_cost():
 
     assert unwieldy_cost < base_cost
     assert unwieldy_cost > 0
+
+
+def test_podwojny_increases_weapon_cost():
+    base_weapon = _weapon("24\"")
+    double_weapon = _weapon("24\"", tags="Podwójny")
+
+    base_cost = costs.weapon_cost(base_weapon, unit_quality=4, unit_flags=[])
+    double_cost = costs.weapon_cost(double_weapon, unit_quality=4, unit_flags=[])
+
+    assert double_cost > base_cost

@@ -1007,7 +1007,11 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
       }
       return;
     }
-    if (['seria', 'rozrywajacy', 'rozrywajaca', 'rozrwyajaca', 'rending'].includes(norm)) {
+    if (
+      ['seria', 'rozrywajacy', 'rozrywajaca', 'rozrwyajaca', 'podwojny', 'podwojna', 'rending'].includes(
+        norm,
+      )
+    ) {
       chance += 1;
     } else if (['lanca', 'lance'].includes(norm)) {
       chance += 0.65;
