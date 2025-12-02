@@ -10,7 +10,15 @@
         {% if armory.parent %}
         <div class="alert alert-info">
           Ten wariant dziedziczy wartości z listy bazowej
-          {% if weapon and weapon.parent %}<strong>{{ weapon.parent.effective_name }}</strong>{% endif %}. Wprowadź nowe wartości,
+          {% if weapon and weapon.parent %}
+          <a
+            class="alert-link"
+            href="/armories/{{ weapon.parent.armory_id }}/weapons/{{ weapon.parent.id }}/edit"
+          >
+            {{ weapon.parent.effective_name }}
+          </a>
+          z Zbrojowni „{{ weapon.parent.armory.name }}”
+          {% endif %}. Wprowadź nowe wartości,
           aby je nadpisać – pozostawienie wartości zgodnych z bazą spowoduje korzystanie z oryginału.
         </div>
         {% endif %}
