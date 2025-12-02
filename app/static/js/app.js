@@ -3998,6 +3998,10 @@ function initRosterEditor() {
       const topId = button.dataset.lockTopId || '';
       const bottomId = button.dataset.lockBottomId || '';
       togglePair(topId, bottomId);
+      const pairKey = createPairKey(topId, bottomId);
+      const isActive = pairKey ? lockedPairs.has(pairKey) : false;
+      setLockButtonIcon(button, isActive);
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
       renderLockButtons();
       updateMoveButtonStates(rosterListEl);
       if (activeItem) {
