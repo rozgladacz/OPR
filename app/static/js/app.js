@@ -5446,6 +5446,8 @@ function initRosterEditor() {
     if (Number.isFinite(totalCostValue)) {
       updateTotalSummary(totalCostValue);
     }
+
+    refreshRosterCostBadges(Number.isFinite(totalCostValue) ? totalCostValue : null);
   }
 
   function updateCostDisplays() {
@@ -5473,6 +5475,117 @@ function initRosterEditor() {
       }
     }
     return total;
+  }
+
+  function computeRosterItemCost(context, partnerContext = null) {
+    if (!context || !context.loadoutState) {
+      return null;
+    }
+
+    let classification = context.currentClassification || null;
+    let weaponMap = null;
+    const estimation = estimateCombinedClassification(context, partnerContext);
+    if (estimation) {
+      if (estimation.classification) {
+        classification = estimation.classification;
+      }
+      if (estimation.weaponMap instanceof Map) {
+        weaponMap = estimation.weaponMap;
+      }
+    }
+
+    const stateClone = cloneLoadoutState(context.loadoutState);
+    applyClassificationToState(stateClone, classification);
+
+    if (!(weaponMap instanceof Map)) {
+      const passiveState = stateClone && stateClone.passive instanceof Map ? stateClone.passive : new Map();
+      weaponMap = buildWeaponCostMap(
+        context.weapons,
+        context.quality,
+        context.baseFlags,
+        context.passiveItems,
+        passiveState,
+        classification,
+      );
+    }
+
+    const total = computeTotalCost(
+      context.baseCostPerModel,
+      context.count,
+      context.weapons,
+      stateClone,
+      context.abilityCosts,
+      context.passiveItems,
+      weaponMap,
+    );
+
+    return {
+      total,
+      classification,
+      weaponMap,
+    };
+  }
+
+  function refreshRosterCostBadges(totalOverride = null) {
+    const listElement = rosterListEl || ensureRosterList();
+    if (!listElement) {
+      return;
+    }
+
+    const rosterItems = Array.from(listElement.querySelectorAll('[data-roster-item]'));
+    if (!rosterItems.length) {
+      if (Number.isFinite(totalOverride)) {
+        updateTotalSummary(totalOverride);
+      }
+      return;
+    }
+
+    const contextCache = new Map();
+    const getContext = (item) => {
+      if (!item) {
+        return null;
+      }
+      const unitId = item.getAttribute('data-roster-unit-id') || '';
+      if (contextCache.has(unitId)) {
+        return contextCache.get(unitId);
+      }
+      const context = buildClassificationContextFromItem(item);
+      contextCache.set(unitId, context);
+      return context;
+    };
+
+    let aggregatedTotal = 0;
+    rosterItems.forEach((item) => {
+      const context = getContext(item);
+      if (!context) {
+        return;
+      }
+      const unitId = item.getAttribute('data-roster-unit-id') || '';
+      const partnerId = getPartnerId(unitId);
+      const partnerItem = partnerId
+        ? listElement.querySelector(`[data-roster-item][data-roster-unit-id="${partnerId}"]`)
+        : null;
+      const partnerContext = partnerItem ? getContext(partnerItem) : null;
+
+      const result = computeRosterItemCost(context, partnerContext);
+      if (!result || !Number.isFinite(result.total)) {
+        return;
+      }
+
+      const formatted = formatPoints(result.total);
+      const badgeEl = item.querySelector('[data-roster-unit-cost]');
+      if (badgeEl) {
+        badgeEl.textContent = `${formatted} pkt`;
+      }
+      item.setAttribute('data-unit-cost', String(result.total));
+      aggregatedTotal += result.total;
+    });
+
+    if (Number.isFinite(totalOverride)) {
+      updateTotalSummary(totalOverride);
+    } else if (Number.isFinite(aggregatedTotal)) {
+      updateTotalSummary(aggregatedTotal);
+    }
   }
 
   function applyClassificationToState(state, classification) {
@@ -5825,6 +5938,7 @@ function renderEditors(precomputedWeaponMap = null) {
   initialItems.forEach((item) => {
     registerRosterItem(item);
   });
+  refreshRosterCostBadges();
   try {
     const initialPairs = JSON.parse(root.dataset.rosterLockPairs || '[]');
     applyLockPairsFromServer(initialPairs);
