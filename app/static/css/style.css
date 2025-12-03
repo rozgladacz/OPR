@@ -112,14 +112,19 @@ body {
   position: relative;
 }
 
+.list-group-item[data-roster-lock-boundary] .roster-unit-entry {
+  gap: 0;
+}
+
 .list-group-item[data-roster-lock-boundary] .roster-lock-boundary {
   pointer-events: none;
   display: flex;
   align-items: stretch;
-  padding: 0.25rem 0;
+  padding: 0;
 }
 
-.roster-lock-reorder {
+
+.list-group-item[data-roster-lock-boundary] .roster-unit-reorder {
   flex: 0 0 auto;
   width: 2.75rem;
 }
