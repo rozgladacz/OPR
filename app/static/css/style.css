@@ -64,7 +64,6 @@ body {
   display: flex;
   gap: 0.75rem;
   align-items: stretch;
-  position: relative;
 }
 
 .roster-unit-reorder {
@@ -73,77 +72,11 @@ body {
   gap: 0.5rem;
   align-items: center;
   justify-content: center;
-  position: relative;
-  padding-bottom: 0;
 }
 
 .roster-unit-reorder .btn {
   padding: 0.25rem 0.5rem;
   line-height: 1;
-}
-
-.roster-unit-lock-toggle {
-  padding: 0.25rem 0.5rem;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transform: none;
-  position: relative;
-  z-index: 3;
-}
-
-.roster-unit-lock-toggle svg {
-  width: 0.85rem;
-  height: 0.85rem;
-  fill: currentColor;
-}
-
-
-.roster-lock-boundary {
-  display: flex;
-  align-items: stretch;
-  pointer-events: none;
-}
-
-.list-group-item[data-roster-lock-boundary] {
-  position: relative;
-  padding: 0;
-}
-
-.list-group-item[data-roster-lock-boundary] .roster-unit-entry {
-  gap: 0;
-  padding: 0;
-}
-
-.list-group-item[data-roster-lock-boundary] .roster-lock-boundary {
-  pointer-events: none;
-  display: flex;
-  align-items: stretch;
-  padding: 0;
-  gap: 0;
-}
-
-
-.list-group-item[data-roster-lock-boundary] .roster-unit-reorder {
-  flex: 0 0 auto;
-}
-
-.roster-unit-list .list-group-item[data-roster-entry] {
-  padding-top: 0.25rem;
-  padding-bottom: 0.25rem;
-}
-
-.roster-unit-reorder--lock {
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.roster-unit-reorder--lock .roster-unit-lock-toggle {
-  pointer-events: auto;
 }
 
 .roster-unit-item[data-roster-item] {

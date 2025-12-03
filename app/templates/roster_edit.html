@@ -67,7 +67,6 @@
   data-roster-id="{{ roster.id }}"
   data-selected-id="{{ selected_id or '' }}"
   data-roster-unit-datasets='{{ unit_payloads | tojson | e }}'
-  data-roster-lock-pairs='{{ lock_pairs | tojson | e }}'
 >
   {% if can_edit %}
   <div class="col-12 d-xl-none">
@@ -280,23 +279,6 @@
               </div>
             </div>
           </div>
-          {% if can_edit and not loop.last %}
-          <div class="list-group-item border-0 px-0 py-0" data-roster-lock-boundary>
-            <div class="roster-unit-entry roster-lock-boundary">
-              <div class="roster-unit-reorder roster-unit-reorder--lock">
-                <button
-                  class="btn btn-outline-secondary btn-sm roster-unit-lock-toggle"
-                  type="button"
-                  data-roster-lock-toggle
-                  aria-label="Połącz z kolejnym oddziałem"
-                  title="Połącz z kolejnym oddziałem"
-                >
-                </button>
-              </div>
-              <div class="flex-grow-1"></div>
-            </div>
-          </div>
-          {% endif %}
           {% endfor %}
         </div>
         {% else %}
@@ -368,7 +350,6 @@
             <div class="mt-3 d-flex justify-content-end align-items-center flex-wrap gap-2">
               <div class="text-muted small" data-roster-editor-save-state></div>
             </div>
-            <input type="hidden" name="lock_pairs_json" data-roster-lock-pairs-input />
           </form>
           <div class="mt-3 d-flex flex-wrap gap-2">
             <form method="post" data-roster-editor-duplicate>
