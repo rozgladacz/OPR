@@ -4039,45 +4039,58 @@ function initRosterEditor() {
     if (!isEditable || !listElement) {
       return;
     }
-    const findAdjacentEntry = (boundary, direction) => {
-      const prop = direction === 'next' ? 'nextElementSibling' : 'previousElementSibling';
-      let sibling = boundary ? boundary[prop] : null;
-      while (sibling) {
-        if (sibling.hasAttribute && sibling.hasAttribute('data-roster-entry')) {
-          return sibling;
-        }
-        sibling = sibling[prop];
-      }
-      return null;
-    };
+
+    const rosterEntries = Array.from(listElement.querySelectorAll('[data-roster-entry]'));
 
     listElement.querySelectorAll('[data-roster-lock-boundary]').forEach((boundary) => {
       const lockButton = boundary.querySelector('[data-roster-lock-toggle]');
       if (!lockButton) {
         return;
       }
-      let topContainer = findAdjacentEntry(boundary, 'previous');
-      let bottomContainer = findAdjacentEntry(boundary, 'next');
 
-      if (!topContainer && !bottomContainer) {
-        boundary.remove();
-        return;
+      let topContainer = null;
+      let bottomContainer = null;
+
+      if (rosterEntries.length > 0) {
+        rosterEntries.some((entry, index) => {
+          const position = boundary.compareDocumentPosition(entry);
+
+          if (position & Node.DOCUMENT_POSITION_FOLLOWING) {
+            bottomContainer = entry;
+            topContainer = index > 0 ? rosterEntries[index - 1] : null;
+            return true;
+          }
+          if (position & Node.DOCUMENT_POSITION_PRECEDING) {
+            topContainer = entry;
+          }
+
+          return false;
+        });
+
+        if (!bottomContainer && rosterEntries.length >= 2) {
+          topContainer = rosterEntries[rosterEntries.length - 2];
+          bottomContainer = rosterEntries[rosterEntries.length - 1];
+        } else if (!topContainer && rosterEntries.length >= 2) {
+          topContainer = rosterEntries[0];
+          bottomContainer = rosterEntries[1];
+        } else if (!bottomContainer && rosterEntries.length === 1) {
+          topContainer = rosterEntries[0];
+        }
       }
 
-      if (!topContainer || !bottomContainer) {
-        boundary.remove();
-        return;
-      }
+      if (topContainer && bottomContainer && bottomContainer.parentElement === topContainer.parentElement) {
+        const desiredParent = bottomContainer.parentElement;
+        const shouldMoveBoundary =
+          boundary.previousElementSibling !== topContainer || boundary.nextElementSibling !== bottomContainer;
 
-      if (
-        boundary.parentElement
-        && boundary.parentElement === topContainer.parentElement
-        && boundary.parentElement === bottomContainer.parentElement
-        && (boundary.previousElementSibling !== topContainer
-          || boundary.nextElementSibling !== bottomContainer)
-      ) {
-        boundary.remove();
-        topContainer.parentElement.insertBefore(boundary, bottomContainer);
+        if (shouldMoveBoundary) {
+          desiredParent.insertBefore(boundary, bottomContainer);
+        }
+      } else if (topContainer && !bottomContainer) {
+        const desiredParent = topContainer.parentElement;
+        if (desiredParent && boundary.previousElementSibling !== topContainer) {
+          desiredParent.insertBefore(boundary, topContainer.nextElementSibling);
+        }
       }
 
       const topEntry = topContainer ? topContainer.querySelector('.roster-unit-entry') : null;
@@ -4085,6 +4098,11 @@ function initRosterEditor() {
       lockButton.dataset.lockTopId = topEntry ? getUnitIdFromEntry(topEntry) || '' : '';
       lockButton.dataset.lockBottomId = bottomEntry ? getUnitIdFromEntry(bottomEntry) || '' : '';
       registerLockButton(lockButton);
+
+      const pairKey = createPairKey(lockButton.dataset.lockTopId || '', lockButton.dataset.lockBottomId || '');
+      const isActive = pairKey ? lockedPairs.has(pairKey) : false;
+      setLockButtonIcon(lockButton, isActive);
+      lockButton.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     });
     renderLockButtons();
   }
