@@ -85,8 +85,6 @@ body {
 .roster-unit-lock-toggle {
   padding: 0.25rem 0.5rem;
   line-height: 1;
-  width: 2.25rem;
-  height: 2.25rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -96,8 +94,8 @@ body {
 }
 
 .roster-unit-lock-toggle svg {
-  width: 1rem;
-  height: 1rem;
+  width: 0.95rem;
+  height: 0.95rem;
   fill: currentColor;
 }
 
