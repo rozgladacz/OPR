@@ -4021,12 +4021,16 @@ function initRosterEditor() {
       const bottomId = button.dataset.lockBottomId || '';
       const pairKey = createPairKey(topId, bottomId);
       const isActive = pairKey ? lockedPairs.has(pairKey) : false;
-      const isVisible = Boolean(topId && bottomId);
-      button.classList.toggle('d-none', !isVisible);
-      button.disabled = !isVisible;
+      const hasNeighbors = Boolean(topId && bottomId);
+      button.classList.remove('d-none');
+      button.disabled = !hasNeighbors;
       setLockButtonIcon(button, isActive);
       button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-      button.title = isActive ? 'Rozłącz parę' : 'Połącz z kolejnym oddziałem';
+      if (!hasNeighbors) {
+        button.title = 'Brak sąsiadujących oddziałów do połączenia';
+      } else {
+        button.title = isActive ? 'Rozłącz parę' : 'Połącz z kolejnym oddziałem';
+      }
     });
   }
 
@@ -4052,8 +4056,30 @@ function initRosterEditor() {
       if (!lockButton) {
         return;
       }
-      const topContainer = findAdjacentEntry(boundary, 'previous');
-      const bottomContainer = findAdjacentEntry(boundary, 'next');
+      let topContainer = findAdjacentEntry(boundary, 'previous');
+      let bottomContainer = findAdjacentEntry(boundary, 'next');
+
+      if (!topContainer && !bottomContainer) {
+        boundary.remove();
+        return;
+      }
+
+      if (!topContainer || !bottomContainer) {
+        boundary.remove();
+        return;
+      }
+
+      if (
+        boundary.parentElement
+        && boundary.parentElement === topContainer.parentElement
+        && boundary.parentElement === bottomContainer.parentElement
+        && (boundary.previousElementSibling !== topContainer
+          || boundary.nextElementSibling !== bottomContainer)
+      ) {
+        boundary.remove();
+        topContainer.parentElement.insertBefore(boundary, bottomContainer);
+      }
+
       const topEntry = topContainer ? topContainer.querySelector('.roster-unit-entry') : null;
       const bottomEntry = bottomContainer ? bottomContainer.querySelector('.roster-unit-entry') : null;
       lockButton.dataset.lockTopId = topEntry ? getUnitIdFromEntry(topEntry) || '' : '';
