@@ -4199,15 +4199,17 @@ function initRosterEditor() {
       const boundaryBefore = findAdjacentBoundary(container, 'previous');
       const boundaryAfter = findAdjacentBoundary(container, 'next');
       const parent = container.parentElement;
-      const placeholder = document.createElement('div');
-      const insertionPoint = boundaryBefore || previous;
-      parent.insertBefore(placeholder, insertionPoint);
-      const fragment = document.createDocumentFragment();
-      [boundaryBefore, container, boundaryAfter, previous]
+      [container, boundaryBefore, boundaryAfter]
         .filter(Boolean)
-        .forEach((node) => fragment.appendChild(node));
-      parent.insertBefore(fragment, placeholder);
-      parent.removeChild(placeholder);
+        .forEach((node) => node.remove());
+
+      parent.insertBefore(container, previous);
+      if (boundaryBefore) {
+        parent.insertBefore(boundaryBefore, previous);
+      }
+      if (boundaryAfter) {
+        parent.insertBefore(boundaryAfter, previous.nextSibling);
+      }
       return true;
     }
     if (direction === 'down') {
@@ -4218,15 +4220,18 @@ function initRosterEditor() {
       const boundaryAfter = findAdjacentBoundary(container, 'next');
       const boundaryBefore = findAdjacentBoundary(container, 'previous');
       const parent = container.parentElement;
-      const placeholder = document.createElement('div');
-      const insertionPoint = boundaryBefore || container;
-      parent.insertBefore(placeholder, insertionPoint);
-      const fragment = document.createDocumentFragment();
-      [next, boundaryAfter, container, boundaryBefore]
+      [container, boundaryAfter, boundaryBefore]
         .filter(Boolean)
-        .forEach((node) => fragment.appendChild(node));
-      parent.insertBefore(fragment, placeholder);
-      parent.removeChild(placeholder);
+        .forEach((node) => node.remove());
+
+      const afterNext = next.nextSibling;
+      if (boundaryBefore) {
+        parent.insertBefore(boundaryBefore, next);
+      }
+      parent.insertBefore(container, afterNext);
+      if (boundaryAfter) {
+        parent.insertBefore(boundaryAfter, container);
+      }
       return true;
     }
     return false;
