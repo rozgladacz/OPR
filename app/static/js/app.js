@@ -3971,14 +3971,15 @@ function initRosterEditor() {
 
   const LOCK_ICON_UNLOCKED =
     '<svg aria-hidden="true" class="roster-lock-icon" viewBox="0 0 16 16">' +
-    '<path fill="currentColor" d="M11 1a2 2 0 0 1 2 2v2h-1V3a1 1 0 0 0-2 0v2H6.5A1.5 1.5 0 0 0 5 6.5v6A1.5 1.5 0 0 0 6.5 14h6A1.5 1.5 0 0 0 14 12.5V9h1v3.5A2.5 2.5 0 0 1 12.5 15h-6A2.5 2.5 0 0 1 4 12.5v-6A2.5 2.5 0 0 1 6.5 4H10V3a2 2 0 0 1 2-2z" />' +
-    '<path fill="currentColor" d="M10 8a2 2 0 1 0-4 0v4a2 2 0 1 0 4 0z" />' +
+    '<path fill="currentColor" d="M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829a3 3 0 0 0 0-4.242l-.343-.343-.708.707.343.343a2 2 0 0 1 0 2.828L6.88 12.5a2 2 0 1 1-2.829-2.828l1.372-1.372-.707-.707Z" />' +
+    '<path fill="currentColor" d="M6.586 4.879 7.95 3.515a3 3 0 1 1 4.243 4.243L10.364 9.586a3 3 0 0 1-4.242 0l-.344-.343.707-.707.343.343a2 2 0 0 0 2.829 0l1.828-1.829a2 2 0 1 0-2.828-2.828L7.293 5.586l-.707-.707Z" />' +
+    '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.25" d="M13.5 2.5 2.5 13.5" />' +
     '</svg>';
 
   const LOCK_ICON_LOCKED =
     '<svg aria-hidden="true" class="roster-lock-icon" viewBox="0 0 16 16">' +
-    '<path fill="currentColor" d="M8 1a3 3 0 0 0-3 3v3H4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1V4a3 3 0 0 0-3-3z" />' +
-    '<path fill="currentColor" d="M6 4a2 2 0 1 1 4 0v3H6z" />' +
+    '<path fill="currentColor" d="M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829a3 3 0 0 0 0-4.242l-.343-.343-.708.707.343.343a2 2 0 0 1 0 2.828L6.88 12.5a2 2 0 1 1-2.829-2.828l1.372-1.372-.707-.707Z" />' +
+    '<path fill="currentColor" d="M6.586 4.879 7.95 3.515a3 3 0 1 1 4.243 4.243L10.364 9.586a3 3 0 0 1-4.242 0l-.344-.343.707-.707.343.343a2 2 0 0 0 2.829 0l1.828-1.829a2 2 0 1 0-2.828-2.828L7.293 5.586l-.707-.707Z" />' +
     '</svg>';
 
   function setLockButtonIcon(button, isLocked) {
