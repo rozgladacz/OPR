@@ -3852,7 +3852,7 @@ function initRosterEditor() {
     });
   }
 
-  async function submitMoveRequest(form) {
+  async function submitMoveRequest(form, options = {}) {
     if (!form) {
       return;
     }
@@ -3861,6 +3861,9 @@ function initRosterEditor() {
       return;
     }
     const payload = new FormData(form);
+    const directionInput = form.querySelector('input[name="direction"]');
+    const direction = directionInput ? String(directionInput.value || '') : '';
+    const entry = form.closest('.roster-unit-entry');
     try {
       await fetch(action, {
         method: 'POST',
@@ -3869,6 +3872,15 @@ function initRosterEditor() {
     } catch (err) {
       console.warn('Nie udało się przesunąć oddziału', err);
     }
+    if (options.moveDom === false) {
+      return;
+    }
+    if (!entry || (direction !== 'up' && direction !== 'down')) {
+      return;
+    }
+    const listElement = entry.closest('[data-roster-list]') || rosterListEl;
+    moveEntryDom(entry, direction);
+    updateMoveButtonStates(listElement);
   }
 
   function findSiblingEntryContainer(container, direction) {
