@@ -24,9 +24,8 @@ from ..security import get_current_user
 from ..pdf_font_data import PDF_FONT_DATA
 from ..services import costs, utils
 from .rosters import (
-    _classification_map_with_pairs,
+    _classification_map,
     _ensure_roster_view_access,
-    _lock_pairs_for_roster,
     _roster_unit_export_data,
     _roster_unit_loadout,
 )
@@ -165,15 +164,14 @@ def _export_roster_unit_entries(
     db: Session, roster: models.Roster
 ) -> list[dict[str, Any]]:
     unit_cache: dict[int, dict[str, Any]] = {}
-    lock_pairs = _lock_pairs_for_roster(db, roster)
     loadouts: dict[int, dict[str, Any]] = {}
     for roster_unit in roster.roster_units:
         unit_id = getattr(roster_unit, "id", None)
         if unit_id is None:
             continue
         loadouts[unit_id] = _roster_unit_loadout(roster_unit)
-    classifications, _totals = _classification_map_with_pairs(
-        roster.roster_units, loadouts, lock_pairs
+    classifications, _totals = _classification_map(
+        roster.roster_units, loadouts
     )
     entries: list[dict[str, Any]] = []
     for roster_unit in roster.roster_units:

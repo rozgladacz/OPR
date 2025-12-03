@@ -3770,7 +3770,6 @@ function initRosterEditor() {
   const auraContainer = root.querySelector('[data-roster-editor-auras]');
   const loadoutContainer = root.querySelector('[data-roster-editor-loadout]');
   const form = root.querySelector('[data-roster-editor-form]');
-  const lockPairsInput = root.querySelector('[data-roster-lock-pairs-input]');
   const duplicateForm = root.querySelector('[data-roster-editor-duplicate]');
   const deleteForm = root.querySelector('[data-roster-editor-delete]');
   const countInput = root.querySelector('[data-roster-editor-count]');
@@ -3788,9 +3787,6 @@ function initRosterEditor() {
   let rosterListEl = root.querySelector('[data-roster-list]');
   const items = [];
   const itemRegistry = new WeakSet();
-  const lockedPairs = new Map();
-  const lockedPairLookup = new Map();
-  const lockButtons = new WeakSet();
   function ensureRosterList() {
     if (rosterListEl && rosterListEl.isConnected) {
       return rosterListEl;
@@ -3845,314 +3841,6 @@ function initRosterEditor() {
     return item ? item.getAttribute('data-roster-unit-id') || '' : '';
   }
 
-  function createPairKey(firstId, secondId) {
-    const safeFirst = firstId ? String(firstId) : '';
-    const safeSecond = secondId ? String(secondId) : '';
-    if (!safeFirst || !safeSecond) {
-      return '';
-    }
-    return [safeFirst, safeSecond].sort().join('::');
-  }
-
-  function updateLockPairsInput() {
-    if (!lockPairsInput) {
-      return;
-    }
-    lockPairsInput.value = serializeLockPairs();
-  }
-
-  function serializeLockPairs() {
-    const pairs = Array.from(lockedPairs.values()).map((pair) => ({
-      top_id: pair.topId,
-      bottom_id: pair.bottomId,
-    }));
-    try {
-      return JSON.stringify(pairs);
-    } catch (error) {
-      return '[]';
-    }
-  }
-
-  function unlockPairByKey(pairKey) {
-    if (!pairKey || !lockedPairs.has(pairKey)) {
-      return;
-    }
-    const pair = lockedPairs.get(pairKey);
-    lockedPairs.delete(pairKey);
-    if (pair) {
-      lockedPairLookup.delete(pair.topId);
-      lockedPairLookup.delete(pair.bottomId);
-    }
-    updateLockPairsInput();
-  }
-
-  function togglePair(topId, bottomId) {
-    const pairKey = createPairKey(topId, bottomId);
-    if (!pairKey) {
-      return;
-    }
-    const existingTop = lockedPairLookup.get(topId);
-    const existingBottom = lockedPairLookup.get(bottomId);
-    if (existingTop && existingTop !== pairKey) {
-      unlockPairByKey(existingTop);
-    }
-    if (existingBottom && existingBottom !== pairKey) {
-      unlockPairByKey(existingBottom);
-    }
-    if (lockedPairs.has(pairKey)) {
-      unlockPairByKey(pairKey);
-      return;
-    }
-    lockedPairs.set(pairKey, { topId, bottomId });
-    lockedPairLookup.set(topId, pairKey);
-    lockedPairLookup.set(bottomId, pairKey);
-    updateLockPairsInput();
-  }
-
-  function applyLockPairsFromServer(pairs) {
-    lockedPairs.clear();
-    lockedPairLookup.clear();
-    const list = Array.isArray(pairs) ? pairs : [];
-    list.forEach((entry) => {
-      if (!entry) {
-        return;
-      }
-      const topId = String(entry.top_id ?? entry.topId ?? entry.top ?? '') || '';
-      const bottomId = String(entry.bottom_id ?? entry.bottomId ?? entry.bottom ?? '') || '';
-      const key = createPairKey(topId, bottomId);
-      if (!key) {
-        return;
-      }
-      lockedPairs.set(key, { topId, bottomId });
-      lockedPairLookup.set(topId, key);
-      lockedPairLookup.set(bottomId, key);
-    });
-    updateLockPairsInput();
-    refreshLockTargets();
-    updateMoveButtonStates(rosterListEl);
-  }
-
-  function getPartnerId(unitId) {
-    const pairKey = unitId ? lockedPairLookup.get(unitId) : null;
-    const pair = pairKey ? lockedPairs.get(pairKey) : null;
-    if (!pair) {
-      return '';
-    }
-    if (pair.topId === unitId) {
-      return pair.bottomId;
-    }
-    if (pair.bottomId === unitId) {
-      return pair.topId;
-    }
-    return '';
-  }
-
-  function buildEntryBlocks(entries) {
-    const blocks = [];
-    for (let index = 0; index < entries.length; index += 1) {
-      const entry = entries[index];
-      const currentId = getUnitIdFromEntry(entry);
-      const pairKey = currentId ? lockedPairLookup.get(currentId) : null;
-      const pair = pairKey ? lockedPairs.get(pairKey) : null;
-      if (pair) {
-        const nextEntry = entries[index + 1];
-        const partnerId = getPartnerId(currentId);
-        if (nextEntry && getUnitIdFromEntry(nextEntry) === partnerId) {
-          blocks.push([entry, nextEntry]);
-          index += 1;
-          continue;
-        }
-        unlockPairByKey(pairKey);
-      }
-      blocks.push([entry]);
-    }
-    return blocks;
-  }
-
-  const LOCK_ICON_UNLOCKED =
-    '<svg aria-hidden="true" class="roster-lock-icon" viewBox="0 0 16 16">' +
-    '<path fill="currentColor" d="M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829a3 3 0 0 0 0-4.242l-.343-.343-.708.707.343.343a2 2 0 0 1 0 2.828L6.88 12.5a2 2 0 1 1-2.829-2.828l1.372-1.372-.707-.707Z" />' +
-    '<path fill="currentColor" d="M6.586 4.879 7.95 3.515a3 3 0 1 1 4.243 4.243L10.364 9.586a3 3 0 0 1-4.242 0l-.344-.343.707-.707.343.343a2 2 0 0 0 2.829 0l1.828-1.829a2 2 0 1 0-2.828-2.828L7.293 5.586l-.707-.707Z" />' +
-    '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.25" d="M13.5 2.5 2.5 13.5" />' +
-    '</svg>';
-
-  const LOCK_ICON_LOCKED =
-    '<svg aria-hidden="true" class="roster-lock-icon" viewBox="0 0 16 16">' +
-    '<path fill="currentColor" d="M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829a3 3 0 0 0 0-4.242l-.343-.343-.708.707.343.343a2 2 0 0 1 0 2.828L6.88 12.5a2 2 0 1 1-2.829-2.828l1.372-1.372-.707-.707Z" />' +
-    '<path fill="currentColor" d="M6.586 4.879 7.95 3.515a3 3 0 1 1 4.243 4.243L10.364 9.586a3 3 0 0 1-4.242 0l-.344-.343.707-.707.343.343a2 2 0 0 0 2.829 0l1.828-1.829a2 2 0 1 0-2.828-2.828L7.293 5.586l-.707-.707Z" />' +
-    '</svg>';
-
-  function setLockButtonIcon(button, isLocked) {
-    if (!button) {
-      return;
-    }
-    button.innerHTML = isLocked ? LOCK_ICON_LOCKED : LOCK_ICON_UNLOCKED;
-  }
-
-  function registerLockButton(button) {
-    if (!button || lockButtons.has(button)) {
-      return;
-    }
-    lockButtons.add(button);
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      const topId = button.dataset.lockTopId || '';
-      const bottomId = button.dataset.lockBottomId || '';
-      togglePair(topId, bottomId);
-      const pairKey = createPairKey(topId, bottomId);
-      const isActive = pairKey ? lockedPairs.has(pairKey) : false;
-      setLockButtonIcon(button, isActive);
-      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-      renderLockButtons();
-      updateMoveButtonStates(rosterListEl);
-      if (activeItem) {
-        handleStateChange();
-      }
-    });
-  }
-
-  function renderLockButtons() {
-    const listElement = rosterListEl || ensureRosterList();
-    if (!isEditable || !listElement) {
-      return;
-    }
-    listElement.querySelectorAll('[data-roster-lock-toggle]').forEach((button) => {
-      const topId = button.dataset.lockTopId || '';
-      const bottomId = button.dataset.lockBottomId || '';
-      const pairKey = createPairKey(topId, bottomId);
-      const isActive = pairKey ? lockedPairs.has(pairKey) : false;
-      const hasNeighbors = Boolean(topId && bottomId);
-      button.classList.remove('d-none');
-      button.disabled = !hasNeighbors;
-      setLockButtonIcon(button, isActive);
-      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-      if (!hasNeighbors) {
-        button.title = 'Brak sąsiadujących oddziałów do połączenia';
-      } else {
-        button.title = isActive ? 'Rozłącz parę' : 'Połącz z kolejnym oddziałem';
-      }
-    });
-  }
-
-  function refreshLockTargets() {
-    const listElement = rosterListEl || ensureRosterList();
-    if (!isEditable || !listElement) {
-      return;
-    }
-
-    const rosterEntries = Array.from(listElement.querySelectorAll('[data-roster-entry]'));
-
-    listElement.querySelectorAll('[data-roster-lock-boundary]').forEach((boundary) => {
-      const lockButton = boundary.querySelector('[data-roster-lock-toggle]');
-      if (!lockButton) {
-        return;
-      }
-
-      let topContainer = null;
-      let bottomContainer = null;
-
-      if (rosterEntries.length > 0) {
-        rosterEntries.some((entry, index) => {
-          const position = boundary.compareDocumentPosition(entry);
-
-          if (position & Node.DOCUMENT_POSITION_FOLLOWING) {
-            bottomContainer = entry;
-            topContainer = index > 0 ? rosterEntries[index - 1] : null;
-            return true;
-          }
-          if (position & Node.DOCUMENT_POSITION_PRECEDING) {
-            topContainer = entry;
-          }
-
-          return false;
-        });
-
-        if (!bottomContainer && rosterEntries.length >= 2) {
-          topContainer = rosterEntries[rosterEntries.length - 2];
-          bottomContainer = rosterEntries[rosterEntries.length - 1];
-        } else if (!topContainer && rosterEntries.length >= 2) {
-          topContainer = rosterEntries[0];
-          bottomContainer = rosterEntries[1];
-        } else if (!bottomContainer && rosterEntries.length === 1) {
-          topContainer = rosterEntries[0];
-        }
-      }
-
-      if (topContainer && bottomContainer && bottomContainer.parentElement === topContainer.parentElement) {
-        const desiredParent = bottomContainer.parentElement;
-        const shouldMoveBoundary =
-          boundary.previousElementSibling !== topContainer || boundary.nextElementSibling !== bottomContainer;
-
-        if (shouldMoveBoundary) {
-          desiredParent.insertBefore(boundary, bottomContainer);
-        }
-      } else if (topContainer && !bottomContainer) {
-        const desiredParent = topContainer.parentElement;
-        if (desiredParent && boundary.previousElementSibling !== topContainer) {
-          desiredParent.insertBefore(boundary, topContainer.nextElementSibling);
-        }
-      }
-
-      const topEntry = topContainer ? topContainer.querySelector('.roster-unit-entry') : null;
-      const bottomEntry = bottomContainer ? bottomContainer.querySelector('.roster-unit-entry') : null;
-      lockButton.dataset.lockTopId = topEntry ? getUnitIdFromEntry(topEntry) || '' : '';
-      lockButton.dataset.lockBottomId = bottomEntry ? getUnitIdFromEntry(bottomEntry) || '' : '';
-      registerLockButton(lockButton);
-
-      const pairKey = createPairKey(lockButton.dataset.lockTopId || '', lockButton.dataset.lockBottomId || '');
-      const isActive = pairKey ? lockedPairs.has(pairKey) : false;
-      setLockButtonIcon(lockButton, isActive);
-      lockButton.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-    });
-    renderLockButtons();
-  }
-
-  function createLockBoundaryElement() {
-    const boundary = (() => {
-      const template = root.querySelector('[data-roster-lock-boundary]');
-      if (template) {
-        return template.cloneNode(true);
-      }
-      const boundaryElement = document.createElement('div');
-      boundaryElement.className = 'list-group-item border-0 px-0 py-0';
-      boundaryElement.setAttribute('data-roster-lock-boundary', '');
-
-      const boundaryContent = document.createElement('div');
-      boundaryContent.className = 'roster-lock-boundary roster-unit-entry';
-      boundaryElement.appendChild(boundaryContent);
-
-      const reorderWrapper = document.createElement('div');
-      reorderWrapper.className = 'roster-unit-reorder roster-unit-reorder--lock';
-      boundaryContent.appendChild(reorderWrapper);
-
-      const button = document.createElement('button');
-      button.className = 'btn btn-outline-secondary btn-sm roster-unit-lock-toggle';
-      button.type = 'button';
-      button.setAttribute('data-roster-lock-toggle', '');
-      button.setAttribute('aria-label', 'Połącz z kolejnym oddziałem');
-      button.title = 'Połącz z kolejnym oddziałem';
-      reorderWrapper.appendChild(button);
-
-      const spacer = document.createElement('div');
-      spacer.className = 'flex-grow-1 roster-lock-spacer';
-      spacer.setAttribute('aria-hidden', 'true');
-      boundaryContent.appendChild(spacer);
-
-      return boundaryElement;
-    })();
-
-    const lockButton = boundary ? boundary.querySelector('[data-roster-lock-toggle]') : null;
-    if (lockButton) {
-      lockButton.dataset.lockTopId = '';
-      lockButton.dataset.lockBottomId = '';
-      lockButton.classList.remove('d-none');
-      lockButton.disabled = false;
-      lockButton.setAttribute('aria-pressed', 'false');
-      setLockButtonIcon(lockButton, false);
-    }
-
-    return boundary;
-  }
 
   function findMoveForm(entry, direction) {
     const normalized = String(direction || '').trim().toLowerCase();
@@ -4192,42 +3880,18 @@ function initRosterEditor() {
     return sibling;
   }
 
-  function findAdjacentBoundary(container, direction) {
-    const step = direction === 'previous' ? 'previousElementSibling' : 'nextElementSibling';
-    let sibling = container ? container[step] : null;
-    while (sibling) {
-      if (sibling.hasAttribute && sibling.hasAttribute('data-roster-lock-boundary')) {
-        return sibling;
-      }
-      sibling = sibling[step];
-    }
-    return null;
-  }
-
   function moveEntryDom(entry, direction) {
     const container = getListItemContainer(entry);
     if (!container || !container.parentElement) {
       return false;
     }
+    const parent = container.parentElement;
     if (direction === 'up') {
       const previous = findSiblingEntryContainer(container, 'up');
       if (!previous) {
         return false;
       }
-      const boundaryBefore = findAdjacentBoundary(container, 'previous');
-      const boundaryAfter = findAdjacentBoundary(container, 'next');
-      const parent = container.parentElement;
-      [container, boundaryBefore, boundaryAfter]
-        .filter(Boolean)
-        .forEach((node) => node.remove());
-
       parent.insertBefore(container, previous);
-      if (boundaryBefore) {
-        parent.insertBefore(boundaryBefore, previous);
-      }
-      if (boundaryAfter) {
-        parent.insertBefore(boundaryAfter, previous.nextSibling);
-      }
       return true;
     }
     if (direction === 'down') {
@@ -4235,144 +3899,34 @@ function initRosterEditor() {
       if (!next) {
         return false;
       }
-      const boundaryAfter = findAdjacentBoundary(container, 'next');
-      const boundaryBefore = findAdjacentBoundary(container, 'previous');
-      const parent = container.parentElement;
-      [container, boundaryAfter, boundaryBefore]
-        .filter(Boolean)
-        .forEach((node) => node.remove());
-
-      const afterNext = next.nextSibling;
-      if (boundaryBefore) {
-        parent.insertBefore(boundaryBefore, next);
-      }
-      parent.insertBefore(container, afterNext);
-      if (boundaryAfter) {
-        parent.insertBefore(boundaryAfter, container);
-      }
+      parent.insertBefore(next, container);
+      parent.insertBefore(container, next.nextSibling);
       return true;
     }
     return false;
-  }
-
-  async function handlePairedMove(pair, direction) {
-    if (!pair || !direction) {
-      return;
-    }
-    const listElement = rosterListEl || ensureRosterList();
-    if (!listElement) {
-      return;
-    }
-    const topEntry = getEntryElementFromItem(
-      listElement.querySelector(`[data-roster-item][data-roster-unit-id="${pair.topId}"]`),
-    );
-    const bottomEntry = getEntryElementFromItem(
-      listElement.querySelector(`[data-roster-item][data-roster-unit-id="${pair.bottomId}"]`),
-    );
-    if (!topEntry || !bottomEntry) {
-      return;
-    }
-    const topContainer = getListItemContainer(topEntry);
-    const bottomContainer = getListItemContainer(bottomEntry);
-    const areAdjacent = (() => {
-      if (!topContainer || !bottomContainer) {
-        return false;
-      }
-      let cursor = topContainer.nextElementSibling;
-      while (cursor && !cursor.hasAttribute('data-roster-entry')) {
-        cursor = cursor.nextElementSibling;
-      }
-      return cursor === bottomContainer;
-    })();
-    if (!areAdjacent) {
-      unlockPairByKey(createPairKey(pair.topId, pair.bottomId));
-      renderLockButtons();
-      updateMoveButtonStates(rosterListEl);
-      return;
-    }
-    const boundaryBetween = (() => {
-      if (!topContainer || !bottomContainer || topContainer.parentElement !== bottomContainer.parentElement) {
-        return null;
-      }
-      let cursor = topContainer.nextElementSibling;
-      while (cursor && cursor !== bottomContainer) {
-        if (cursor.hasAttribute && cursor.hasAttribute('data-roster-lock-boundary')) {
-          return cursor;
-        }
-        cursor = cursor.nextElementSibling;
-      }
-      return null;
-    })();
-    const sequence = direction === 'up'
-      ? [
-          { entry: topEntry, direction: 'up' },
-          { entry: bottomEntry, direction: 'up' },
-        ]
-      : [
-          { entry: bottomEntry, direction: 'down' },
-          { entry: topEntry, direction: 'down' },
-        ];
-    /* eslint-disable no-await-in-loop */
-    for (const step of sequence) {
-      const moveForm = findMoveForm(step.entry, step.direction);
-      await submitMoveRequest(moveForm);
-      moveEntryDom(step.entry, step.direction);
-    }
-    /* eslint-enable no-await-in-loop */
-    if (boundaryBetween && boundaryBetween.parentElement) {
-      const currentTopContainer = getListItemContainer(topEntry);
-      const currentBottomContainer = getListItemContainer(bottomEntry);
-      if (currentTopContainer && currentBottomContainer) {
-        const sameParent = currentTopContainer.parentElement === currentBottomContainer.parentElement;
-        if (sameParent) {
-          const isTopFirst = !(currentTopContainer.compareDocumentPosition(currentBottomContainer)
-            & Node.DOCUMENT_POSITION_PRECEDING);
-          const upperContainer = isTopFirst ? currentTopContainer : currentBottomContainer;
-          const lowerContainer = isTopFirst ? currentBottomContainer : currentTopContainer;
-          const isAlreadyBetween = boundaryBetween.previousElementSibling === upperContainer
-            && boundaryBetween.nextElementSibling === lowerContainer;
-          if (!isAlreadyBetween) {
-            boundaryBetween.remove();
-            upperContainer.parentElement.insertBefore(boundaryBetween, lowerContainer);
-          }
-        }
-      }
-    }
-    refreshLockTargets();
-    updateMoveButtonStates(rosterListEl);
   }
 
   function updateMoveButtonStates(listElement) {
     if (!isEditable || !listElement) {
       return;
     }
-    refreshLockTargets();
     const entries = Array.from(listElement.querySelectorAll('.roster-unit-entry'));
-    const blocks = buildEntryBlocks(entries);
-    const lastBlockIndex = blocks.length - 1;
-    blocks.forEach((block, blockIndex) => {
-      const isFirstBlock = blockIndex === 0;
-      const isLastBlock = blockIndex === lastBlockIndex;
-      block.forEach((entry) => {
-        const unitId = getUnitIdFromEntry(entry);
-        const pairKey = unitId ? lockedPairLookup.get(unitId) : null;
-        const pair = pairKey ? lockedPairs.get(pairKey) : null;
-        entry.querySelectorAll('[data-roster-move-form]').forEach((form) => {
-          const directionInput = form.querySelector('input[name="direction"]');
-          const button = form.querySelector('[data-roster-move]');
-          if (!button) {
-            return;
-          }
-          const direction = directionInput ? String(directionInput.value || '') : '';
-          if (direction === 'up') {
-            button.disabled = isFirstBlock || (pair && pair.bottomId === unitId);
-          } else if (direction === 'down') {
-            button.disabled = isLastBlock || (pair && pair.topId === unitId);
-          }
-        });
+    const lastIndex = entries.length - 1;
+    entries.forEach((entry, index) => {
+      entry.querySelectorAll('[data-roster-move-form]').forEach((form) => {
+        const directionInput = form.querySelector('input[name="direction"]');
+        const button = form.querySelector('[data-roster-move]');
+        if (!button) {
+          return;
+        }
+        const direction = directionInput ? String(directionInput.value || '') : '';
+        if (direction === 'up') {
+          button.disabled = index === 0;
+        } else if (direction === 'down') {
+          button.disabled = index === lastIndex;
+        }
       });
     });
-    renderLockButtons();
   }
 
   function registerRosterItem(item) {
@@ -4400,17 +3954,6 @@ function initRosterEditor() {
       entry.querySelectorAll('[data-roster-move-form]').forEach((form) => {
         form.addEventListener('click', (event) => {
           event.stopPropagation();
-        });
-        form.addEventListener('submit', (event) => {
-          const directionInput = form.querySelector('input[name="direction"]');
-          const direction = directionInput ? String(directionInput.value || '') : '';
-          const unitId = getUnitIdFromEntry(entry);
-          const pairKey = unitId ? lockedPairLookup.get(unitId) : null;
-          const pair = pairKey ? lockedPairs.get(pairKey) : null;
-          if (pair) {
-            event.preventDefault();
-            handlePairedMove(pair, direction === 'up' ? 'up' : 'down');
-          }
         });
       });
     }
@@ -4451,9 +3994,6 @@ function initRosterEditor() {
       registerRosterItem(rosterItemElement);
     }
     applyServerUpdate(payload);
-    if (isEditable) {
-      refreshLockTargets();
-    }
     if (rosterItemElement) {
       selectItem(rosterItemElement);
       if (typeof listItemElement.scrollIntoView === 'function') {
@@ -5148,7 +4688,6 @@ function initRosterEditor() {
     if (loadoutInput) {
       payload.set('loadout_json', loadoutInput.value || '{}');
     }
-    payload.set('lock_pairs_json', serializeLockPairs());
     payload.set('request_id', String(requestVersion));
     const response = await fetch(action, {
       method: 'POST',
@@ -5467,14 +5006,6 @@ function initRosterEditor() {
     };
 
     applyUnitData(payload.unit || {});
-    if (Array.isArray(payload.paired_units)) {
-      payload.paired_units.forEach((unitEntry) => {
-        applyUnitData(unitEntry);
-      });
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'lock_pairs')) {
-      applyLockPairsFromServer(payload.lock_pairs);
-    }
     let totalCostValue = null;
     if (typeof payload.total_cost === 'number') {
       totalCostValue = payload.total_cost;
