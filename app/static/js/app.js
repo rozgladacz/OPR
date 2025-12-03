@@ -4172,19 +4172,16 @@ function initRosterEditor() {
       }
       const boundaryBefore = findAdjacentBoundary(container, 'previous');
       const boundaryAfter = findAdjacentBoundary(container, 'next');
+      const parent = container.parentElement;
       const placeholder = document.createElement('div');
-      container.parentElement.insertBefore(placeholder, previous);
+      const insertionPoint = boundaryBefore || previous;
+      parent.insertBefore(placeholder, insertionPoint);
       const fragment = document.createDocumentFragment();
-      fragment.appendChild(container);
-      if (boundaryBefore) {
-        fragment.appendChild(boundaryBefore);
-      }
-      fragment.appendChild(previous);
-      if (boundaryAfter) {
-        fragment.appendChild(boundaryAfter);
-      }
-      container.parentElement.insertBefore(fragment, placeholder);
-      container.parentElement.removeChild(placeholder);
+      [boundaryBefore, container, boundaryAfter, previous]
+        .filter(Boolean)
+        .forEach((node) => fragment.appendChild(node));
+      parent.insertBefore(fragment, placeholder);
+      parent.removeChild(placeholder);
       return true;
     }
     if (direction === 'down') {
@@ -4194,20 +4191,16 @@ function initRosterEditor() {
       }
       const boundaryAfter = findAdjacentBoundary(container, 'next');
       const boundaryBefore = findAdjacentBoundary(container, 'previous');
+      const parent = container.parentElement;
       const placeholder = document.createElement('div');
-      const insertionPoint = boundaryAfter ? boundaryAfter.nextElementSibling : next.nextElementSibling;
-      container.parentElement.insertBefore(placeholder, insertionPoint);
+      const insertionPoint = boundaryBefore || container;
+      parent.insertBefore(placeholder, insertionPoint);
       const fragment = document.createDocumentFragment();
-      if (boundaryBefore) {
-        fragment.appendChild(boundaryBefore);
-      }
-      fragment.appendChild(next);
-      if (boundaryAfter) {
-        fragment.appendChild(boundaryAfter);
-      }
-      fragment.appendChild(container);
-      container.parentElement.insertBefore(fragment, placeholder);
-      container.parentElement.removeChild(placeholder);
+      [next, boundaryAfter, container, boundaryBefore]
+        .filter(Boolean)
+        .forEach((node) => fragment.appendChild(node));
+      parent.insertBefore(fragment, placeholder);
+      parent.removeChild(placeholder);
       return true;
     }
     return false;
