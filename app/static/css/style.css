@@ -94,8 +94,8 @@ body {
 }
 
 .roster-unit-lock-toggle svg {
-  width: 0.95rem;
-  height: 0.95rem;
+  width: 0.85rem;
+  height: 0.85rem;
   fill: currentColor;
 }
 
@@ -127,7 +127,6 @@ body {
 
 .list-group-item[data-roster-lock-boundary] .roster-unit-reorder {
   flex: 0 0 auto;
-  width: 2.75rem;
 }
 
 .roster-unit-list .list-group-item[data-roster-entry] {
@@ -139,9 +138,8 @@ body {
   pointer-events: none;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   justify-content: center;
-  width: 100%;
 }
 
 .roster-unit-reorder--lock .roster-unit-lock-toggle {
