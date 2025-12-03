@@ -108,10 +108,12 @@ body {
 
 .list-group-item[data-roster-lock-boundary] {
   position: relative;
+  padding: 0;
 }
 
 .list-group-item[data-roster-lock-boundary] .roster-unit-entry {
   gap: 0;
+  padding: 0;
 }
 
 .list-group-item[data-roster-lock-boundary] .roster-lock-boundary {
@@ -119,12 +121,18 @@ body {
   display: flex;
   align-items: stretch;
   padding: 0;
+  gap: 0;
 }
 
 
 .list-group-item[data-roster-lock-boundary] .roster-unit-reorder {
   flex: 0 0 auto;
   width: 2.75rem;
+}
+
+.roster-unit-list .list-group-item[data-roster-entry] {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
 }
 
 .roster-unit-reorder--lock {
