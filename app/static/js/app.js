@@ -4164,7 +4164,7 @@ function initRosterEditor() {
     });
   }
 
-  async function submitMoveRequest(form) {
+  async function submitMoveRequest(form, options = {}) {
     if (!form) {
       return;
     }
@@ -4173,6 +4173,9 @@ function initRosterEditor() {
       return;
     }
     const payload = new FormData(form);
+    const directionInput = form.querySelector('input[name="direction"]');
+    const direction = directionInput ? String(directionInput.value || '') : '';
+    const entry = form.closest('.roster-unit-entry');
     try {
       await fetch(action, {
         method: 'POST',
@@ -4181,6 +4184,15 @@ function initRosterEditor() {
     } catch (err) {
       console.warn('Nie udało się przesunąć oddziału', err);
     }
+    if (options.moveDom === false) {
+      return;
+    }
+    if (!entry || (direction !== 'up' && direction !== 'down')) {
+      return;
+    }
+    const listElement = entry.closest('[data-roster-list]') || rosterListEl;
+    moveEntryDom(entry, direction);
+    updateMoveButtonStates(listElement);
   }
 
   function findSiblingEntryContainer(container, direction) {
@@ -4214,20 +4226,7 @@ function initRosterEditor() {
       if (!previous) {
         return false;
       }
-      const boundaryBefore = findAdjacentBoundary(container, 'previous');
-      const boundaryAfter = findAdjacentBoundary(container, 'next');
-      const parent = container.parentElement;
-      [container, boundaryBefore, boundaryAfter]
-        .filter(Boolean)
-        .forEach((node) => node.remove());
-
-      parent.insertBefore(container, previous);
-      if (boundaryBefore) {
-        parent.insertBefore(boundaryBefore, previous);
-      }
-      if (boundaryAfter) {
-        parent.insertBefore(boundaryAfter, previous.nextSibling);
-      }
+      container.parentElement.insertBefore(container, previous);
       return true;
     }
     if (direction === 'down') {
@@ -4235,21 +4234,9 @@ function initRosterEditor() {
       if (!next) {
         return false;
       }
-      const boundaryAfter = findAdjacentBoundary(container, 'next');
-      const boundaryBefore = findAdjacentBoundary(container, 'previous');
-      const parent = container.parentElement;
-      [container, boundaryAfter, boundaryBefore]
-        .filter(Boolean)
-        .forEach((node) => node.remove());
-
-      const afterNext = next.nextSibling;
-      if (boundaryBefore) {
-        parent.insertBefore(boundaryBefore, next);
-      }
-      parent.insertBefore(container, afterNext);
-      if (boundaryAfter) {
-        parent.insertBefore(boundaryAfter, container);
-      }
+      const afterNext = next.nextElementSibling;
+      container.parentElement.insertBefore(next, container);
+      container.parentElement.insertBefore(container, afterNext);
       return true;
     }
     return false;
@@ -4290,19 +4277,6 @@ function initRosterEditor() {
       updateMoveButtonStates(rosterListEl);
       return;
     }
-    const boundaryBetween = (() => {
-      if (!topContainer || !bottomContainer || topContainer.parentElement !== bottomContainer.parentElement) {
-        return null;
-      }
-      let cursor = topContainer.nextElementSibling;
-      while (cursor && cursor !== bottomContainer) {
-        if (cursor.hasAttribute && cursor.hasAttribute('data-roster-lock-boundary')) {
-          return cursor;
-        }
-        cursor = cursor.nextElementSibling;
-      }
-      return null;
-    })();
     const sequence = direction === 'up'
       ? [
           { entry: topEntry, direction: 'up' },
@@ -4315,29 +4289,10 @@ function initRosterEditor() {
     /* eslint-disable no-await-in-loop */
     for (const step of sequence) {
       const moveForm = findMoveForm(step.entry, step.direction);
-      await submitMoveRequest(moveForm);
+      await submitMoveRequest(moveForm, { moveDom: false });
       moveEntryDom(step.entry, step.direction);
     }
     /* eslint-enable no-await-in-loop */
-    if (boundaryBetween && boundaryBetween.parentElement) {
-      const currentTopContainer = getListItemContainer(topEntry);
-      const currentBottomContainer = getListItemContainer(bottomEntry);
-      if (currentTopContainer && currentBottomContainer) {
-        const sameParent = currentTopContainer.parentElement === currentBottomContainer.parentElement;
-        if (sameParent) {
-          const isTopFirst = !(currentTopContainer.compareDocumentPosition(currentBottomContainer)
-            & Node.DOCUMENT_POSITION_PRECEDING);
-          const upperContainer = isTopFirst ? currentTopContainer : currentBottomContainer;
-          const lowerContainer = isTopFirst ? currentBottomContainer : currentTopContainer;
-          const isAlreadyBetween = boundaryBetween.previousElementSibling === upperContainer
-            && boundaryBetween.nextElementSibling === lowerContainer;
-          if (!isAlreadyBetween) {
-            boundaryBetween.remove();
-            upperContainer.parentElement.insertBefore(boundaryBetween, lowerContainer);
-          }
-        }
-      }
-    }
     refreshLockTargets();
     updateMoveButtonStates(rosterListEl);
   }
@@ -4402,15 +4357,17 @@ function initRosterEditor() {
           event.stopPropagation();
         });
         form.addEventListener('submit', (event) => {
+          event.preventDefault();
           const directionInput = form.querySelector('input[name="direction"]');
           const direction = directionInput ? String(directionInput.value || '') : '';
           const unitId = getUnitIdFromEntry(entry);
           const pairKey = unitId ? lockedPairLookup.get(unitId) : null;
           const pair = pairKey ? lockedPairs.get(pairKey) : null;
           if (pair) {
-            event.preventDefault();
             handlePairedMove(pair, direction === 'up' ? 'up' : 'down');
+            return;
           }
+          submitMoveRequest(form);
         });
       });
     }
