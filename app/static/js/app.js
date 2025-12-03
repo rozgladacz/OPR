@@ -4445,19 +4445,6 @@ function initRosterEditor() {
     if (!listItemElement) {
       return;
     }
-    const existingEntries = getEntryContainers(listElement);
-    const lastEntryContainer = existingEntries.length ? existingEntries[existingEntries.length - 1] : null;
-    if (isEditable && lastEntryContainer) {
-      let lockBoundary = findAdjacentBoundary(lastEntryContainer, 'next');
-      if (lockBoundary) {
-        lockBoundary.remove();
-      } else {
-        lockBoundary = createLockBoundaryElement();
-      }
-      if (lockBoundary) {
-        listElement.appendChild(lockBoundary);
-      }
-    }
     listElement.appendChild(listItemElement);
     const rosterItemElement = listItemElement.querySelector('[data-roster-item]');
     if (rosterItemElement) {
