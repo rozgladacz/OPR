@@ -190,199 +190,23 @@ def _available_role_slugs(unit: models.Unit | None) -> set[str]:
     return {costs.ability_identifier(trait) for trait in traits}
 
 
-def _lock_pairs_for_roster(
-    db: Session, roster: models.Roster
-) -> list[tuple[int, int]]:
-    if roster.id is None:
-        return []
-    raw_pairs = getattr(roster, "roster_unit_pairs", None)
-    if raw_pairs is None:
-        raw_pairs = (
-            db.execute(
-                select(models.RosterUnitPair).where(
-                    models.RosterUnitPair.roster_id == roster.id
-                )
-            )
-            .scalars()
-            .all()
-        )
-    pairs: list[tuple[int, int]] = []
-    seen: set[tuple[int, int]] = set()
-    for pair in raw_pairs:
-        first_id = getattr(pair, "first_roster_unit_id", None)
-        second_id = getattr(pair, "second_roster_unit_id", None)
-        if first_id is None or second_id is None:
-            continue
-        if first_id == second_id:
-            continue
-        normalized = tuple(sorted((int(first_id), int(second_id))))
-        if normalized in seen:
-            continue
-        seen.add(normalized)
-        pairs.append(normalized)
-    return pairs
-
-
-def _lock_pairs_payload(
-    lock_pairs: list[tuple[int, int]],
-    roster_units: list[models.RosterUnit],
-) -> list[dict[str, int]]:
-    position_map: dict[int, int] = {
-        ru.id: int(getattr(ru, "position", 0))
-        for ru in roster_units
-        if ru.id is not None
-    }
-    payload: list[dict[str, int]] = []
-    for first_id, second_id in lock_pairs:
-        if first_id not in position_map or second_id not in position_map:
-            continue
-        if position_map.get(second_id, 0) < position_map.get(first_id, 0):
-            top_id, bottom_id = second_id, first_id
-        else:
-            top_id, bottom_id = first_id, second_id
-        payload.append({"top_id": top_id, "bottom_id": bottom_id})
-    return payload
-
-
-def _parse_lock_pairs(
-    raw_pairs: Any, valid_ids: set[int] | None = None
-) -> list[tuple[int, int]]:
-    if valid_ids is None:
-        valid_ids = set()
-    if isinstance(raw_pairs, str):
-        try:
-            parsed = json.loads(raw_pairs)
-        except json.JSONDecodeError:
-            return []
-    else:
-        parsed = raw_pairs
-    if not isinstance(parsed, Sequence):
-        return []
-    result: list[tuple[int, int]] = []
-    seen: set[tuple[int, int]] = set()
-    for entry in parsed:
-        if isinstance(entry, Mapping):
-            top_raw = (
-                entry.get("top_id")
-                or entry.get("top")
-                or entry.get("first")
-                or entry.get("first_id")
-            )
-            bottom_raw = entry.get("bottom_id") or entry.get("bottom") or entry.get("second")
-        elif isinstance(entry, Sequence) and len(entry) >= 2:
-            top_raw, bottom_raw = entry[0], entry[1]
-        else:
-            continue
-        try:
-            top_id = int(top_raw)
-            bottom_id = int(bottom_raw)
-        except (TypeError, ValueError):
-            continue
-        if top_id == bottom_id:
-            continue
-        if valid_ids and (top_id not in valid_ids or bottom_id not in valid_ids):
-            continue
-        normalized = tuple(sorted((top_id, bottom_id)))
-        if normalized in seen:
-            continue
-        seen.add(normalized)
-        result.append(normalized)
-    return result
-
-
-def _update_lock_pairs(
-    db: Session, roster: models.Roster, lock_pairs: list[tuple[int, int]]
-) -> None:
-    if roster.id is None:
-        return
-    existing_pairs = (
-        db.execute(
-            select(models.RosterUnitPair).where(
-                models.RosterUnitPair.roster_id == roster.id
-            )
-        )
-        .scalars()
-        .all()
-    )
-    existing_map: dict[tuple[int, int], models.RosterUnitPair] = {}
-    for pair in existing_pairs:
-        first_id = getattr(pair, "first_roster_unit_id", None)
-        second_id = getattr(pair, "second_roster_unit_id", None)
-        if first_id is None or second_id is None:
-            continue
-        existing_map[tuple(sorted((int(first_id), int(second_id))))] = pair
-
-    desired_pairs = {tuple(sorted(pair)) for pair in lock_pairs if len(pair) == 2}
-    for pair_key, pair_obj in existing_map.items():
-        if pair_key not in desired_pairs:
-            db.delete(pair_obj)
-    for pair in desired_pairs:
-        if pair in existing_map:
-            continue
-        first_id, second_id = pair
-        db.add(
-            models.RosterUnitPair(
-                roster=roster,
-                first_roster_unit_id=first_id,
-                second_roster_unit_id=second_id,
-            )
-        )
-
-
-def _lock_partner_id(lock_pairs: list[tuple[int, int]], roster_unit_id: int) -> int | None:
-    for first_id, second_id in lock_pairs:
-        if first_id == roster_unit_id:
-            return second_id
-        if second_id == roster_unit_id:
-            return first_id
-    return None
-
-
-def _classification_map_with_pairs(
+def _classification_map(
     roster_units: list[models.RosterUnit],
     loadouts: Mapping[int, dict[str, Any] | None],
-    lock_pairs: list[tuple[int, int]],
 ) -> tuple[dict[int, dict[str, Any] | None], dict[int, dict[str, float]]]:
     units_by_id: dict[int, models.RosterUnit] = {
         ru.id: ru for ru in roster_units if ru.id is not None
     }
     totals_by_id: dict[int, dict[str, float]] = {}
-    available_by_id: dict[int, set[str]] = {}
+    classifications: dict[int, dict[str, Any] | None] = {}
+
     for unit_id, roster_unit in units_by_id.items():
         loadout_payload = loadouts.get(unit_id)
         totals_by_id[unit_id] = costs.roster_unit_role_totals(
             roster_unit, loadout_payload
         )
-        available_by_id[unit_id] = _available_role_slugs(getattr(roster_unit, "unit", None))
-
-    classifications: dict[int, dict[str, Any] | None] = {}
-    for first_id, second_id in lock_pairs:
-        if first_id not in totals_by_id or second_id not in totals_by_id:
-            continue
-        warrior_total = float(totals_by_id[first_id].get("wojownik") or 0.0) + float(
-            totals_by_id[second_id].get("wojownik") or 0.0
-        )
-        shooter_total = float(totals_by_id[first_id].get("strzelec") or 0.0) + float(
-            totals_by_id[second_id].get("strzelec") or 0.0
-        )
-        available_slugs = available_by_id.get(first_id, set())
-        partner_available = available_by_id.get(second_id, set())
-        intersection = available_slugs & partner_available
-        if intersection:
-            available_slugs = intersection
-        elif not available_slugs:
-            available_slugs = partner_available
-        classification = _classification_from_totals(
-            warrior_total, shooter_total, available_slugs
-        )
-        classifications[first_id] = classification
-        classifications[second_id] = classification
-
-    for unit_id, roster_unit in units_by_id.items():
-        if unit_id in classifications:
-            continue
         classifications[unit_id] = _roster_unit_classification(
-            roster_unit, loadouts.get(unit_id), totals=totals_by_id.get(unit_id)
+            roster_unit, loadout_payload, totals=totals_by_id.get(unit_id)
         )
 
     return classifications, totals_by_id
@@ -569,7 +393,6 @@ def edit_roster(
             }
         )
 
-    lock_pairs = _lock_pairs_for_roster(db, roster)
     roster_items: list[dict[str, Any]] = []
     sanitized_loadouts: dict[int, dict[str, Any]] = {}
     payload_cache: dict[int | None, dict[str, Any]] = {}
@@ -588,8 +411,8 @@ def edit_roster(
         if roster_unit.id is not None:
             sanitized_loadouts[roster_unit.id] = loadout
 
-    classifications, _totals_by_id = _classification_map_with_pairs(
-        roster.roster_units, sanitized_loadouts, lock_pairs
+    classifications, _totals_by_id = _classification_map(
+        roster.roster_units, sanitized_loadouts
     )
 
     for roster_unit in roster.roster_units:
@@ -681,7 +504,6 @@ def edit_roster(
             "warnings": [],
             "selected_id": selected_id,
             "unit_payloads": unit_payloads,
-            "lock_pairs": _lock_pairs_payload(lock_pairs, roster.roster_units),
         },
     )
 
@@ -862,10 +684,6 @@ def add_roster_unit(
             "roster_item": roster_item,
             "warnings": [],
             "total_cost": total_cost,
-            "lock_pairs": _lock_pairs_payload(
-                _lock_pairs_for_roster(db, roster),
-                _ordered_roster_units(db, roster),
-            ),
         }
         return JSONResponse(_json_safe(payload))
     return RedirectResponse(
@@ -972,7 +790,6 @@ def update_roster_unit(
     request: Request,
     count: int = Form(...),
     loadout_json: str | None = Form(None),
-    lock_pairs_json: str | None = Form(None),
     custom_name: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
@@ -987,7 +804,6 @@ def update_roster_unit(
         .where(models.RosterUnit.roster_id == roster_id)
         .order_by(models.RosterUnit.position, models.RosterUnit.id)
     ).all()
-    valid_ids = {row.id for row in roster_unit_rows if row.id is not None}
     roster_unit = (
         db.execute(
             select(models.RosterUnit)
@@ -1003,32 +819,6 @@ def update_roster_unit(
         raise HTTPException(status_code=404)
     _ensure_roster_edit_access(roster, current_user)
 
-    if lock_pairs_json is None:
-        lock_pairs = _lock_pairs_for_roster(db, roster)
-    else:
-        lock_pairs = _parse_lock_pairs(lock_pairs_json, valid_ids)
-        _update_lock_pairs(db, roster, lock_pairs)
-
-    partner_id = _lock_partner_id(lock_pairs, roster_unit.id or 0)
-    roster_partner = None
-    if partner_id:
-        roster_partner = (
-            db.execute(
-                select(models.RosterUnit)
-                .options(
-                    selectinload(models.RosterUnit.unit).options(*_unit_eager_options())
-                )
-                .where(models.RosterUnit.id == partner_id)
-            )
-            .scalars()
-            .first()
-        )
-    roster_unit_map = {
-        ru.id: ru
-        for ru in [roster_unit, roster_partner]
-        if ru is not None and ru.id is not None
-    }
-
     roster_unit.count = max(int(count), 1)
     unit_data_cache: dict[int, dict[str, Any]] = {}
     unit_payloads: dict[int, dict[str, Any]] = {}
@@ -1039,7 +829,7 @@ def update_roster_unit(
     payload_cache: dict[int, dict[str, Any]] = {}
     loadout_map: dict[int, dict[str, Any]] = {}
     role_slug_maps: dict[int, dict[str, str]] = {}
-    affected_units = [ru for ru in (roster_unit, roster_partner) if ru is not None]
+    affected_units = [roster_unit]
 
     for ru in affected_units:
         payload = _unit_payload(ru.unit)
@@ -1070,14 +860,8 @@ def update_roster_unit(
             )
         loadout_map[ru.id] = loadout
 
-    relevant_lock_pairs = [
-        pair
-        for pair in lock_pairs
-        if pair[0] in loadout_map and pair[1] in loadout_map
-    ]
-
-    classifications, totals_by_id = _classification_map_with_pairs(
-        affected_units, loadout_map, relevant_lock_pairs
+    classifications, totals_by_id = _classification_map(
+        affected_units, loadout_map
     )
 
     applied_loadouts: dict[int, dict[str, Any]] = {}
@@ -1167,25 +951,10 @@ def update_roster_unit(
             }
 
         unit_payload = _unit_payload_for_response(roster_unit)
-        partner_id = _lock_partner_id(lock_pairs, roster_unit.id or 0)
-        paired_units: list[dict[str, Any]] = []
-        if partner_id:
-            partner = roster_unit_map.get(partner_id)
-            if partner:
-                paired_units.append(_unit_payload_for_response(partner))
-
-        lock_pair_ids = {id_ for pair in lock_pairs for id_ in pair}
-        payload_roster_units = [
-            SimpleNamespace(id=row.id, position=row.position)
-            for row in roster_unit_rows
-            if row.id in lock_pair_ids
-        ]
         payload = {
             "unit": unit_payload,
-            "paired_units": paired_units,
             "warnings": [],
             "total_cost": total_cost,
-            "lock_pairs": _lock_pairs_payload(lock_pairs, payload_roster_units),
         }
         return JSONResponse(_json_safe(payload))
     return RedirectResponse(
