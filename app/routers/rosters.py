@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+from collections import defaultdict
 from collections.abc import Mapping, Sequence, Set as AbstractSet
 from decimal import Decimal
 from types import SimpleNamespace
@@ -795,15 +796,6 @@ def update_roster_unit(
     current_user: models.User = Depends(get_current_user()),
 ):
     roster = db.get(models.Roster, roster_id)
-    roster_unit_rows = db.execute(
-        select(
-            models.RosterUnit.id,
-            models.RosterUnit.position,
-            models.RosterUnit.cached_cost,
-        )
-        .where(models.RosterUnit.roster_id == roster_id)
-        .order_by(models.RosterUnit.position, models.RosterUnit.id)
-    ).all()
     roster_unit = (
         db.execute(
             select(models.RosterUnit)
@@ -826,10 +818,65 @@ def update_roster_unit(
     def _unit_payload(unit: models.Unit) -> dict[str, Any]:
         return _unit_payload_cached(unit, unit_data_cache, unit_payloads)
 
+    roster_unit_rows = db.execute(
+        select(
+            models.RosterUnit.id,
+            models.RosterUnit.position,
+            models.RosterUnit.cached_cost,
+        )
+        .where(models.RosterUnit.roster_id == roster_id)
+        .order_by(models.RosterUnit.position, models.RosterUnit.id)
+    ).all()
+
+    lock_pairs = (
+        db.execute(
+            select(models.RosterUnitPair)
+            .where(
+                models.RosterUnitPair.roster_id == roster.id,
+                or_(
+                    models.RosterUnitPair.first_roster_unit_id == roster_unit.id,
+                    models.RosterUnitPair.second_roster_unit_id == roster_unit.id,
+                ),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    pair_partner_map: dict[int, list[int]] = defaultdict(list)
+    for pair in lock_pairs:
+        first_id = pair.first_roster_unit_id
+        second_id = pair.second_roster_unit_id
+        if first_id is None or second_id is None:
+            continue
+        pair_partner_map[first_id].append(second_id)
+        pair_partner_map[second_id].append(first_id)
+    paired_unit_ids = {
+        pair.first_roster_unit_id for pair in lock_pairs if pair.first_roster_unit_id
+    } | {
+        pair.second_roster_unit_id for pair in lock_pairs if pair.second_roster_unit_id
+    }
+    paired_unit_ids.discard(roster_unit.id)
+
+    paired_units: list[models.RosterUnit] = []
+    if paired_unit_ids:
+        paired_units = (
+            db.execute(
+                select(models.RosterUnit)
+                .options(
+                    selectinload(models.RosterUnit.unit).options(
+                        *_unit_eager_options()
+                    )
+                )
+                .where(models.RosterUnit.id.in_(paired_unit_ids))
+            )
+            .scalars()
+            .all()
+        )
+
     payload_cache: dict[int, dict[str, Any]] = {}
     loadout_map: dict[int, dict[str, Any]] = {}
     role_slug_maps: dict[int, dict[str, str]] = {}
-    affected_units = [roster_unit]
+    affected_units = [roster_unit, *paired_units]
 
     for ru in affected_units:
         payload = _unit_payload(ru.unit)
@@ -948,13 +995,27 @@ def update_roster_unit(
                 "active_items": active_items,
                 "aura_items": aura_items,
                 "loadout": loadout_payload,
+                "locked_pair_unit_ids": pair_partner_map.get(target.id, []),
             }
 
-        unit_payload = _unit_payload_for_response(roster_unit)
+        unit_payloads = {
+            ru.id: _unit_payload_for_response(ru) for ru in affected_units if ru.id
+        }
+        lock_pair_payloads = [
+            {
+                "id": pair.id,
+                "first_roster_unit_id": pair.first_roster_unit_id,
+                "second_roster_unit_id": pair.second_roster_unit_id,
+            }
+            for pair in lock_pairs
+        ]
+        unit_payload = unit_payloads.get(roster_unit.id)
         payload = {
             "unit": unit_payload,
+            "units": list(unit_payloads.values()),
             "warnings": [],
             "total_cost": total_cost,
+            "lock_pairs": lock_pair_payloads,
         }
         return JSONResponse(_json_safe(payload))
     return RedirectResponse(

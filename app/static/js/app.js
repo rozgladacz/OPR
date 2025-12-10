@@ -5017,7 +5017,30 @@ function initRosterEditor() {
       }
     };
 
-    applyUnitData(payload.unit || {});
+    const unitsPayload = Array.isArray(payload.units)
+      ? payload.units.slice()
+      : [];
+    if (payload.unit) {
+      unitsPayload.push(payload.unit);
+    }
+    if (unitsPayload.length === 0) {
+      applyUnitData(payload.unit || {});
+    } else {
+      const seen = new Set();
+      unitsPayload.forEach((unitData) => {
+        const unitId = unitData && unitData.id !== undefined ? String(unitData.id) : '';
+        if (unitId && seen.has(unitId)) {
+          return;
+        }
+        if (unitId) {
+          seen.add(unitId);
+        }
+        applyUnitData(unitData);
+      });
+    }
+    if (Array.isArray(payload.lock_pairs)) {
+      root.dataset.lockPairs = JSON.stringify(payload.lock_pairs);
+    }
     let totalCostValue = null;
     if (typeof payload.total_cost === 'number') {
       totalCostValue = payload.total_cost;
