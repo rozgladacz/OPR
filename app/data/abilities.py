@@ -326,7 +326,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Wrak",
         type="passive",
         description=(
-            "Gdy zostaniesz pokonany teren który zajmujesz do końca bitwy uznawany jest za osłonę oraz niebezpieczny i trudny tere."
+            "Gdy zostaniesz pokonany teren który zajmujesz do końca bitwy uznawany jest niebezpieczny i trudny oraz osłonę."
         ),
     ),
     # Active abilities
