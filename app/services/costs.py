@@ -1030,11 +1030,14 @@ def _weapon_cost(
     chance = max(chance - q, 1.0)
     cost = attacks * 2.0 * range_mod * chance * ap_mod * mult
 
-    if overcharge and (not assault or range_value != 0):
+    # Overcharge is applied exactly once per component (ranged or melee). For
+    # Assault weapons we compute each component separately and apply the 1.4x
+    # multiplier to each path independently instead of stacking.
+    if overcharge:
         cost *= 1.4
 
     if assault and allow_assault_extra and range_value != 0:
-        extra = _weapon_cost(
+        cost += _weapon_cost(
             quality,
             0,
             attacks,
@@ -1043,13 +1046,6 @@ def _weapon_cost(
             unit_traits,
             allow_assault_extra=False,
         )
-        if overcharge:
-            cost += extra + max(cost, extra) * 0.4
-        else:
-            cost += extra
-    else:
-        if overcharge:
-            cost *= 1.4
     return cost
 
 
