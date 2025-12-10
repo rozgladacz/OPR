@@ -4711,7 +4711,12 @@ function initRosterEditor() {
       throw new Error(`HTTP ${response.status}`);
     }
     const data = await response.json();
-    if (requestVersion !== latestEditVersion || requestVersion !== latestRequestVersion) {
+    const parsedRequestId = Number.isFinite(Number(data?.request_id)) ? Number(data.request_id) : requestVersion;
+    if (
+      parsedRequestId !== requestVersion ||
+      parsedRequestId !== latestEditVersion ||
+      parsedRequestId !== latestRequestVersion
+    ) {
       return;
     }
     applyServerUpdate(data || {});
