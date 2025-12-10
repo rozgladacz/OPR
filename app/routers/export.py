@@ -280,6 +280,7 @@ def roster_pdf(
     total_cost_rounded = utils.round_points(total_cost)
     roster_items = _export_roster_unit_entries(db, roster)
     spell_entries = _army_spell_entries(roster, roster_items)
+    army_rules = _army_rule_labels(getattr(roster, "army", None))
 
     _ensure_pdf_fonts()
 
