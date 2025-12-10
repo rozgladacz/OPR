@@ -1132,11 +1132,12 @@ def update_weapon(
         else:
             weapon.ap = ap_value
 
-    cleaned_tags = tags_text or None
+    cleaned_tags = tags_text or ""
     if weapon.parent:
-        weapon.tags = None if cleaned_tags == weapon.parent.effective_tags else cleaned_tags
+        inherited_tags = weapon.parent.effective_tags or ""
+        weapon.tags = None if cleaned_tags == inherited_tags else cleaned_tags
     else:
-        weapon.tags = cleaned_tags
+        weapon.tags = cleaned_tags or None
 
     cleaned_notes = cleaned_notes_text or None
     if weapon.parent:
