@@ -57,7 +57,7 @@ CAUTIOUS_HIT_BONUS = {0: 0.0, 12: 0.0, 18: 0.6, 24: 0.7, 30: 0.8, 36: 0.9}
 AP_BASE = {-1: 0.8, 0: 1.0, 1: 1.5, 2: 1.9, 3: 2.25, 4: 2.5, 5: 2.65}
 AP_LANCE = {-1: 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05}
 AP_NO_COVER = {-1: 0.1, 0: 0.25, 1: 0.2, 2: 0.15, 3: 0.1, 4: 0.1, 5: 0.05}
-AP_CORROSIVE = {-1: 0.05, 0: 0.05, 1: 0.1, 2: 0.25, 3: 0.4, 4: 0.5, 5: 0.55}
+AP_BRUTAL = {-1: 0.14, 0: 0.15, 1: 0.23, 2: 0.33, 3: 0.45, 4: 0.55, 5: 0.65}
 PENETRATING_MULTIPLIER = {-1: 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2.9, 5: 3.0}
 WAAGH_AP_MODIFIER = {-1: 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02}
 
@@ -994,8 +994,12 @@ def _weapon_cost(
             ap_mod += lookup_with_nearest(AP_NO_COVER, base_ap)
         elif norm in {"przebijajaca", "przebijajacy", "penetrating"}:
             mult *= lookup_with_nearest(PENETRATING_MULTIPLIER, base_ap)
-        elif norm in {"zracy", "corrosive"}:
-            ap_mod += lookup_with_nearest(AP_CORROSIVE, base_ap)
+        elif norm in {
+            "brutalny",
+            "brutalna",
+            "brutal"
+        }:
+            ap_mod += lookup_with_nearest(AP_BRUTAL, base_ap)
         elif norm in {"niebezposredni", "indirect"}:
             mult *= 1.2
         elif norm in {"zuzywalny", "limited"}:
@@ -1010,18 +1014,10 @@ def _weapon_cost(
             range_bonus += lookup_with_nearest(ARTILLERY_RANGE_BONUS, range_value)
         elif norm in {"nieporeczny", "unwieldy"}:
             range_penalty += lookup_with_nearest(UNWIELDY_RANGE_PENALTY, range_value)
-        elif norm in {
-            "brutalny",
-            "brutalna",
-            "brutal",
-            "bez regeneracji",
-            "bez regegenracji",
-            "no regen",
-            "no regeneration",
-        }:
-            mult *= 1.1
         elif norm in {"podkrecenie", "overcharge", "overclock"}:
             overcharge = True
+        elif norm in {"burzaca"}:
+            mult *= 1.5
 
     if waagh_penalty:
         ap_mod = max(ap_mod - waagh_penalty, 0.0)

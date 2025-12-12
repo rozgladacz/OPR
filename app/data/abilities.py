@@ -94,7 +94,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="nieruchomy",
         name="Nieruchomy",
         type="passive",
-        description="Po rozstawieniu nie może się przemieszczać i nie może zostać przyszpilony.",
+        description="Po rozstawieniu nie może się przemieszczać i nie może zostać przyszpilony. Podczas szarży może atakować odziały w zasięgu 3”.",
     ),
     AbilityDefinition(
         slug="zwinny",
@@ -121,7 +121,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description=(
             "Jest latający. Podczas ruchu musi przemieścić się dodatkowe 30” w jednej linii. Nie może być przyszpilony, "
             "nie może kontrolować punktów, szarżować, ani być celem szarży. Nie blokuje ruchu ani widzenia innych jednostek. "
-            "Jednostki strzelające do niego mają -12” zasięgu i -1 do trafienia."
+            "Jednostki strzelające do niego mają -12” zasięgu i -1 do trafienia. Nie może być atakowany bronią Niebezpośrednią."
         ),
     ),
     AbilityDefinition(
@@ -498,12 +498,6 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Każde trafienie zadaje liczbę ran równą wynikowi kostki obrony.",
     ),
     AbilityDefinition(
-        slug="zracy",
-        name="Żrący",
-        type="weapon",
-        description="W testach obrony nie ma automatycznych sukcesów.",
-    ),
-    AbilityDefinition(
         slug="szturmowa",
         name="Szturmowa",
         type="weapon",
@@ -519,13 +513,19 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="brutalny",
         name="Brutalny",
         type="weapon",
-        description="Ignoruje regenerację.",
+        description="Ignoruje regenerację i automatyczne sukcesy w testach obrony.",
     ),
     AbilityDefinition(
         slug="podkrecenie",
         name="Podkręcenie",
         type="weapon",
         description="Raz na grę może być użyta dodatkowy raz.",
+    ),
+    AbilityDefinition(
+        slug="burzaca",
+        name="Burząca",
+        type="weapon",
+        description="Jeżeli cel jest wewnątrz terenu lub 1” od blokującego terenu, wykonujesz podwójna ilość ataków.",
     ),
 ]
 
