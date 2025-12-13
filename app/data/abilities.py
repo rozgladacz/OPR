@@ -525,8 +525,15 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="burzaca",
         name="Burząca",
         type="weapon",
-        description="Jeżeli cel jest wewnątrz terenu lub 1” od blokującego terenu, wykonujesz podwójna ilość ataków.",
+        description="Jeżeli cel jest wewnątrz terenu lub 1” od blokującego terenu,  wykonuje podwójną liczbę ataków.",
     ),
+    AbilityDefinition(
+        slug="unik",
+        name="Unik",
+        type="weapon",
+        description="Jeżeli cel jest Przyszpilony lub Wyczerpany, wykonuje podwójną liczbę ataków.",
+    ),
+    
 ]
 
 

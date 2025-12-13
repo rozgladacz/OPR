@@ -24,7 +24,7 @@ DEFENSE_BASE_VALUES = {2: 2.0, 3: 1.67, 4: 1.33, 5: 1.0, 6: 0.8}
 DEFENSE_ABILITY_MODIFIERS = {
     "delikatny": {2: -0.05, 3: -0.07, 4: -0.08, 5: -0.1, 6: -0.13},
     "niewrazliwy": {2: 0.05, 3: 0.1, 4: 0.2, 5: 0.3, 6: 0.35},
-    "regeneracja": {2: 1.0, 3: 0.65, 4: 0.5, 5: 0.45, 6: 0.4},
+    "regeneracja": {2: 0.5, 3: 0.45, 4: 0.4, 5: 0.35, 6: 0.3},
     "szpica": {2: 0.15, 3: 0.12, 4: 0.1, 5: 0.08, 6: 0.06},
     "waagh": {2: -0.03, 3: -0.03, 4: -0.03, 5: -0.02, 6: -0.01},
     "odrodzenie": {2: 0.3, 3: 0.38, 4: 0.5, 5: 0.62, 6: 0.75},
@@ -631,12 +631,12 @@ def passive_cost(
             if identifier:
                 ability_slugs.add(identifier)
         if "rezerwa" in ability_slugs:
-            return 0
+            return -0.25
         if "zwiadowca" in ability_slugs:
-            return -2.5 * tou
+            return -2.75 * tou
         if "zasadzka" in ability_slugs:
             return -0.25 * tou
-        return -1.5 * tou
+        return -1.75 * tou
     if slug == "szybki":
         return 1.0 * tou
     if slug == "wolny":
@@ -672,7 +672,7 @@ def passive_cost(
     if slug == "cierpliwy":
         return 3.0 * tou
     if slug == "rezerwa":
-        return -2.0 * tou
+        return -3.0 * tou
         
     if aura:
         if slug in {"nieustraszony", "ucieczka", "stracency"}:
@@ -680,9 +680,9 @@ def passive_cost(
         if slug == "delikatny":
             return 0.5 * tou
         if slug == "niewrazliwy":
-            return 2.0 * tou
+            return 1.5 * tou
         if slug == "regeneracja":
-            return 3.5 * tou
+            return 2.25 * tou
         if slug == "furia":
             return 3.0 * tou
         if slug == "przygotowanie":
@@ -1017,7 +1017,9 @@ def _weapon_cost(
         elif norm in {"podkrecenie", "overcharge", "overclock"}:
             overcharge = True
         elif norm in {"burzaca"}:
-            mult *= 1.5
+            mult *= 1.75
+        elif norm in {"unik"}:
+            mult *= 1.25
 
     if waagh_penalty:
         ap_mod = max(ap_mod - waagh_penalty, 0.0)
