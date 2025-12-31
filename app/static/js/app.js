@@ -4105,23 +4105,31 @@ function initRosterEditor() {
   const rosterUnitDatasetRepo = new Map();
   const rosterUnitDatasetCache = new Map();
 
+  function safeParseJson(value, fallback, warningLabel = 'Nie udało się odczytać danych') {
+    if (!value) {
+      return fallback;
+    }
+    try {
+      return JSON.parse(value);
+    } catch (err) {
+      console.warn(warningLabel, err);
+      return fallback;
+    }
+  }
+
   function initializeUnitDatasetRepo() {
     const raw = root.dataset ? root.dataset.rosterUnitDatasets || '' : '';
     if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') {
-          Object.entries(parsed).forEach(([unitId, value]) => {
-            if (!unitId || !value || typeof value !== 'object') {
-              return;
-            }
-            rosterUnitDatasetRepo.set(String(unitId), value);
-          });
-        } else {
-          console.warn('Nieprawidłowy format danych jednostek, używam wartości domyślnych.');
-        }
-      } catch (err) {
-        console.warn('Nie udało się odczytać danych jednostek', err);
+      const parsed = safeParseJson(raw, {}, 'Nie udało się odczytać danych jednostek');
+      if (parsed && typeof parsed === 'object') {
+        Object.entries(parsed).forEach(([unitId, value]) => {
+          if (!unitId || !value || typeof value !== 'object') {
+            return;
+          }
+          rosterUnitDatasetRepo.set(String(unitId), value);
+        });
+      } else {
+        console.warn('Nieprawidłowy format danych jednostek, używam wartości domyślnych.');
       }
     }
     if (root.dataset && Object.prototype.hasOwnProperty.call(root.dataset, 'rosterUnitDatasets')) {
@@ -4153,41 +4161,18 @@ function initRosterEditor() {
   }
 
   function parseList(value) {
-    if (!value) {
-      return [];
-    }
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (err) {
-      console.warn('Nie udało się odczytać danych oddziału', err);
-      return [];
-    }
+    const parsed = safeParseJson(value, [], 'Nie udało się odczytać danych oddziału');
+    return Array.isArray(parsed) ? parsed : [];
   }
 
   function parseLoadout(value) {
-    if (!value) {
-      return {};
-    }
-    try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch (err) {
-      console.warn('Nie udało się odczytać konfiguracji oddziału', err);
-      return {};
-    }
+    const parsed = safeParseJson(value, {}, 'Nie udało się odczytać konfiguracji oddziału');
+    return parsed && typeof parsed === 'object' ? parsed : {};
   }
 
-  function parseJsonValue(value, warningLabel = 'Nie udało się odczytać danych') {
-    if (!value) {
-      return null;
-    }
-    try {
-      return JSON.parse(value);
-    } catch (err) {
-      console.warn(warningLabel, err);
-      return null;
-    }
+  function parseJsonValue(value, warningLabel = 'Nie udało się odczytać danych', fallback = null) {
+    const parsed = safeParseJson(value, fallback, warningLabel);
+    return parsed === undefined ? fallback : parsed;
   }
 
   function resolveUnitCacheId(source) {
@@ -4513,7 +4498,7 @@ function initRosterEditor() {
     const classificationData = getParsedObject(
       item,
       'data-unit-classification',
-      (value) => parseJsonValue(value, 'Nie udało się odczytać klasyfikacji oddziału'),
+      (value) => parseJsonValue(value, 'Nie udało się odczytać klasyfikacji oddziału', {}),
     );
     const loadout = createLoadoutState(loadoutData);
     ensureStateEntries(loadout.weapons, weapons, 'id', 'default_count', { fallbackIdKeys: ['weapon_id'] });
@@ -4903,11 +4888,11 @@ function initRosterEditor() {
     const classificationData = getParsedObject(
       item,
       'data-unit-classification',
-      (value) => parseJsonValue(value, 'Nie udało się odczytać klasyfikacji oddziału'),
+      (value) => parseJsonValue(value, 'Nie udało się odczytać klasyfikacji oddziału', {}),
     );
 
     currentClassification =
-      classificationData && typeof classificationData === 'object' ? classificationData : null;
+      classificationData && typeof classificationData === 'object' ? classificationData : {};
 
     if (nameEl) {
       nameEl.textContent = unitName;
@@ -5617,15 +5602,38 @@ function renderEditors(precomputedWeaponMap = null) {
   }
 
   function parseLockPairs(rawValue) {
-    if (!rawValue) {
-      return [];
+    const parsed = safeParseJson(rawValue, [], 'Nie udało się odczytać par blokad ekwipunku');
+    return Array.isArray(parsed) ? parsed : [];
+  }
+
+  function initializeRosterEditorState() {
+    try {
+      initializeUnitDatasetRepo();
+    } catch (error) {
+      rosterUnitDatasetRepo.clear();
+      rosterUnitDatasetCache.clear();
+      console.warn('Zresetowano dane jednostek po błędzie inicjalizacji', error);
+    }
+    let initialItems = [];
+    try {
+      initialItems = Array.from(root.querySelectorAll('[data-roster-item]'));
+      initialItems.forEach((item) => {
+        registerRosterItem(item);
+      });
+    } catch (error) {
+      console.error('Nie udało się zarejestrować początkowych oddziałów', error);
+      initialItems = [];
     }
     try {
-      const parsed = JSON.parse(rawValue);
-      return Array.isArray(parsed) ? parsed : [];
+      refreshRosterCostBadges();
     } catch (error) {
-      console.warn('Nie udało się odczytać par blokad ekwipunku', error);
-      return [];
+      console.warn('Nie udało się zaktualizować kosztów początkowych', error);
+    }
+    try {
+      const initialPairs = parseLockPairs(root.dataset.rosterLockPairs || '[]');
+      applyLockPairsFromServer(initialPairs);
+    } catch (error) {
+      console.warn('Nie udało się załadować blokad ekwipunku', error);
     }
   }
 
@@ -5649,23 +5657,28 @@ function renderEditors(precomputedWeaponMap = null) {
       updateMoveButtonStates(rosterListEl);
     }
 
-    const selectedId = root.dataset.selectedId || '';
-    let initialItem = null;
-    if (selectedId) {
-      initialItem = items.find(
-        (element) => element.getAttribute('data-roster-unit-id') === selectedId,
-      );
-    }
-    if (initialItem) {
-      selectItem(initialItem);
-      if (typeof initialItem.scrollIntoView === 'function') {
-        initialItem.scrollIntoView({ block: 'nearest' });
+    try {
+      const selectedId = root.dataset.selectedId || '';
+      let initialItem = null;
+      if (selectedId) {
+        initialItem = items.find(
+          (element) => element.getAttribute('data-roster-unit-id') === selectedId,
+        );
       }
-    } else if (items.length) {
-      selectItem(items[0]);
-    } else if (editor && emptyState) {
-      editor.classList.add('d-none');
-      emptyState.classList.remove('d-none');
+      if (initialItem) {
+        selectItem(initialItem);
+        if (typeof initialItem.scrollIntoView === 'function') {
+          initialItem.scrollIntoView({ block: 'nearest' });
+        }
+      } else if (items.length) {
+        selectItem(items[0]);
+      } else if (editor && emptyState) {
+        editor.classList.add('d-none');
+        emptyState.classList.remove('d-none');
+      }
+    } catch (error) {
+      console.error('Nie udało się wybrać początkowego oddziału', error);
+      showRosterEditorError('Panel edycji jest obecnie niedostępny.');
     }
   }
 
