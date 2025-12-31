@@ -3849,6 +3849,51 @@ function initRosterEditor() {
     return item ? item.getAttribute('data-roster-unit-id') || '' : '';
   }
 
+  function reorderEntriesFromPayload(orderPayload) {
+    const listElement = rosterListEl || ensureRosterList();
+    if (!listElement || !Array.isArray(orderPayload)) {
+      return null;
+    }
+    const normalizedOrder = orderPayload
+      .map((entry, index) => {
+        if (!entry || typeof entry !== 'object') {
+          return null;
+        }
+        const id = normalizeRosterUnitId(entry.id ?? entry.roster_unit_id ?? entry.rosterUnitId);
+        if (!id) {
+          return null;
+        }
+        const position =
+          typeof entry.position === 'number' && Number.isFinite(entry.position)
+            ? entry.position
+            : index;
+        return { id, position, index };
+      })
+      .filter(Boolean);
+    if (!normalizedOrder.length) {
+      return null;
+    }
+    const orderMap = new Map(
+      normalizedOrder.map((entry) => [entry.id, { position: entry.position, index: entry.index }]),
+    );
+    const entries = getEntryContainers(listElement);
+    if (!entries.length) {
+      return listElement;
+    }
+    const sorted = entries
+      .map((entry, index) => {
+        const unitId = getUnitIdFromEntry(entry);
+        const orderEntry = unitId ? orderMap.get(unitId) : null;
+        const sortValue = orderEntry
+          ? orderEntry.position * 1000 + orderEntry.index
+          : Number.MAX_SAFE_INTEGER + index;
+        return { entry, sortValue, index };
+      })
+      .sort((a, b) => a.sortValue - b.sortValue || a.index - b.index);
+    sorted.forEach(({ entry }) => listElement.appendChild(entry));
+    return listElement;
+  }
+
 
   function findMoveForm(entry, direction) {
     const normalized = String(direction || '').trim().toLowerCase();
@@ -3873,6 +3918,7 @@ function initRosterEditor() {
     const directionInput = form.querySelector('input[name="direction"]');
     const direction = directionInput ? String(directionInput.value || '') : '';
     const entry = form.closest('.roster-unit-entry');
+    const headers = new Headers({ Accept: 'application/json' });
     const selectedItem =
       preserveSelection && activeItem
         ? activeItem
@@ -3893,14 +3939,29 @@ function initRosterEditor() {
         method: 'POST',
         body: payload,
         credentials: 'same-origin',
+        headers,
       });
     } catch (err) {
       fallback(err);
       return;
     }
-    if (!response.ok) {
+    const isRedirectResponse =
+      response.redirected
+      || response.type === 'opaqueredirect'
+      || (response.status >= 300 && response.status < 400);
+    if (!isRedirectResponse && response.status >= 400) {
       fallback(`response status: ${response.status}`);
       return;
+    }
+    const contentType = (response.headers && response.headers.get('content-type')) || '';
+    const isJsonResponse = contentType.toLowerCase().includes('application/json');
+    let responseData = null;
+    if (isJsonResponse) {
+      try {
+        responseData = await response.json();
+      } catch (err) {
+        console.warn('Nie udało się odczytać odpowiedzi JSON', err);
+      }
     }
     if (moveDom === false) {
       return;
@@ -3908,12 +3969,38 @@ function initRosterEditor() {
     if (!entry || (direction !== 'up' && direction !== 'down')) {
       return;
     }
-    const listElement = entry.closest('[data-roster-list]') || rosterListEl;
-    moveEntryDom(entry, direction);
-    updateMoveButtonStates(listElement);
-    if (preserveSelection && selectedItem && selectedItem.isConnected) {
-      activeItem = selectedItem;
-      selectedItem.classList.add('active');
+    const preferredSelectionId = normalizeRosterUnitId(
+      responseData
+        ? responseData.selected ?? responseData.selected_id ?? responseData.selectedId
+        : null,
+    );
+    const listElement =
+      reorderEntriesFromPayload(responseData && responseData.order)
+      || entry.closest('[data-roster-list]')
+      || rosterListEl;
+    if (!responseData || !Array.isArray(responseData.order) || responseData.order.length === 0) {
+      moveEntryDom(entry, direction);
+    }
+    if (listElement) {
+      updateMoveButtonStates(listElement);
+    }
+    if (preserveSelection) {
+      const preferredItem = preferredSelectionId
+        ? root.querySelector(`[data-roster-item][data-roster-unit-id="${preferredSelectionId}"]`)
+        : null;
+      const nextSelection =
+        preferredItem && preferredItem.isConnected
+          ? preferredItem
+          : selectedItem && selectedItem.isConnected
+            ? selectedItem
+            : null;
+      if (nextSelection) {
+        if (activeItem && activeItem !== nextSelection) {
+          activeItem.classList.remove('active');
+        }
+        activeItem = nextSelection;
+        activeItem.classList.add('active');
+      }
     }
   }
 

@@ -697,6 +697,7 @@ def add_roster_unit(
 def move_roster_unit(
     roster_id: int,
     roster_unit_id: int,
+    request: Request,
     direction: str = Form(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
@@ -741,7 +742,29 @@ def move_roster_unit(
             .first()
         )
 
+    accept_header = (request.headers.get("accept") or "").lower()
+    wants_json = "application/json" in accept_header
+
+    def _json_payload(moved: bool) -> JSONResponse:
+        ordered_units = _ordered_roster_units(db, roster)
+        payload = {
+            "selected": roster_unit.id,
+            "moved": moved,
+            "direction": normalized_direction,
+            "order": [
+                {
+                    "id": unit.id,
+                    "position": unit.position if unit.position is not None else index,
+                }
+                for index, unit in enumerate(ordered_units)
+                if unit.id is not None
+            ],
+        }
+        return JSONResponse(_json_safe(payload))
+
     if neighbor_position is None:
+        if wants_json:
+            return _json_payload(moved=False)
         return RedirectResponse(
             url=f"/rosters/{roster.id}?selected={roster_unit.id}",
             status_code=303,
@@ -771,6 +794,8 @@ def move_roster_unit(
             .execution_options(synchronize_session=False)
         )
     else:
+        if wants_json:
+            return _json_payload(moved=False)
         return RedirectResponse(
             url=f"/rosters/{roster.id}?selected={roster_unit.id}",
             status_code=303,
@@ -778,6 +803,8 @@ def move_roster_unit(
 
     roster_unit.position = target_position
     db.commit()
+    if wants_json:
+        return _json_payload(moved=True)
     return RedirectResponse(
         url=f"/rosters/{roster.id}?selected={roster_unit.id}",
         status_code=303,
