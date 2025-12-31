@@ -397,6 +397,14 @@ def edit_roster(
     roster_items: list[dict[str, Any]] = []
     sanitized_loadouts: dict[int, dict[str, Any]] = {}
     payload_cache: dict[int | None, dict[str, Any]] = {}
+    lock_pairs = [
+        {
+            "id": pair.id,
+            "first_roster_unit_id": pair.first_roster_unit_id,
+            "second_roster_unit_id": pair.second_roster_unit_id,
+        }
+        for pair in roster.roster_unit_pairs
+    ]
 
     for roster_unit in roster.roster_units:
         unit = roster_unit.unit
@@ -505,6 +513,7 @@ def edit_roster(
             "warnings": [],
             "selected_id": selected_id,
             "unit_payloads": unit_payloads,
+            "lock_pairs": lock_pairs,
         },
     )
 

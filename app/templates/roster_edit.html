@@ -67,6 +67,7 @@
   data-roster-id="{{ roster.id }}"
   data-selected-id="{{ selected_id or '' }}"
   data-roster-unit-datasets='{{ unit_payloads | tojson | e }}'
+  data-roster-lock-pairs='{{ lock_pairs | tojson | e }}'
 >
   {% if can_edit %}
   <div class="col-12 d-xl-none">
