@@ -3879,13 +3879,24 @@ function initRosterEditor() {
         : preserveSelection && entry
           ? entry.querySelector('[data-roster-item]')
           : null;
+    const fallback = () => {
+      form.submit();
+    };
+    let response;
     try {
-      await fetch(action, {
+      response = await fetch(action, {
         method: 'POST',
         body: payload,
+        credentials: 'same-origin',
       });
     } catch (err) {
       console.warn('Nie udało się przesunąć oddziału', err);
+      fallback();
+      return;
+    }
+    if (!response.ok) {
+      fallback();
+      return;
     }
     if (moveDom === false) {
       return;
