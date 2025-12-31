@@ -3854,6 +3854,7 @@ function initRosterEditor() {
   }
 
   async function submitMoveRequest(form, options = {}) {
+    const { moveDom = true, preserveSelection = true } = options;
     if (!form) {
       return;
     }
@@ -3865,6 +3866,12 @@ function initRosterEditor() {
     const directionInput = form.querySelector('input[name="direction"]');
     const direction = directionInput ? String(directionInput.value || '') : '';
     const entry = form.closest('.roster-unit-entry');
+    const selectedItem =
+      preserveSelection && activeItem
+        ? activeItem
+        : preserveSelection && entry
+          ? entry.querySelector('[data-roster-item]')
+          : null;
     try {
       await fetch(action, {
         method: 'POST',
@@ -3873,7 +3880,7 @@ function initRosterEditor() {
     } catch (err) {
       console.warn('Nie udało się przesunąć oddziału', err);
     }
-    if (options.moveDom === false) {
+    if (moveDom === false) {
       return;
     }
     if (!entry || (direction !== 'up' && direction !== 'down')) {
@@ -3882,6 +3889,10 @@ function initRosterEditor() {
     const listElement = entry.closest('[data-roster-list]') || rosterListEl;
     moveEntryDom(entry, direction);
     updateMoveButtonStates(listElement);
+    if (preserveSelection && selectedItem && selectedItem.isConnected) {
+      activeItem = selectedItem;
+      selectedItem.classList.add('active');
+    }
   }
 
   function findSiblingEntryContainer(container, direction) {
@@ -3955,18 +3966,16 @@ function initRosterEditor() {
       }
       isSubmitting = true;
       try {
-        await submitMoveRequest(form);
-        const entry = form.closest('[data-roster-entry]') || form.closest('.roster-unit-entry');
-        const listElement = (entry ? entry.closest('[data-roster-list]') : null) || rosterListEl;
-        if (listElement) {
-          updateMoveButtonStates(listElement);
-        }
-        if (activeItem && activeItem.isConnected) {
-          activeItem.classList.add('active');
-        }
+        await submitMoveRequest(form, { preserveSelection: true });
       } finally {
         isSubmitting = false;
       }
+    });
+  }
+
+  function initializeMoveForms() {
+    root.querySelectorAll('[data-roster-move-form]').forEach((form) => {
+      registerMoveForm(form);
     });
   }
 
@@ -5626,6 +5635,18 @@ function renderEditors(precomputedWeaponMap = null) {
     } catch (error) {
       console.warn('Nie udało się załadować blokad ekwipunku', error);
     }
+  }
+
+  function initializeRosterEditorState() {
+    initializeUnitDatasetRepo();
+    initializeMoveForms();
+    const initialItems = Array.from(root.querySelectorAll('[data-roster-item]'));
+    initialItems.forEach((item) => {
+      registerRosterItem(item);
+    });
+    refreshRosterCostBadges();
+    const initialPairs = parseLockPairs(root.dataset.rosterLockPairs || '[]');
+    applyLockPairsFromServer(initialPairs);
     if (!rosterListEl && initialItems.length) {
       const inferredList = initialItems[0].closest('[data-roster-list]');
       if (inferredList) {
