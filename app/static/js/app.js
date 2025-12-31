@@ -3822,7 +3822,14 @@ function initRosterEditor() {
   }
 
   function getListItemContainer(entry) {
-    return entry ? entry.closest('.list-group-item') : null;
+    if (!entry) {
+      return null;
+    }
+    const rosterContainer = entry.closest('[data-roster-entry]');
+    if (rosterContainer) {
+      return rosterContainer;
+    }
+    return entry.closest('.list-group-item');
   }
 
   function getEntryContainers(listElement = null) {
@@ -3896,6 +3903,12 @@ function initRosterEditor() {
   }
 
   function findSiblingEntryContainer(container, direction) {
+    if (container && !container.hasAttribute('data-roster-entry')) {
+      const entryContainer = container.closest('[data-roster-entry]');
+      if (entryContainer) {
+        container = entryContainer;
+      }
+    }
     const step = direction === 'up' ? 'previousElementSibling' : 'nextElementSibling';
     let sibling = container ? container[step] : null;
     while (sibling && !sibling.hasAttribute('data-roster-entry')) {
@@ -3905,7 +3918,7 @@ function initRosterEditor() {
   }
 
   function moveEntryDom(entry, direction) {
-    const container = getListItemContainer(entry);
+    const container = getListItemContainer(entry) || entry && entry.closest('[data-roster-entry]');
     if (!container || !container.parentElement) {
       return false;
     }
