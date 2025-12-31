@@ -4104,6 +4104,7 @@ function initRosterEditor() {
   ]);
   const rosterUnitDatasetRepo = new Map();
   const rosterUnitDatasetCache = new Map();
+  const lockPairCache = new Map();
 
   function safeParseJson(value, fallback, warningLabel = 'Nie udało się odczytać danych') {
     if (!value) {
@@ -4115,6 +4116,169 @@ function initRosterEditor() {
       console.warn(warningLabel, err);
       return fallback;
     }
+  }
+
+  function parseLockPairs(rawValue) {
+    const parsed = safeParseJson(rawValue, [], 'Nie udało się odczytać par blokad ekwipunku');
+    return Array.isArray(parsed) ? parsed : [];
+  }
+
+  function normalizeRosterUnitId(value) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    const text = String(value).trim();
+    return text || null;
+  }
+
+  function applyLockPairsFromServer(payload) {
+    if (payload === undefined || payload === null) {
+      return;
+    }
+    const nextCache = new Map();
+    let hasPayload = false;
+
+    const ensureEntry = (unitId) => {
+      const normalized = normalizeRosterUnitId(unitId);
+      if (!normalized) {
+        return null;
+      }
+      if (!nextCache.has(normalized)) {
+        nextCache.set(normalized, new Set());
+      }
+      return nextCache.get(normalized);
+    };
+
+    const addPair = (first, second) => {
+      const firstId = normalizeRosterUnitId(first);
+      const secondId = normalizeRosterUnitId(second);
+      if (!firstId || !secondId || firstId === secondId) {
+        return;
+      }
+      hasPayload = true;
+      const firstSet = ensureEntry(firstId);
+      const secondSet = ensureEntry(secondId);
+      if (firstSet) {
+        firstSet.add(secondId);
+      }
+      if (secondSet) {
+        secondSet.add(firstId);
+      }
+    };
+
+    const addUnitPartners = (unit) => {
+      if (!unit || typeof unit !== 'object' || !Object.prototype.hasOwnProperty.call(unit, 'locked_pair_unit_ids')) {
+        return;
+      }
+      const unitId = normalizeRosterUnitId(unit.id ?? unit.roster_unit_id ?? unit.rosterUnitId);
+      if (!unitId) {
+        return;
+      }
+      hasPayload = true;
+      ensureEntry(unitId);
+      const partners = Array.isArray(unit.locked_pair_unit_ids) ? unit.locked_pair_unit_ids : [];
+      partners.forEach((partnerId) => addPair(unitId, partnerId));
+    };
+
+    const addPairList = (pairs) => {
+      if (!Array.isArray(pairs)) {
+        return;
+      }
+      hasPayload = true;
+      pairs.forEach((pair) => {
+        if (!pair || typeof pair !== 'object') {
+          return;
+        }
+        const first = pair.first_roster_unit_id ?? pair.first ?? pair.first_id;
+        const second = pair.second_roster_unit_id ?? pair.second ?? pair.second_id;
+        addPair(first, second);
+      });
+    };
+
+    if (Array.isArray(payload)) {
+      addPairList(payload);
+    } else if (typeof payload === 'string') {
+      addPairList(parseLockPairs(payload));
+    } else if (payload && typeof payload === 'object') {
+      if (Object.prototype.hasOwnProperty.call(payload, 'lock_pairs')) {
+        addPairList(payload.lock_pairs);
+      }
+      const unitList = [];
+      if (Array.isArray(payload.units)) {
+        unitList.push(...payload.units);
+      }
+      if (payload.unit && typeof payload.unit === 'object') {
+        unitList.push(payload.unit);
+      }
+      unitList.forEach((unit) => addUnitPartners(unit));
+    } else {
+      return;
+    }
+
+    if (!hasPayload) {
+      return;
+    }
+
+    lockPairCache.clear();
+    nextCache.forEach((partners, unitId) => {
+      lockPairCache.set(unitId, partners);
+    });
+  }
+
+  function getPartnerId(rosterUnitId) {
+    const targetId = normalizeRosterUnitId(rosterUnitId);
+    if (!targetId) {
+      return null;
+    }
+    const cachedPartners = lockPairCache.get(targetId);
+    if (cachedPartners instanceof Set) {
+      const candidate = Array.from(cachedPartners).find(
+        (partnerId) => partnerId && partnerId !== targetId,
+      );
+      if (candidate) {
+        return candidate;
+      }
+      if (cachedPartners.size === 0) {
+        return null;
+      }
+    }
+    const datasetPartners = getUnitDatasetValue(targetId, 'locked_pair_unit_ids', []);
+    if (Array.isArray(datasetPartners)) {
+      const partnerId = datasetPartners
+        .map((value) => normalizeRosterUnitId(value))
+        .find((value) => value && value !== targetId);
+      if (partnerId) {
+        return partnerId;
+      }
+    }
+    const rawPairs =
+      (root && root.dataset && (root.dataset.lockPairs || root.dataset.rosterLockPairs)) || '[]';
+    const parsedPairs = parseLockPairs(rawPairs);
+    if (parsedPairs.length) {
+      const partnerFromPairs = parsedPairs.reduce((result, pair) => {
+        if (result || !pair || typeof pair !== 'object') {
+          return result;
+        }
+        const first = normalizeRosterUnitId(pair.first_roster_unit_id ?? pair.first ?? pair.first_id);
+        const second = normalizeRosterUnitId(
+          pair.second_roster_unit_id ?? pair.second ?? pair.second_id,
+        );
+        if (!first || !second || first === second) {
+          return result;
+        }
+        if (first === targetId) {
+          return second;
+        }
+        if (second === targetId) {
+          return first;
+        }
+        return result;
+      }, null);
+      if (partnerFromPairs) {
+        return partnerFromPairs;
+      }
+    }
+    return null;
   }
 
   function initializeUnitDatasetRepo() {
@@ -5097,8 +5261,11 @@ function initRosterEditor() {
       });
     }
     if (Array.isArray(payload.lock_pairs)) {
-      root.dataset.lockPairs = JSON.stringify(payload.lock_pairs);
+      const serializedPairs = JSON.stringify(payload.lock_pairs);
+      root.dataset.lockPairs = serializedPairs;
+      root.dataset.rosterLockPairs = serializedPairs;
     }
+    applyLockPairsFromServer(payload);
     let totalCostValue = null;
     if (typeof payload.total_cost === 'number') {
       totalCostValue = payload.total_cost;
@@ -5601,42 +5768,6 @@ function renderEditors(precomputedWeaponMap = null) {
     }
   }
 
-  function parseLockPairs(rawValue) {
-    const parsed = safeParseJson(rawValue, [], 'Nie udało się odczytać par blokad ekwipunku');
-    return Array.isArray(parsed) ? parsed : [];
-  }
-
-  function initializeRosterEditorState() {
-    try {
-      initializeUnitDatasetRepo();
-    } catch (error) {
-      rosterUnitDatasetRepo.clear();
-      rosterUnitDatasetCache.clear();
-      console.warn('Zresetowano dane jednostek po błędzie inicjalizacji', error);
-    }
-    let initialItems = [];
-    try {
-      initialItems = Array.from(root.querySelectorAll('[data-roster-item]'));
-      initialItems.forEach((item) => {
-        registerRosterItem(item);
-      });
-    } catch (error) {
-      console.error('Nie udało się zarejestrować początkowych oddziałów', error);
-      initialItems = [];
-    }
-    try {
-      refreshRosterCostBadges();
-    } catch (error) {
-      console.warn('Nie udało się zaktualizować kosztów początkowych', error);
-    }
-    try {
-      const initialPairs = parseLockPairs(root.dataset.rosterLockPairs || '[]');
-      applyLockPairsFromServer(initialPairs);
-    } catch (error) {
-      console.warn('Nie udało się załadować blokad ekwipunku', error);
-    }
-  }
-
   function initializeRosterEditorState() {
     initializeUnitDatasetRepo();
     initializeMoveForms();
@@ -5644,9 +5775,14 @@ function renderEditors(precomputedWeaponMap = null) {
     initialItems.forEach((item) => {
       registerRosterItem(item);
     });
+    const initialPairs = parseLockPairs(
+      (root.dataset && (root.dataset.lockPairs || root.dataset.rosterLockPairs)) || '[]',
+    );
+    const initialUnitPayloads = Array.from(rosterUnitDatasetRepo.values()).filter(
+      (value) => value && typeof value === 'object',
+    );
+    applyLockPairsFromServer({ lock_pairs: initialPairs, units: initialUnitPayloads });
     refreshRosterCostBadges();
-    const initialPairs = parseLockPairs(root.dataset.rosterLockPairs || '[]');
-    applyLockPairsFromServer(initialPairs);
     if (!rosterListEl && initialItems.length) {
       const inferredList = initialItems[0].closest('[data-roster-list]');
       if (inferredList) {
