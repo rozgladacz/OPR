@@ -4,7 +4,17 @@ import math
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, event
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    event,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -82,6 +92,19 @@ class Armory(TimestampMixin, Base):
         back_populates="armory", cascade="all, delete-orphan"
     )
     armies: Mapped[List["Army"]] = relationship(back_populates="armory")
+
+
+class ArmoryDisabledWeapon(TimestampMixin, Base):
+    __tablename__ = "armory_disabled_weapons"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    armory_id: Mapped[int] = mapped_column(ForeignKey("armories.id"), nullable=False)
+    weapon_id: Mapped[int] = mapped_column(ForeignKey("weapons.id"), nullable=False)
+
+    armory: Mapped[Armory] = relationship()
+    weapon: Mapped["Weapon"] = relationship()
+
+    __table_args__ = (UniqueConstraint("armory_id", "weapon_id"),)
 
 
 class Weapon(TimestampMixin, Base):
