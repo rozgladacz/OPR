@@ -3879,8 +3879,13 @@ function initRosterEditor() {
         : preserveSelection && entry
           ? entry.querySelector('[data-roster-item]')
           : null;
-    const fallback = () => {
-      form.submit();
+    const fallback = (reason = null) => {
+      console.warn('Nie udało się przesunąć oddziału, wysyłam formularz ponownie.', reason);
+      if (form && typeof form.submit === 'function') {
+        form.submit();
+        return;
+      }
+      window.location.reload();
     };
     let response;
     try {
@@ -3890,12 +3895,11 @@ function initRosterEditor() {
         credentials: 'same-origin',
       });
     } catch (err) {
-      console.warn('Nie udało się przesunąć oddziału', err);
-      fallback();
+      fallback(err);
       return;
     }
     if (!response.ok) {
-      fallback();
+      fallback(`response status: ${response.status}`);
       return;
     }
     if (moveDom === false) {
