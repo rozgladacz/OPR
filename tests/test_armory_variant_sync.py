@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from starlette.datastructures import URL
 from starlette.requests import Request
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
@@ -34,6 +35,43 @@ def _session():
     engine = create_engine("sqlite:///:memory:", future=True)
     Base.metadata.create_all(engine)
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)()
+
+
+class _DummyURL:
+    def __init__(self, path: str):
+        self._path = path
+
+    def make_absolute_url(self, base_url: URL) -> URL:
+        return base_url.replace(path=self._path)
+
+    def __str__(self) -> str:
+        return self._path
+
+
+class _DummyApp:
+    def url_path_for(self, name: str, **path_params: str) -> _DummyURL:
+        path = path_params.get("path")
+        if path:
+            return _DummyURL(path)
+        return _DummyURL(f"/{name}")
+
+
+async def _empty_receive() -> dict:
+    return {"type": "http.request"}
+
+
+def _build_request(path: str) -> Request:
+    dummy_app = _DummyApp()
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": path,
+        "headers": [],
+        "query_string": b"",
+        "app": dummy_app,
+        "router": dummy_app,
+    }
+    return Request(scope, _empty_receive)
 
 
 def test_child_weapon_inherits_attacks_from_parent():
@@ -424,6 +462,62 @@ def test_variant_weapon_tree_preserves_parent_structure():
             assert (
                 payload_parent_lookup.get(clone.id) == expected_parent_id
             ), "Weapon tree payload should mirror base structure"
+    finally:
+        session.close()
+
+
+def test_variant_weapon_tree_prefers_direct_clone_for_parent_mapping():
+    session = _session()
+    try:
+        user = models.User(username="viewer", password_hash="x", is_admin=True)
+        base_armory = models.Armory(name="Broń bazowa", owner=user)
+        variant_armory = models.Armory(name="Broń wariant", owner=user, parent=base_armory)
+
+        base_parent = models.Weapon(
+            armory=base_armory,
+            owner=user,
+            name="Broń ręczna",
+            range="Melee",
+            attacks=1,
+            ap=0,
+            cached_cost=1.0,
+        )
+        base_child = models.Weapon(
+            armory=base_armory,
+            owner=user,
+            parent=base_parent,
+            name="Miażdżenie",
+            range="Melee",
+            attacks=1,
+            ap=0,
+            cached_cost=1.5,
+        )
+
+        session.add_all([user, base_armory, variant_armory, base_parent, base_child])
+        session.flush()
+
+        utils.ensure_armory_variant_sync(session, variant_armory)
+        session.flush()
+
+        collection = utils.load_armory_weapons(session, variant_armory)
+        ordered_names = [weapon.effective_name for weapon in collection.items]
+        assert ordered_names[:2] == ["Broń ręczna", "Miażdżenie"]
+
+        tree = collection.payload
+        assert len(tree) == 1
+        root = tree[0]
+        assert root["name"] == "Broń ręczna"
+        assert [child["name"] for child in root["children"]] == ["Miażdżenie"]
+
+        request = _build_request(path=f"/armories/{variant_armory.id}")
+        response = armories_router.view_armory(
+            variant_armory.id, request, session, current_user=user
+        )
+
+        weapon_tree = response.context["weapon_tree"]
+        assert len(weapon_tree) == 1
+        assert weapon_tree[0]["name"] == "Broń ręczna"
+        assert [child["name"] for child in weapon_tree[0]["children"]] == ["Miażdżenie"]
     finally:
         session.close()
 
