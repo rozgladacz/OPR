@@ -40,9 +40,9 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Zasadzka",
         type="passive",
         description=(
-            "Odział można odłożyć przed rozstawieniem. Na początku każdej rundy (poza pierwszą) można rozstawić go w dowolnym "
-            "miejscu w odległości ponad 9” od jednostek wroga. W tej rundzie nie może kontrolować punktów. Gracze na zmianę "
-            "rozmieszczają jednostki zasadzki, zaczynając od gracza, który dokonuje aktywacji jako następny."
+            "Odział można odłożyć przed rozstawieniem."
+            "Na początku każdej rundy (poza pierwszą) można rozstawić go w dowolnym legalnym miejscu."
+            "Gracze na zmianę rozmieszczają jednostki zasadzki, zaczynając od gracza, który dokonuje aktywacji jako następny."
         ),
     ),
     AbilityDefinition(
@@ -60,8 +60,8 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Odwody",
         type="passive",
         description=(
-            "Przed rozstawieniem podziel odziały z tą zdolnośćią na dwie grupy. Przeciwnik wybiera jedną z nich, a oddziały w niej tracą "
-            "zdolność Zwiadowca, a zyskują Rezerwa, ale wciąż mogą skorzystać z Zasadzka, jeżeli posiadają."
+            "Przed rozstawieniem podziel oddziały z tą zdolnością bez zdolności Zwiadowca, Zasadzka lub Rezerwa na dwie grupy."
+            "Przeciwnik wybiera jedną z nich, a oddziały w niej zyskują zdolność Rezerwa."
         ),
     ),
     AbilityDefinition(

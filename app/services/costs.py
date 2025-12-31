@@ -630,12 +630,8 @@ def passive_cost(
             identifier = ability_identifier(ability)
             if identifier:
                 ability_slugs.add(identifier)
-        if "rezerwa" in ability_slugs:
-            return -0.25
-        if "zwiadowca" in ability_slugs:
-            return -2.75 * tou
-        if "zasadzka" in ability_slugs:
-            return -0.25 * tou
+        if ability_slugs & {"rezerwa", "zwiadowca", "zasadzka"}:
+            return 0
         return -1.75 * tou
     if slug == "szybki":
         return 1.0 * tou
