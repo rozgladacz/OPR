@@ -71,7 +71,7 @@ def _build_weapon_tree(
     weapon_map: dict[int, models.Weapon] = {
         weapon.id: weapon for weapon in weapons if weapon.id is not None
     }
-    source_weapon_map: dict[int, models.Weapon] = {}
+    source_weapon_map: dict[int, tuple[int, models.Weapon]] = {}
     children_map: dict[int, list[models.Weapon]] = {}
     roots: list[models.Weapon] = []
 
@@ -84,13 +84,25 @@ def _build_weapon_tree(
         ):
             visited_sources: set[int] = set()
             current = parent
+            depth = 1
             while current is not None:
                 source_id = getattr(current, "id", None)
                 if source_id is None or source_id in visited_sources:
                     break
                 visited_sources.add(source_id)
-                source_weapon_map.setdefault(source_id, weapon)
+                existing = source_weapon_map.get(source_id)
+                is_direct_clone = weapon.parent_id == source_id
+                if existing is None:
+                    source_weapon_map[source_id] = (depth, weapon)
+                else:
+                    existing_depth, existing_weapon = existing
+                    existing_is_direct = existing_weapon.parent_id == source_id
+                    if depth < existing_depth or (
+                        is_direct_clone and not existing_is_direct
+                    ):
+                        source_weapon_map[source_id] = (depth, weapon)
                 current = getattr(current, "parent", None)
+                depth += 1
 
     for weapon in weapons:
         parent_id = weapon.parent_id
@@ -107,7 +119,8 @@ def _build_weapon_tree(
                     if source_id is None or source_id in visited_sources:
                         break
                     visited_sources.add(source_id)
-                    candidate = source_weapon_map.get(source_id)
+                    candidate_entry = source_weapon_map.get(source_id)
+                    candidate = candidate_entry[1] if candidate_entry else None
                     if candidate is not None and candidate is not weapon:
                         assigned_parent_id = candidate.id
                         break
