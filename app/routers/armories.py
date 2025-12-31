@@ -7,7 +7,7 @@ import json
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import models
@@ -231,6 +231,63 @@ def _refresh_costs(db: Session, weapons: Iterable[models.Weapon]) -> None:
     if updated:
         db.flush()
 
+def _render_armory_detail(
+    *,
+    request: Request,
+    db: Session,
+    armory: models.Armory,
+    current_user: models.User,
+    error: str | None = None,
+    selected_weapon_id: int | None = None,
+) -> HTMLResponse:
+    weapon_collection = _armory_weapons(db, armory)
+    weapons = list(weapon_collection.items)
+    weapon_tree = weapon_collection.payload
+    _refresh_costs(db, weapons)
+
+    if selected_weapon_id is not None and not any(w.id == selected_weapon_id for w in weapons):
+        selected_weapon_id = None
+
+    parent_chain = _parent_chain(armory)
+    can_edit = current_user.is_admin or armory.owner_id == current_user.id
+    can_delete = can_edit and not armory.variants and not armory.armies
+
+    weapon_rows = []
+    for weapon in weapons:
+        overrides = {field: getattr(weapon, field) is not None for field in OVERRIDABLE_FIELDS}
+        cached_cost = weapon.effective_cached_cost
+        if cached_cost is None:
+            cached_cost = costs.weapon_cost(weapon)
+        weapon_rows.append(
+            {
+                "instance": weapon,
+                "overrides": overrides,
+                "cost": cached_cost,
+                "abilities": _weapon_tags_payload(weapon.effective_tags),
+            }
+        )
+
+    weapon_tree = _weapon_tree_payload(weapon_rows)
+
+    db.commit()
+
+    return templates.TemplateResponse(
+        "armory_detail.html",
+        {
+            "request": request,
+            "user": current_user,
+            "armory": armory,
+            "weapons": weapon_rows,
+            "weapon_tree": weapon_tree,
+            "can_edit": can_edit,
+            "can_delete": can_delete,
+            "parent_chain": list(reversed(parent_chain)),
+            "form_values": _weapon_form_values(None),
+            "error": error,
+            "selected_weapon_id": selected_weapon_id,
+        },
+    )
+
 
 def _weapon_form_values(weapon: models.Weapon | None) -> dict:
     if not weapon:
@@ -385,6 +442,18 @@ def _weapon_tree_payload(weapon_rows: Iterable[dict]) -> list[dict]:
     return roots
 
 
+def _weapon_chain_ids(db: Session, weapon: models.Weapon) -> list[int]:
+    ids: list[int] = [weapon.id]
+    children = (
+        db.execute(select(models.Weapon).where(models.Weapon.parent_id == weapon.id))
+        .scalars()
+        .all()
+    )
+    for child in children:
+        ids.extend(_weapon_chain_ids(db, child))
+    return ids
+
+
 def _delete_weapon_chain(db: Session, weapon: models.Weapon) -> None:
     children = db.execute(
         select(models.Weapon).where(models.Weapon.parent_id == weapon.id)
@@ -392,6 +461,68 @@ def _delete_weapon_chain(db: Session, weapon: models.Weapon) -> None:
     for child in children:
         _delete_weapon_chain(db, child)
     db.delete(weapon)
+
+
+def _cleanup_weapon_references(
+    db: Session, armory: models.Armory, weapon_ids: set[int]
+) -> None:
+    if not weapon_ids:
+        return
+
+    armory_ids = set(
+        db.execute(
+            select(models.Weapon.armory_id).where(models.Weapon.id.in_(weapon_ids))
+        ).scalars()
+    )
+    if not armory_ids:
+        armory_ids.add(armory.id)
+
+    db.execute(
+        delete(models.UnitWeapon).where(models.UnitWeapon.weapon_id.in_(weapon_ids))
+    )
+    db.execute(
+        delete(models.ArmySpell).where(models.ArmySpell.weapon_id.in_(weapon_ids))
+    )
+
+    roster_units = (
+        db.execute(
+            select(models.RosterUnit)
+            .join(models.Roster)
+            .join(models.Army)
+            .where(models.Army.armory_id.in_(armory_ids))
+        )
+        .scalars()
+        .all()
+    )
+
+    for roster_unit in roster_units:
+        payload_text = roster_unit.extra_weapons_json
+        if not payload_text:
+            continue
+        try:
+            payload = json.loads(payload_text)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        weapons_section = payload.get("weapons")
+        if not isinstance(weapons_section, dict):
+            continue
+        updated_section: dict[str, object] = {}
+        changed = False
+        for key, value in weapons_section.items():
+            try:
+                weapon_id = int(str(key))
+            except (TypeError, ValueError):
+                updated_section[str(key)] = value
+                continue
+            if weapon_id in weapon_ids:
+                changed = True
+                continue
+            updated_section[str(key)] = value
+        if changed or len(updated_section) != len(weapons_section):
+            payload["weapons"] = updated_section
+            roster_unit.extra_weapons_json = json.dumps(payload, ensure_ascii=False)
 
 
 def _parent_chain(armory: models.Armory) -> list[models.Armory]:
@@ -524,59 +655,21 @@ def view_armory(
     if armory.parent_id is not None:
         utils.ensure_armory_variant_sync(db, armory)
 
-    weapon_collection = _armory_weapons(db, armory)
-    weapons = list(weapon_collection.items)
-    weapon_tree = weapon_collection.payload
-    _refresh_costs(db, weapons)
-
     selected_weapon_id: int | None = None
     selected_weapon_param = request.query_params.get("selected_weapon")
     if selected_weapon_param:
         try:
-            candidate = int(selected_weapon_param)
+            selected_weapon_id = int(selected_weapon_param)
         except (TypeError, ValueError):
-            candidate = None
-        if candidate is not None and any(weapon.id == candidate for weapon in weapons):
-            selected_weapon_id = candidate
+            selected_weapon_id = None
 
-    parent_chain = _parent_chain(armory)
-    can_edit = current_user.is_admin or armory.owner_id == current_user.id
-    can_delete = can_edit and not armory.variants and not armory.armies
-
-    weapon_rows = []
-    for weapon in weapons:
-        overrides = {field: getattr(weapon, field) is not None for field in OVERRIDABLE_FIELDS}
-        cached_cost = weapon.effective_cached_cost
-        if cached_cost is None:
-            cached_cost = costs.weapon_cost(weapon)
-        weapon_rows.append(
-            {
-                "instance": weapon,
-                "overrides": overrides,
-                "cost": cached_cost,
-                "abilities": _weapon_tags_payload(weapon.effective_tags),
-            }
-        )
-
-    weapon_tree = _weapon_tree_payload(weapon_rows)
-
-    db.commit()
-
-    return templates.TemplateResponse(
-        "armory_detail.html",
-        {
-            "request": request,
-            "user": current_user,
-            "armory": armory,
-            "weapons": weapon_rows,
-            "weapon_tree": weapon_tree,
-            "can_edit": can_edit,
-            "can_delete": can_delete,
-            "parent_chain": list(reversed(parent_chain)),
-            "form_values": _weapon_form_values(None),
-            "error": None,
-            "selected_weapon_id": selected_weapon_id,
-        },
+    return _render_armory_detail(
+        request=request,
+        db=db,
+        armory=armory,
+        current_user=current_user,
+        error=None,
+        selected_weapon_id=selected_weapon_id,
     )
 
 
@@ -1174,12 +1267,44 @@ def update_weapon(
 def delete_weapon(
     armory_id: int,
     weapon_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
     armory = _get_armory(db, armory_id)
     _ensure_armory_edit_access(armory, current_user)
     weapon = _get_weapon(db, armory, weapon_id)
+
+    weapon_ids = set(_weapon_chain_ids(db, weapon))
+
+    default_units = (
+        db.execute(
+            select(models.Unit)
+            .join(models.Army)
+            .where(
+                models.Unit.default_weapon_id.in_(weapon_ids),
+                models.Army.armory_id == armory.id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if default_units:
+        unit_names = sorted({unit.name for unit in default_units})
+        error = (
+            "Nie można usunąć broni, jest ustawiona jako domyślna dla jednostek: "
+            + ", ".join(unit_names)
+        )
+        return _render_armory_detail(
+            request=request,
+            db=db,
+            armory=armory,
+            current_user=current_user,
+            error=error,
+            selected_weapon_id=weapon.id,
+        )
+
+    _cleanup_weapon_references(db, armory, weapon_ids)
     _delete_weapon_chain(db, weapon)
     db.commit()
     return RedirectResponse(url=f"/armories/{armory.id}", status_code=303)
