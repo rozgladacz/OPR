@@ -5772,6 +5772,62 @@ function renderEditors(precomputedWeaponMap = null) {
     toggleSectionVisibility(loadoutContainer, hasWeapons);
   }
 
+  function collectInitialRosterItems() {
+    const initialItems = Array.from(root.querySelectorAll('[data-roster-item]'));
+    initialItems.forEach((item) => {
+      registerRosterItem(item);
+    });
+    return initialItems;
+  }
+
+  function hydrateInitialLockPairs() {
+    const rawLockPairs = readLockPairDataset();
+    const initialPairs = parseLockPairs(rawLockPairs);
+    writeLockPairDataset(JSON.stringify(initialPairs));
+    const initialUnitPayloads = Array.from(rosterUnitDatasetRepo.values()).filter(
+      (value) => value && typeof value === 'object',
+    );
+    applyLockPairsFromServer({ lock_pairs: initialPairs, units: initialUnitPayloads });
+  }
+
+  function syncInitialRosterList(initialItems) {
+    if (!rosterListEl && initialItems.length) {
+      const inferredList = initialItems[0].closest('[data-roster-list]');
+      if (inferredList) {
+        rosterListEl = inferredList;
+      }
+    }
+    if (rosterListEl) {
+      updateMoveButtonStates(rosterListEl);
+    }
+  }
+
+  function selectInitialRosterItem() {
+    try {
+      const selectedId = root.dataset.selectedId || '';
+      let initialItem = null;
+      if (selectedId) {
+        initialItem = items.find(
+          (element) => element.getAttribute('data-roster-unit-id') === selectedId,
+        );
+      }
+      if (initialItem) {
+        selectItem(initialItem);
+        if (typeof initialItem.scrollIntoView === 'function') {
+          initialItem.scrollIntoView({ block: 'nearest' });
+        }
+      } else if (items.length) {
+        selectItem(items[0]);
+      } else if (editor && emptyState) {
+        editor.classList.add('d-none');
+        emptyState.classList.remove('d-none');
+      }
+    } catch (error) {
+      console.error('Nie udało się wybrać początkowego oddziału', error);
+      throw error;
+    }
+  }
+
   function selectItem(item, options = {}) {
     const { preserveAutoSave = false } = options;
     if (!preserveAutoSave && activeItem === item) {
@@ -5823,51 +5879,11 @@ function renderEditors(precomputedWeaponMap = null) {
     try {
       initializeUnitDatasetRepo();
       initializeMoveForms();
-      const initialItems = Array.from(root.querySelectorAll('[data-roster-item]'));
-      initialItems.forEach((item) => {
-        registerRosterItem(item);
-      });
-      const rawLockPairs = readLockPairDataset();
-      const initialPairs = parseLockPairs(rawLockPairs);
-      writeLockPairDataset(JSON.stringify(initialPairs));
-      const initialUnitPayloads = Array.from(rosterUnitDatasetRepo.values()).filter(
-        (value) => value && typeof value === 'object',
-      );
-      applyLockPairsFromServer({ lock_pairs: initialPairs, units: initialUnitPayloads });
+      const initialItems = collectInitialRosterItems();
+      hydrateInitialLockPairs();
       refreshRosterCostBadges();
-      if (!rosterListEl && initialItems.length) {
-        const inferredList = initialItems[0].closest('[data-roster-list]');
-        if (inferredList) {
-          rosterListEl = inferredList;
-        }
-      }
-      if (rosterListEl) {
-        updateMoveButtonStates(rosterListEl);
-      }
-
-      try {
-        const selectedId = root.dataset.selectedId || '';
-        let initialItem = null;
-        if (selectedId) {
-          initialItem = items.find(
-            (element) => element.getAttribute('data-roster-unit-id') === selectedId,
-          );
-        }
-        if (initialItem) {
-          selectItem(initialItem);
-          if (typeof initialItem.scrollIntoView === 'function') {
-            initialItem.scrollIntoView({ block: 'nearest' });
-          }
-        } else if (items.length) {
-          selectItem(items[0]);
-        } else if (editor && emptyState) {
-          editor.classList.add('d-none');
-          emptyState.classList.remove('d-none');
-        }
-      } catch (error) {
-        console.error('Nie udało się wybrać początkowego oddziału', error);
-        throw error;
-      }
+      syncInitialRosterList(initialItems);
+      selectInitialRosterItem();
     } catch (error) {
       resetRosterCaches();
       throw error;
