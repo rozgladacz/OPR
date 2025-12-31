@@ -450,6 +450,15 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
 
     synced_variants.add(armory.id)
 
+    disabled_parent_ids: set[int] = {
+        identifier
+        for identifier in db.execute(
+            select(models.ArmoryDisabledWeapon.weapon_id).where(
+                models.ArmoryDisabledWeapon.armory_id == armory.id
+            )
+        ).scalars()
+    }
+
     parent_weapon_ids = {
         weapon_id
         for weapon_id in db.execute(
@@ -469,7 +478,7 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
         if parent_id is not None
     }
 
-    missing_ids = parent_weapon_ids - existing_parent_ids
+    missing_ids = parent_weapon_ids - existing_parent_ids - disabled_parent_ids
 
     parent_weapons_map: dict[int, models.Weapon] = {}
     if missing_ids:
@@ -537,6 +546,11 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
     cleaned = False
     for weapon in variant_weapons:
         parent = weapon.parent
+
+        if weapon.parent_id in disabled_parent_ids:
+            db.delete(weapon)
+            cleaned = True
+            continue
 
         if weapon.parent_id is not None and parent is None:
             db.delete(weapon)

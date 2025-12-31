@@ -463,6 +463,31 @@ def _delete_weapon_chain(db: Session, weapon: models.Weapon) -> None:
     db.delete(weapon)
 
 
+def _disable_inherited_weapon(db: Session, armory: models.Armory, weapon: models.Weapon) -> None:
+    if not weapon.parent_id:
+        return
+
+    exists = (
+        db.execute(
+            select(models.ArmoryDisabledWeapon).where(
+                models.ArmoryDisabledWeapon.armory_id == armory.id,
+                models.ArmoryDisabledWeapon.weapon_id == weapon.parent_id,
+            )
+        )
+        .scalar_one_or_none()
+        is not None
+    )
+    if exists:
+        return
+
+    db.add(
+        models.ArmoryDisabledWeapon(
+            armory_id=armory.id,
+            weapon_id=weapon.parent_id,
+        )
+    )
+
+
 def _cleanup_weapon_references(
     db: Session, armory: models.Armory, weapon_ids: set[int]
 ) -> None:
@@ -1304,6 +1329,7 @@ def delete_weapon(
             selected_weapon_id=weapon.id,
         )
 
+    _disable_inherited_weapon(db, armory, weapon)
     _cleanup_weapon_references(db, armory, weapon_ids)
     _delete_weapon_chain(db, weapon)
     db.commit()
