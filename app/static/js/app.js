@@ -3787,6 +3787,7 @@ function initRosterEditor() {
   let rosterListEl = root.querySelector('[data-roster-list]');
   const items = [];
   const itemRegistry = new WeakSet();
+  const moveFormRegistry = new WeakSet();
   function ensureRosterList() {
     if (rosterListEl && rosterListEl.isConnected) {
       return rosterListEl;
@@ -3941,6 +3942,34 @@ function initRosterEditor() {
     });
   }
 
+  function registerMoveForm(form) {
+    if (!form || moveFormRegistry.has(form)) {
+      return;
+    }
+    moveFormRegistry.add(form);
+    let isSubmitting = false;
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (isSubmitting) {
+        return;
+      }
+      isSubmitting = true;
+      try {
+        await submitMoveRequest(form);
+        const entry = form.closest('[data-roster-entry]') || form.closest('.roster-unit-entry');
+        const listElement = (entry ? entry.closest('[data-roster-list]') : null) || rosterListEl;
+        if (listElement) {
+          updateMoveButtonStates(listElement);
+        }
+        if (activeItem && activeItem.isConnected) {
+          activeItem.classList.add('active');
+        }
+      } finally {
+        isSubmitting = false;
+      }
+    });
+  }
+
   function registerRosterItem(item) {
     if (!item || itemRegistry.has(item)) {
       return;
@@ -3967,6 +3996,7 @@ function initRosterEditor() {
         form.addEventListener('click', (event) => {
           event.stopPropagation();
         });
+        registerMoveForm(form);
       });
     }
     const listElement = item.closest('[data-roster-list]') || rosterListEl;
