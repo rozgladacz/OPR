@@ -9,7 +9,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select, update
@@ -181,6 +181,45 @@ def _ordered_roster_units(db: Session, roster: models.Roster) -> list[models.Ros
         .scalars()
         .all()
     )
+
+
+def _apply_roster_order(
+    roster_units: list[models.RosterUnit], order: Sequence[int | str]
+) -> bool:
+    """Apply a new roster order in-place.
+
+    Returns ``True`` when any position changed. Raises ``ValueError`` if the
+    provided ``order`` is invalid (missing IDs or duplicates).
+    """
+
+    id_map: dict[int, models.RosterUnit] = {
+        unit.id: unit for unit in roster_units if unit.id is not None
+    }
+    normalized: list[int] = []
+    seen: set[int] = set()
+
+    for value in order:
+        try:
+            unit_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if unit_id in seen:
+            continue
+        if unit_id not in id_map:
+            raise ValueError("Invalid roster unit ID")
+        seen.add(unit_id)
+        normalized.append(unit_id)
+
+    if len(normalized) != len(id_map):
+        raise ValueError("Order does not match roster units")
+
+    changed = False
+    for position, unit_id in enumerate(normalized):
+        unit = id_map[unit_id]
+        if unit.position != position:
+            changed = True
+        unit.position = position
+    return changed
 
 
 def _available_role_slugs(unit: models.Unit | None) -> set[str]:
@@ -818,6 +857,44 @@ def move_roster_unit(
         url=f"/rosters/{roster.id}?selected={roster_unit.id}",
         status_code=303,
     )
+
+
+@router.post("/{roster_id}/units/reorder")
+def reorder_roster_units(
+    roster_id: int,
+    payload: dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    roster = db.get(models.Roster, roster_id)
+    if not roster:
+        raise HTTPException(status_code=404)
+    _ensure_roster_edit_access(roster, current_user)
+
+    order = payload.get("order") if isinstance(payload, Mapping) else None
+    if not isinstance(order, Sequence):
+        raise HTTPException(status_code=400, detail="Nieprawidłowa kolejność")
+
+    roster_units = _ordered_roster_units(db, roster)
+    try:
+        changed = _apply_roster_order(roster_units, order)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Nieprawidłowa kolejność") from exc
+
+    if changed:
+        db.commit()
+    ordered_units = _ordered_roster_units(db, roster)
+    payload = {
+        "order": [
+            {
+                "id": unit.id,
+                "position": unit.position if unit.position is not None else index,
+            }
+            for index, unit in enumerate(ordered_units)
+            if unit.id is not None
+        ]
+    }
+    return JSONResponse(_json_safe(payload))
 
 
 @router.post("/{roster_id}/units/{roster_unit_id}/update")
