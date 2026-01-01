@@ -3849,6 +3849,13 @@ function initRosterEditor() {
     return item ? item.getAttribute('data-roster-unit-id') || '' : '';
   }
 
+  function getRosterOrder(listElement = null) {
+    const containers = getEntryContainers(listElement);
+    return containers
+      .map((entry) => getUnitIdFromEntry(entry))
+      .filter((unitId) => unitId);
+  }
+
   function reorderEntriesFromPayload(orderPayload) {
     const listElement = rosterListEl || ensureRosterList();
     if (!listElement || !Array.isArray(orderPayload)) {
@@ -3892,6 +3899,61 @@ function initRosterEditor() {
       .sort((a, b) => a.sortValue - b.sortValue || a.index - b.index);
     sorted.forEach(({ entry }) => listElement.appendChild(entry));
     return listElement;
+  }
+
+  async function persistRosterOrder(orderPayload = null) {
+    if (!isEditable || !rosterId) {
+      return;
+    }
+    let orderList = null;
+    if (Array.isArray(orderPayload)) {
+      orderList = orderPayload
+        .map((entry) => {
+          if (entry && typeof entry === 'object') {
+            return (
+              entry.id
+              ?? entry.roster_unit_id
+              ?? entry.rosterUnitId
+              ?? entry
+            );
+          }
+          return entry;
+        })
+        .filter((value) => value !== undefined && value !== null);
+    }
+    if (!Array.isArray(orderList) || orderList.length === 0) {
+      orderList = getRosterOrder();
+    }
+    if (!Array.isArray(orderList) || orderList.length === 0) {
+      return;
+    }
+    try {
+      const response = await fetch(`/rosters/${rosterId}/units/reorder`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ order: orderList }),
+      });
+      if (!response.ok) {
+        return;
+      }
+      const contentType = (response.headers.get('content-type') || '').toLowerCase();
+      if (!contentType.includes('application/json')) {
+        return;
+      }
+      const data = await response.json();
+      if (Array.isArray(data.order)) {
+        const listElement = reorderEntriesFromPayload(data.order);
+        if (listElement) {
+          updateMoveButtonStates(listElement);
+        }
+      }
+    } catch (error) {
+      console.warn('Nie udało się zapisać kolejności oddziałów', error);
+    }
   }
 
 
@@ -3984,6 +4046,10 @@ function initRosterEditor() {
     if (listElement) {
       updateMoveButtonStates(listElement);
     }
+    const currentOrder = Array.isArray(responseData && responseData.order)
+      ? responseData.order
+      : getRosterOrder(listElement);
+    persistRosterOrder(currentOrder);
     if (preserveSelection) {
       const preferredItem = preferredSelectionId
         ? root.querySelector(`[data-roster-item][data-roster-unit-id="${preferredSelectionId}"]`)
