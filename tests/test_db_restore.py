@@ -50,6 +50,24 @@ def _build_sqlite_db(path: Path, marker: str) -> None:
         conn.execute("INSERT INTO markers(label) VALUES (?)", (marker,))
 
 
+def _build_sqlite_db_wal(path: Path, marker: str) -> None:
+    with sqlite3.connect(path) as conn:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT)")
+        conn.execute("CREATE TABLE armies (id INTEGER PRIMARY KEY)")
+        conn.execute("CREATE TABLE rosters (id INTEGER PRIMARY KEY)")
+        conn.execute("CREATE TABLE units (id INTEGER PRIMARY KEY)")
+        conn.execute("CREATE TABLE weapons (id INTEGER PRIMARY KEY)")
+        conn.execute("CREATE TABLE markers (label TEXT)")
+        conn.execute("INSERT INTO markers(label) VALUES (?)", (marker,))
+        conn.commit()
+
+    wal_path = path.with_name(f"{path.name}-wal")
+    shm_path = path.with_name(f"{path.name}-shm")
+    assert wal_path.exists()
+    assert shm_path.exists()
+
+
 def test_restore_requires_admin() -> None:
     request = _build_request()
     non_admin = SimpleNamespace(username="user", is_admin=False)
@@ -104,5 +122,47 @@ def test_restore_replaces_database(monkeypatch, tmp_path) -> None:
     parsed = urlparse(response.headers["location"])
     query = parse_qs(parsed.query)
     assert query["status"] == ["restore-ok"]
+    with sqlite3.connect(target_path) as conn:
+        assert conn.execute("SELECT label FROM markers").fetchone()[0] == "new"
+
+
+def test_backup_copies_wal_sidecars(tmp_path) -> None:
+    source_path = tmp_path / "opr.db"
+    backup_path = tmp_path / "backup.db"
+    _build_sqlite_db_wal(source_path, "wal-marker")
+
+    db_restore._copy_sqlite_with_sidecars(source_path, backup_path)
+
+    with sqlite3.connect(backup_path) as conn:
+        assert conn.execute("SELECT label FROM markers").fetchone()[0] == "wal-marker"
+
+    wal_path = backup_path.with_name(f"{backup_path.name}-wal")
+    shm_path = backup_path.with_name(f"{backup_path.name}-shm")
+    assert wal_path.exists()
+    assert shm_path.exists()
+
+
+def test_restore_removes_old_sidecars(monkeypatch, tmp_path) -> None:
+    target_path = tmp_path / "opr.db"
+    replacement_path = tmp_path / "replacement.db"
+    _build_sqlite_db_wal(target_path, "old")
+    _build_sqlite_db(replacement_path, "new")
+
+    # Ensure leftover sidecars exist before restoration.
+    target_wal = target_path.with_name(f"{target_path.name}-wal")
+    target_shm = target_path.with_name(f"{target_path.name}-shm")
+    assert target_wal.exists()
+    assert target_shm.exists()
+
+    monkeypatch.setattr(db_restore, "resolve_sqlite_path", lambda: target_path)
+
+    with open(replacement_path, "rb") as fh:
+        upload = UploadFile(filename="replacement.db", file=fh)
+        asyncio.run(
+            users.restore_database(_build_request(), file=upload, current_user=SimpleNamespace(username="admin", is_admin=True))
+        )
+
+    assert not target_wal.exists()
+    assert not target_shm.exists()
     with sqlite3.connect(target_path) as conn:
         assert conn.execute("SELECT label FROM markers").fetchone()[0] == "new"
