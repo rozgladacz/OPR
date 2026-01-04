@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 from pathlib import Path
+import time
 from datetime import datetime
 from urllib.parse import quote_plus
 
@@ -22,10 +23,15 @@ router = APIRouter(prefix="/users", tags=["users"])
 templates = Jinja2Templates(directory="app/templates")
 
 def _cleanup_temp_file(path: Path) -> None:
-    try:
-        path.unlink(missing_ok=True)
-    except FileNotFoundError:
-        pass
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            path.unlink(missing_ok=True)
+            break
+        except FileNotFoundError:
+            break
+        except PermissionError:
+            time.sleep(0.1)
 
 
 def _require_admin(user: models.User) -> None:
