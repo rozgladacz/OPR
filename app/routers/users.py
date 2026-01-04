@@ -134,13 +134,12 @@ def download_backup(current_user: models.User = Depends(get_current_user())) -> 
         temp_path = Path(tmp.name)
 
     try:
-        with sqlite3.connect(db_path) as source_conn, sqlite3.connect(temp_path) as dest_conn:
-            source_conn.backup(dest_conn)
-    except sqlite3.Error as exc:
+        db_restore._copy_sqlite_with_sidecars(db_path, temp_path)
+    except db_restore.DBRestoreError as exc:
         _cleanup_temp_file(temp_path)
         raise HTTPException(
             status_code=500,
-            detail="Nie udało się utworzyć kopii zapasowej bazy danych.",
+            detail=str(exc),
         ) from exc
 
     timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")

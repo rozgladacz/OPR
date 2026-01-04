@@ -49,8 +49,9 @@ Dostęp do narzędzi backupu mają wyłącznie administratorzy:
 
 ## Dane przykładowe i testy
 
-- Repozytorium zawiera przykładową bazę SQLite w `data/opr.db`, która może zostać zastąpiona podczas pierwszego uruchomienia lub przywracania.
-- Scenariusze testowe rozpisek znajdują się w `tests/fixtures/rosters/`. Do uruchomienia testów wykorzystaj:
-  ```bash
-  pytest -q
-  ```
+Domyślne konto administratora zostanie utworzone przy pierwszym uruchomieniu (`admin`/`admin`).
+
+## Narzędzia developerskie
+
+- Testy: `pytest -q` (lub `make test`)
+- Uruchomienie serwera deweloperskiego: `uvicorn app.main:app --reload` (lub `make dev`)
