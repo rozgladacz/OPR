@@ -8,6 +8,6 @@ load_dotenv()
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 
-SECRET_KEY = os.getenv("SECRET_KEY", "change-me-please-very-secret-key")
+SECRET_KEY = os.getenv("SECRET_KEY", "jakis_dlugi_i_sekretny_klucz_po_polsku_dla_zmylki")
 DB_URL = os.getenv("DB_URL", "sqlite:///./data/opr.db")
-DEBUG = os.getenv("DEBUG", "true").lower() in {"1", "true", "yes"}
+DEBUG = os.getenv("DEBUG", "false").lower() in {"1", "true", "yes"}
