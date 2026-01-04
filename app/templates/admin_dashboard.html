@@ -23,9 +23,12 @@
   <div class="card-body">
     <h2 class="h5 card-title">Aktualizacja aplikacji</h2>
     <p class="card-text">Pobierz najnowsze zmiany z repozytorium i zaktualizuj środowisko.</p>
-    <form method="post" action="/admin/update" class="d-flex gap-2 align-items-center flex-wrap">
-      <button class="btn btn-primary" type="submit">Uruchom aktualizację</button>
-    </form>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <form method="post" action="/admin/update" class="d-flex">
+        <button class="btn btn-primary" type="submit">Uruchom aktualizację</button>
+      </form>
+      <a class="btn btn-outline-secondary" href="/users/backup">Pobierz bazę danych</a>
+    </div>
   </div>
 </div>
 {% endblock %}
