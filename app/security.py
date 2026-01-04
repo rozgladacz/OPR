@@ -32,7 +32,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def get_current_user(optional: bool = False):
+def get_current_user(optional: bool = False, *, close_session: bool = False):
     def dependency(
         request: Request, db: Session = Depends(get_db)
     ) -> Optional[models.User]:
@@ -48,6 +48,11 @@ def get_current_user(optional: bool = False):
             if optional:
                 return None
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+        if close_session:
+            db.expunge(user)
+            db.close()
+
         return user
 
     return dependency

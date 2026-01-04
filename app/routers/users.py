@@ -211,7 +211,7 @@ def delete_user(
 async def restore_database(
     request: Request,
     file: UploadFile = File(...),
-    current_user: models.User = Depends(get_current_user()),
+    current_user: models.User = Depends(get_current_user(close_session=True)),
 ) -> RedirectResponse:
     _require_admin(current_user)
 
