@@ -16,6 +16,8 @@ from ..db import SessionLocal, engine
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _REQUIRED_TABLES = {"users", "armies", "rosters", "units", "weapons"}
+_CLEANUP_RETRY_SECONDS = 5
+_CLEANUP_SLEEP_SECONDS = 0.1
 
 
 def _sqlite_sidecar_paths(db_path: Path) -> tuple[Path, Path]:
@@ -29,7 +31,7 @@ def _remove_sqlite_sidecars(db_path: Path) -> None:
     wal_path, shm_path = _sqlite_sidecar_paths(db_path)
     for sidecar in (wal_path, shm_path):
         with contextlib.suppress(FileNotFoundError):
-            deadline = time.monotonic() + 5
+            deadline = time.monotonic() + _CLEANUP_RETRY_SECONDS
             while True:
                 try:
                     sidecar.unlink()
@@ -37,7 +39,7 @@ def _remove_sqlite_sidecars(db_path: Path) -> None:
                 except PermissionError:
                     if time.monotonic() >= deadline:
                         raise
-                    time.sleep(0.1)
+                    time.sleep(_CLEANUP_SLEEP_SECONDS)
 
 
 def _checkpoint_sqlite(db_path: Path) -> None:
@@ -111,19 +113,42 @@ def _close_active_sessions() -> None:
     engine.dispose()
 
 
+def _cleanup_temp_files(paths: tuple[Path, ...]) -> None:
+    deadline = time.monotonic() + _CLEANUP_RETRY_SECONDS
+    while True:
+        try:
+            for path in paths:
+                path.unlink(missing_ok=True)
+            break
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(_CLEANUP_SLEEP_SECONDS)
+
+
 def _replace_sqlite_db(source: Path, target: Path) -> None:
     _close_active_sessions()
     _checkpoint_sqlite(source)
 
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + _CLEANUP_RETRY_SECONDS
+    replace_error: str | None = None
     while True:
         try:
             os.replace(source, target)
             break
         except PermissionError:
             if time.monotonic() >= deadline:
-                raise
-            time.sleep(0.1)
+                replace_error = (
+                    "Nie udało się podmienić pliku bazy danych, ponieważ jest używany przez inny proces."
+                )
+                break
+            time.sleep(_CLEANUP_SLEEP_SECONDS)
+
+    if replace_error is not None:
+        try:
+            _copy_sqlite_with_sidecars(source, target)
+        except Exception as exc:
+            raise DBRestoreError(replace_error) from exc
 
     _remove_sqlite_sidecars(target)
 
@@ -156,21 +181,10 @@ def restore_sqlite_database(
             sidecar.unlink(missing_ok=True)
 
         _replace_sqlite_db(temp_path, target_path)
+        _cleanup_temp_files((temp_path, wal_temp, shm_temp))
         return target_path
     except Exception as exc:
-        with contextlib.suppress(FileNotFoundError):
-            deadline = time.monotonic() + 5
-            while True:
-                try:
-                    temp_path.unlink(missing_ok=True)
-                    wal_temp.unlink(missing_ok=True)
-                    shm_temp.unlink(missing_ok=True)
-                    break
-                except PermissionError:
-                    if time.monotonic() >= deadline:
-                        raise
-                    time.sleep(0.1)
-
+        _cleanup_temp_files((temp_path, wal_temp, shm_temp))
         if isinstance(exc, DBRestoreError):
             raise
 

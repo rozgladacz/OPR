@@ -166,3 +166,36 @@ def test_restore_removes_old_sidecars(monkeypatch, tmp_path) -> None:
     assert not target_shm.exists()
     with sqlite3.connect(target_path) as conn:
         assert conn.execute("SELECT label FROM markers").fetchone()[0] == "new"
+
+
+def test_restore_handles_locked_destination(monkeypatch, tmp_path) -> None:
+    target_path = tmp_path / "opr.db"
+    replacement_path = tmp_path / "replacement.db"
+    _build_sqlite_db(target_path, "old")
+    _build_sqlite_db(replacement_path, "new")
+
+    # Ensure temp files are created under the temp directory to simplify cleanup.
+    monkeypatch.setattr(db_restore, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(db_restore, "resolve_sqlite_path", lambda: target_path)
+
+    def always_locked(source, target):
+        raise PermissionError("locked by tests")
+
+    monkeypatch.setattr(db_restore.os, "replace", always_locked)
+
+    with open(replacement_path, "rb") as fh:
+        upload = UploadFile(filename="replacement.db", file=fh)
+        response = asyncio.run(
+            users.restore_database(
+                _build_request(), file=upload, current_user=SimpleNamespace(username="admin", is_admin=True)
+            )
+        )
+
+    parsed = urlparse(response.headers["location"])
+    query = parse_qs(parsed.query)
+    assert query["status"] == ["restore-ok"]
+    with sqlite3.connect(target_path) as conn:
+        assert conn.execute("SELECT label FROM markers").fetchone()[0] == "new"
+
+    # Temporary restore files should be cleaned even when replacement required a fallback.
+    assert not any(tmp_path.glob("tmp*.db"))
