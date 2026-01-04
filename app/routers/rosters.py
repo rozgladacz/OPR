@@ -1081,7 +1081,6 @@ def update_roster_unit(
             selected_auras = _selected_ability_entries(
                 loadout_payload, aura_items, "aura"
             )
-            default_summary = _default_loadout_summary(target.unit)
             loadout_summary = _loadout_display_summary(
                 target, loadout_payload, payload["weapon_options"]
             )
@@ -1093,21 +1092,11 @@ def update_roster_unit(
                 "cached_cost": target.cached_cost,
                 "loadout_json": json.dumps(loadout_payload, ensure_ascii=False),
                 "loadout_summary": loadout_summary,
-                "default_summary": default_summary,
                 "base_cost_per_model": base_cost_per_model,
                 "classification": classification,
                 "selected_passive_items": selected_passives,
                 "selected_active_items": selected_actives,
                 "selected_aura_items": selected_auras,
-                "unit_cache_id": target.unit.id,
-                "selected_passives": passive_items,
-                "selected_actives": active_items,
-                "selected_auras": aura_items,
-                "weapon_options": payload["weapon_options"],
-                "passive_items": passive_items,
-                "active_items": active_items,
-                "aura_items": aura_items,
-                "loadout": loadout_payload,
                 "locked_pair_unit_ids": pair_partner_map.get(target.id, []),
             }
 
