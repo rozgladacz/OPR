@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from ..config import UPDATE_BRANCH, UPDATE_REPO_URL
 
@@ -16,7 +17,28 @@ class UpdateError(Exception):
 
 
 def _normalize_url(url: str) -> str:
-    return url.strip().rstrip("/")
+    """Return a comparable representation of Git URLs (ssh/https)."""
+    cleaned = url.strip().rstrip("/")
+    if not cleaned:
+        return ""
+
+    def _strip_git_suffix(path: str) -> str:
+        return path[:-4] if path.endswith(".git") else path
+
+    if cleaned.startswith("git@"):
+        # git@github.com:owner/repo(.git)
+        try:
+            _, host_and_path = cleaned.split("@", 1)
+            host, path = host_and_path.split(":", 1)
+        except ValueError:
+            return cleaned.lower()
+        return f"{host.lower()}/{_strip_git_suffix(path).lstrip('/').lower()}"
+
+    parsed = urlsplit(cleaned)
+    if parsed.scheme and parsed.hostname:
+        return f"{parsed.hostname.lower()}/{_strip_git_suffix(parsed.path).lstrip('/').lower()}"
+
+    return _strip_git_suffix(cleaned).lower()
 
 
 def _run_git_command(*args: str) -> str:
