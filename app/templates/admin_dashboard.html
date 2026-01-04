@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Panel administratora - OPR{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+  <div>
+    <h1 class="h3 mb-1">Panel administratora</h1>
+    <p class="text-muted mb-0">Zarządzanie aplikacją i zadaniami administracyjnymi.</p>
+  </div>
+</div>
+
+{% if message %}
+<div class="alert alert-success" role="alert">
+  {{ message }}
+</div>
+{% endif %}
+{% if error %}
+<div class="alert alert-danger" role="alert">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-body">
+    <h2 class="h5 card-title">Aktualizacja aplikacji</h2>
+    <p class="card-text">Pobierz najnowsze zmiany z repozytorium i zaktualizuj środowisko.</p>
+    <form method="post" action="/admin/update" class="d-flex gap-2 align-items-center flex-wrap">
+      <button class="btn btn-primary" type="submit">Uruchom aktualizację</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
