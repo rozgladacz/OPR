@@ -4338,11 +4338,30 @@ function initRosterEditor() {
     return text || null;
   }
 
+  function cloneLockPairCache(source) {
+    const clone = new Map();
+    if (!(source instanceof Map)) {
+      return clone;
+    }
+    source.forEach((partners, unitId) => {
+      if (!(partners instanceof Set)) {
+        return;
+      }
+      clone.set(unitId, new Set(partners));
+    });
+    return clone;
+  }
+
   function applyLockPairsFromServer(payload) {
     if (payload === undefined || payload === null) {
       return;
     }
-    const nextCache = new Map();
+    const payloadIsList = Array.isArray(payload) || typeof payload === 'string';
+    const hasLockPairListProp =
+      payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'lock_pairs');
+    const replaceCache = payloadIsList || hasLockPairListProp;
+
+    const nextCache = replaceCache ? new Map() : cloneLockPairCache(lockPairCache);
     let hasPayload = false;
 
     const ensureEntry = (unitId) => {
