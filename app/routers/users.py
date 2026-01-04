@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
 import sqlite3
 import tempfile
 from pathlib import Path
+from datetime import datetime
+from urllib.parse import quote_plus
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, update
@@ -15,32 +16,16 @@ from starlette.background import BackgroundTask
 from .. import models
 from ..db import get_db
 from ..security import get_current_user, hash_password
-from ..config import DB_URL
+from ..services import db_restore
 
 router = APIRouter(prefix="/users", tags=["users"])
 templates = Jinja2Templates(directory="app/templates")
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
 
 def _cleanup_temp_file(path: Path) -> None:
     try:
         path.unlink(missing_ok=True)
     except FileNotFoundError:
         pass
-
-
-def _resolve_sqlite_path() -> Path:
-    if not DB_URL.startswith("sqlite"):
-        raise HTTPException(
-            status_code=400,
-            detail="Kopia zapasowa jest dostępna tylko dla bazy danych SQLite.",
-        )
-    raw_path = DB_URL.split("///")[-1]
-    db_path = Path(raw_path).expanduser()
-    if not db_path.is_absolute():
-        db_path = (_PROJECT_ROOT / db_path).resolve()
-    return db_path
 
 
 def _require_admin(user: models.User) -> None:
@@ -94,9 +79,11 @@ def list_users(
 ):
     _require_admin(current_user)
     status_key = request.query_params.get("status")
+    detail = request.query_params.get("detail")
     message_map = {
         "password-changed": "Hasło użytkownika zostało zaktualizowane.",
         "deleted": "Użytkownik został usunięty.",
+        "restore-ok": detail or "Baza danych została przywrócona.",
     }
     message = message_map.get(status_key)
 
@@ -104,6 +91,7 @@ def list_users(
     error_map = {
         "self-delete": "Nie można usunąć własnego konta.",
         "missing-user": "Użytkownik nie istnieje.",
+        "restore-error": detail or "Przywracanie bazy danych nie powiodło się.",
     }
     error = error_map.get(error_key)
 
@@ -123,7 +111,13 @@ def list_users(
 @router.get("/backup")
 def download_backup(current_user: models.User = Depends(get_current_user())) -> FileResponse:
     _require_admin(current_user)
-    db_path = _resolve_sqlite_path()
+    try:
+        db_path = db_restore.resolve_sqlite_path()
+    except db_restore.DBRestoreError as exc:  # pragma: no cover - guarded by config
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
     if not db_path.exists():
         raise HTTPException(
             status_code=404,
@@ -206,3 +200,26 @@ def delete_user(
     db.delete(target_user)
     db.commit()
     return RedirectResponse(url="/users?status=deleted", status_code=303)
+
+
+@router.post("/restore")
+async def restore_database(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user()),
+) -> RedirectResponse:
+    _require_admin(current_user)
+
+    try:
+        await file.seek(0)
+        db_restore.restore_sqlite_database(file)
+    except db_restore.DBRestoreError as exc:
+        detail = quote_plus(str(exc))
+        return RedirectResponse(
+            url=f"/users?status=restore-error&detail={detail}",
+            status_code=303,
+        )
+    finally:
+        await file.close()
+
+    return RedirectResponse(url="/users?status=restore-ok", status_code=303)

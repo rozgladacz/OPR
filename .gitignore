@@ -1,2 +1,6 @@
-data/opr.db
-data/opr.db
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.bak

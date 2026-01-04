@@ -4338,11 +4338,30 @@ function initRosterEditor() {
     return text || null;
   }
 
+  function cloneLockPairCache(source) {
+    const clone = new Map();
+    if (!(source instanceof Map)) {
+      return clone;
+    }
+    source.forEach((partners, unitId) => {
+      if (!(partners instanceof Set)) {
+        return;
+      }
+      clone.set(unitId, new Set(partners));
+    });
+    return clone;
+  }
+
   function applyLockPairsFromServer(payload) {
     if (payload === undefined || payload === null) {
       return;
     }
-    const nextCache = new Map();
+    const payloadIsList = Array.isArray(payload) || typeof payload === 'string';
+    const hasLockPairListProp =
+      payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'lock_pairs');
+    const replaceCache = payloadIsList || hasLockPairListProp;
+
+    const nextCache = replaceCache ? new Map() : cloneLockPairCache(lockPairCache);
     let hasPayload = false;
 
     const ensureEntry = (unitId) => {
@@ -5364,6 +5383,18 @@ function initRosterEditor() {
         return;
       }
       const unitCacheId = resolveUnitCacheId(targetItem);
+      if (unitCacheId && !rosterUnitDatasetRepo.has(unitCacheId)) {
+        const hydratedDataset = {};
+        UNIT_DATASET_ATTRIBUTE_MAP.forEach((datasetKey, attribute) => {
+          if (datasetKey === 'default_summary') {
+            hydratedDataset[datasetKey] = targetItem.getAttribute(attribute) || '';
+            return;
+          }
+          hydratedDataset[datasetKey] = getParsedList(targetItem, attribute);
+        });
+        rosterUnitDatasetRepo.set(unitCacheId, hydratedDataset);
+        rosterUnitDatasetCache.delete(unitCacheId);
+      }
       if (unitCacheId) {
         const datasetUpdates = {};
         UNIT_DATASET_KEYS.forEach((key) => {
@@ -5428,16 +5459,28 @@ function initRosterEditor() {
       if (loadoutEl) {
         const defaultSummary =
           getUnitDatasetValue(unitCacheId || targetItem, 'default_summary', unitData.default_summary || '-') || '-';
-        const summary = unitData.loadout_summary || defaultSummary;
+        const summary =
+          unitData.loadout_summary !== undefined && unitData.loadout_summary !== null
+            ? unitData.loadout_summary
+            : defaultSummary;
         loadoutEl.textContent = `Uzbrojenie: ${summary || '-'}`;
       }
       if (Object.prototype.hasOwnProperty.call(unitData, 'classification')) {
         updateItemClassification(targetItem, unitData.classification || null);
       }
+      const nextPassiveItems = Object.prototype.hasOwnProperty.call(unitData, 'selected_passive_items')
+        ? unitData.selected_passive_items
+        : getParsedList(targetItem, 'data-selected-passives');
+      const nextActiveItems = Object.prototype.hasOwnProperty.call(unitData, 'selected_active_items')
+        ? unitData.selected_active_items
+        : getParsedList(targetItem, 'data-selected-actives');
+      const nextAuraItems = Object.prototype.hasOwnProperty.call(unitData, 'selected_aura_items')
+        ? unitData.selected_aura_items
+        : getParsedList(targetItem, 'data-selected-auras');
       updateItemAbilityBadges(targetItem, {
-        passives: unitData.selected_passive_items || [],
-        actives: unitData.selected_active_items || [],
-        auras: unitData.selected_aura_items || [],
+        passives: Array.isArray(nextPassiveItems) ? nextPassiveItems : [],
+        actives: Array.isArray(nextActiveItems) ? nextActiveItems : [],
+        auras: Array.isArray(nextAuraItems) ? nextAuraItems : [],
       });
       if (isActiveMatch) {
         syncEditorFromItem(targetItem, { preserveAutoSave: true });

@@ -943,19 +943,15 @@ def update_roster_unit(
 
     lock_pairs = (
         db.execute(
-            select(models.RosterUnitPair)
-            .where(
+            select(models.RosterUnitPair).where(
                 models.RosterUnitPair.roster_id == roster.id,
-                or_(
-                    models.RosterUnitPair.first_roster_unit_id == roster_unit.id,
-                    models.RosterUnitPair.second_roster_unit_id == roster_unit.id,
-                ),
             )
         )
         .scalars()
         .all()
     )
     pair_partner_map: dict[int, list[int]] = defaultdict(list)
+    target_pair_ids: set[int] = set()
     for pair in lock_pairs:
         first_id = pair.first_roster_unit_id
         second_id = pair.second_roster_unit_id
@@ -963,12 +959,12 @@ def update_roster_unit(
             continue
         pair_partner_map[first_id].append(second_id)
         pair_partner_map[second_id].append(first_id)
-    paired_unit_ids = {
-        pair.first_roster_unit_id for pair in lock_pairs if pair.first_roster_unit_id
-    } | {
-        pair.second_roster_unit_id for pair in lock_pairs if pair.second_roster_unit_id
-    }
-    paired_unit_ids.discard(roster_unit.id)
+        if first_id == roster_unit.id:
+            target_pair_ids.add(second_id)
+        elif second_id == roster_unit.id:
+            target_pair_ids.add(first_id)
+
+    paired_unit_ids = target_pair_ids
 
     paired_units: list[models.RosterUnit] = []
     if paired_unit_ids:
@@ -1081,7 +1077,6 @@ def update_roster_unit(
             selected_auras = _selected_ability_entries(
                 loadout_payload, aura_items, "aura"
             )
-            default_summary = _default_loadout_summary(target.unit)
             loadout_summary = _loadout_display_summary(
                 target, loadout_payload, payload["weapon_options"]
             )
@@ -1093,21 +1088,11 @@ def update_roster_unit(
                 "cached_cost": target.cached_cost,
                 "loadout_json": json.dumps(loadout_payload, ensure_ascii=False),
                 "loadout_summary": loadout_summary,
-                "default_summary": default_summary,
                 "base_cost_per_model": base_cost_per_model,
                 "classification": classification,
                 "selected_passive_items": selected_passives,
                 "selected_active_items": selected_actives,
                 "selected_aura_items": selected_auras,
-                "unit_cache_id": target.unit.id,
-                "selected_passives": passive_items,
-                "selected_actives": active_items,
-                "selected_auras": aura_items,
-                "weapon_options": payload["weapon_options"],
-                "passive_items": passive_items,
-                "active_items": active_items,
-                "aura_items": aura_items,
-                "loadout": loadout_payload,
                 "locked_pair_unit_ids": pair_partner_map.get(target.id, []),
             }
 
