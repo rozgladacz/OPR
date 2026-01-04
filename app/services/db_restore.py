@@ -18,6 +18,38 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _REQUIRED_TABLES = {"users", "armies", "rosters", "units", "weapons"}
 
 
+def _sqlite_sidecar_paths(db_path: Path) -> tuple[Path, Path]:
+    return (
+        db_path.with_name(f"{db_path.name}-wal"),
+        db_path.with_name(f"{db_path.name}-shm"),
+    )
+
+
+def _remove_sqlite_sidecars(db_path: Path) -> None:
+    wal_path, shm_path = _sqlite_sidecar_paths(db_path)
+    for sidecar in (wal_path, shm_path):
+        with contextlib.suppress(FileNotFoundError):
+            deadline = time.monotonic() + 5
+            while True:
+                try:
+                    sidecar.unlink()
+                    break
+                except PermissionError:
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.1)
+
+
+def _checkpoint_sqlite(db_path: Path) -> None:
+    try:
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except sqlite3.Error as exc:
+        raise DBRestoreError(
+            "Nie udało się spójnie przetworzyć dziennika WAL bazy danych."
+        ) from exc
+
+
 class DBRestoreError(Exception):
     """Raised when restoring the database fails."""
 
@@ -55,10 +87,45 @@ def _validate_sqlite_file(path: Path) -> None:
         raise DBRestoreError("Brakuje wymaganych tabel w bazie danych.")
 
 
+def _copy_sqlite_with_sidecars(source: Path, target: Path) -> None:
+    _checkpoint_sqlite(source)
+    sidecars = _sqlite_sidecar_paths(source)
+    target_sidecars = _sqlite_sidecar_paths(target)
+
+    try:
+        with sqlite3.connect(source) as source_conn, sqlite3.connect(target) as dest_conn:
+            source_conn.backup(dest_conn)
+    except sqlite3.Error as exc:
+        raise DBRestoreError(
+            "Nie udało się utworzyć kopii zapasowej bazy danych."
+        ) from exc
+
+    for source_sidecar, target_sidecar in zip(sidecars, target_sidecars):
+        if source_sidecar.exists():
+            shutil.copy2(source_sidecar, target_sidecar)
+
+
 def _close_active_sessions() -> None:
     with contextlib.suppress(Exception):
         close_all_sessions()
     engine.dispose()
+
+
+def _replace_sqlite_db(source: Path, target: Path) -> None:
+    _close_active_sessions()
+    _checkpoint_sqlite(source)
+
+    deadline = time.monotonic() + 5
+    while True:
+        try:
+            os.replace(source, target)
+            break
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.1)
+
+    _remove_sqlite_sidecars(target)
 
 
 def restore_sqlite_database(
@@ -74,6 +141,8 @@ def restore_sqlite_database(
     )
     os.close(fd)
     temp_path = Path(temp_name)
+    wal_temp = temp_path.with_name(f"{temp_path.name}-wal")
+    shm_temp = temp_path.with_name(f"{temp_path.name}-shm")
 
     try:
         upload_file.file.seek(0)
@@ -83,16 +152,10 @@ def restore_sqlite_database(
             os.fsync(buffer.fileno())
 
         _validate_sqlite_file(temp_path)
-        _close_active_sessions()
-        deadline = time.monotonic() + 5
-        while True:
-            try:
-                os.replace(temp_path, target_path)
-                break
-            except PermissionError:
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(0.1)
+        for sidecar in (wal_temp, shm_temp):
+            sidecar.unlink(missing_ok=True)
+
+        _replace_sqlite_db(temp_path, target_path)
         return target_path
     except Exception as exc:
         with contextlib.suppress(FileNotFoundError):
@@ -100,6 +163,8 @@ def restore_sqlite_database(
             while True:
                 try:
                     temp_path.unlink(missing_ok=True)
+                    wal_temp.unlink(missing_ok=True)
+                    shm_temp.unlink(missing_ok=True)
                     break
                 except PermissionError:
                     if time.monotonic() >= deadline:
