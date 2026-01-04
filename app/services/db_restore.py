@@ -5,6 +5,7 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import time
 from pathlib import Path
 
 from fastapi import UploadFile
@@ -83,11 +84,27 @@ def restore_sqlite_database(
 
         _validate_sqlite_file(temp_path)
         _close_active_sessions()
-        os.replace(temp_path, target_path)
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                os.replace(temp_path, target_path)
+                break
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.1)
         return target_path
     except Exception as exc:
         with contextlib.suppress(FileNotFoundError):
-            temp_path.unlink(missing_ok=True)
+            deadline = time.monotonic() + 5
+            while True:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                    break
+                except PermissionError:
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.1)
 
         if isinstance(exc, DBRestoreError):
             raise
