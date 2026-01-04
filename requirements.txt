@@ -8,3 +8,4 @@ passlib[bcrypt]
 reportlab
 openpyxl
 python-dotenv
+itsdangerous>=2.2.0

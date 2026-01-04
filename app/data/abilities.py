@@ -126,7 +126,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
     ),
     AbilityDefinition(
         slug="masywny",
-        name="Masywny",
+        name="Sekcje",
         type="passive",
         description=(
             "Cały oddział reprezentowany jest przez jeden model z wydzielonymi elementami, "
@@ -327,6 +327,25 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         type="passive",
         description=(
             "Gdy zostaniesz pokonany teren który zajmujesz do końca bitwy uznawany jest niebezpieczny i trudny oraz osłonę."
+        ),
+    ),
+    AbilityDefinition(
+        slug="roj",
+        name="Rój",
+        type="passive",
+        description=(
+            "Gdy ten odział jest celem, ignoruj zdolność Zabójczy na broni,"
+            "ale bronie z Rozprysk(X), są traktowane jakby miały również Zabójczy(x)."
+        ),
+    ),
+    AbilityDefinition(
+        slug="zwrot",
+        name="Zwrot",
+        type="passive",
+        description=(
+            "Rusza się o dodatkowe 2”, ale może się poruszać tylko do przodu, każdy obrót kosztuje 2”." "Jego usytuowanie wyznacza 4 nakładające się strefy, każda o kącie 180’: przód, tył, lewo, prawo."
+            "Jeżeli oddział który go atakuje jest cały w przedniej strefie, otrzymuje +1 do obrony."
+            "Co najmniej połowa jego broni musi być przypisana do strefy i może atakować tylko cele które w pełni się w niej znajdują. Pozostałe muszą atakować jeden oddział."
         ),
     ),
     # Active abilities
