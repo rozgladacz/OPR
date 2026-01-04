@@ -943,19 +943,15 @@ def update_roster_unit(
 
     lock_pairs = (
         db.execute(
-            select(models.RosterUnitPair)
-            .where(
+            select(models.RosterUnitPair).where(
                 models.RosterUnitPair.roster_id == roster.id,
-                or_(
-                    models.RosterUnitPair.first_roster_unit_id == roster_unit.id,
-                    models.RosterUnitPair.second_roster_unit_id == roster_unit.id,
-                ),
             )
         )
         .scalars()
         .all()
     )
     pair_partner_map: dict[int, list[int]] = defaultdict(list)
+    target_pair_ids: set[int] = set()
     for pair in lock_pairs:
         first_id = pair.first_roster_unit_id
         second_id = pair.second_roster_unit_id
@@ -963,12 +959,12 @@ def update_roster_unit(
             continue
         pair_partner_map[first_id].append(second_id)
         pair_partner_map[second_id].append(first_id)
-    paired_unit_ids = {
-        pair.first_roster_unit_id for pair in lock_pairs if pair.first_roster_unit_id
-    } | {
-        pair.second_roster_unit_id for pair in lock_pairs if pair.second_roster_unit_id
-    }
-    paired_unit_ids.discard(roster_unit.id)
+        if first_id == roster_unit.id:
+            target_pair_ids.add(second_id)
+        elif second_id == roster_unit.id:
+            target_pair_ids.add(first_id)
+
+    paired_unit_ids = target_pair_ids
 
     paired_units: list[models.RosterUnit] = []
     if paired_unit_ids:
