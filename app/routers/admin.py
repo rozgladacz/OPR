@@ -3,14 +3,14 @@ from __future__ import annotations
 import logging
 from urllib.parse import quote_plus
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from .. import models
 from ..security import get_current_user
-from ..services import updater
+from ..services import update_service, updater
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
@@ -86,6 +86,7 @@ def trigger_update(
 
 @router.post("/update-job")
 def trigger_update_job(
+    background_tasks: BackgroundTasks,
     payload: UpdatePayload | None = Body(default=None),
     current_user: models.User = Depends(current_user_dep),
 ) -> dict[str, str | None]:
@@ -95,14 +96,13 @@ def trigger_update_job(
         "Aktualizacja repozytorium (API) uruchomiona przez użytkownika %s",
         current_user.username,
     )
-    try:
-        message = updater.sync_repository_target(ref=payload.ref, tag=payload.tag)
-    except updater.UpdateError as exc:
-        logger.error(
-            "Aktualizacja repozytorium (API) nie powiodła się dla użytkownika %s: %s",
-            current_user.username,
-            exc,
-        )
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    status_payload = update_service.queue_update(
+        background_tasks, ref=payload.ref, tag=payload.tag
+    )
     target = payload.ref or (f"tag {payload.tag}" if payload.tag else None)
-    return {"status": "ok", "detail": message, "target": target}
+    return {
+        "status": status_payload.status,
+        "detail": status_payload.detail,
+        "target": target,
+        "task_id": status_payload.task_id,
+    }
