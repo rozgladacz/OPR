@@ -18,6 +18,7 @@ UPDATE_REPO_PATH = os.getenv("UPDATE_REPO_PATH", ".")
 UPDATE_REF = os.getenv("UPDATE_REF", "")
 UPDATE_DOCKERFILE = os.getenv("UPDATE_DOCKERFILE", "Dockerfile")
 UPDATE_COMPOSE_FILE = os.getenv("UPDATE_COMPOSE_FILE", "docker-compose.yml")
+UPDATE_WEBHOOK_TOKEN = os.getenv("UPDATE_WEBHOOK_TOKEN", "")
 
 
 def _load_json_list(env_key: str, default: list) -> list:

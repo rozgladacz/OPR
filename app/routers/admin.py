@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from uuid import uuid4
 from urllib.parse import quote_plus
 
@@ -9,7 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from .. import models
+from .. import config, models
 from ..security import get_current_user
 from ..services import update_service, updater
 
@@ -27,6 +28,15 @@ class UpdatePayload(BaseModel):
 def _require_admin(user: models.User) -> None:
     if not user.is_admin:
         raise HTTPException(status_code=403, detail="Brak uprawnień")
+
+
+def _require_webhook_token(request: Request) -> None:
+    expected_token = config.UPDATE_WEBHOOK_TOKEN
+    if not expected_token:
+        raise HTTPException(status_code=500, detail="Brak konfiguracji tokenu webhooka.")
+    provided_token = request.headers.get("x-webhook-token") or request.query_params.get("token")
+    if not provided_token or not secrets.compare_digest(provided_token, expected_token):
+        raise HTTPException(status_code=401, detail="Nieprawidłowy token webhooka.")
 
 
 def _status_messages(status_key: str | None, detail: str | None) -> tuple[str | None, str | None]:
@@ -150,5 +160,40 @@ def get_update_status(current_user: models.User = Depends(current_user_dep)) -> 
     _require_admin(current_user)
     return {
         "status": update_service.read_status(),
+        "logs": update_service.read_logs(limit=10),
+    }
+
+
+@router.post("/update/webhook")
+def trigger_update_webhook(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    payload: UpdatePayload | None = Body(default=None),
+) -> dict[str, str | None]:
+    _require_webhook_token(request)
+    payload = payload or UpdatePayload()
+    logger.info("Webhook uruchomił aktualizację repozytorium.")
+    status_payload = update_service.queue_update(
+        background_tasks, ref=payload.ref, tag=payload.tag
+    )
+    if status_payload.status == "blocked":
+        raise HTTPException(status_code=429, detail=status_payload.detail)
+    target = payload.ref or (f"tag {payload.tag}" if payload.tag else None)
+    return {
+        "status": status_payload.status,
+        "detail": status_payload.detail,
+        "target": target,
+        "task_id": status_payload.task_id,
+    }
+
+
+@router.get("/update/webhook-status")
+def get_update_webhook_status(request: Request, task_id: str | None = None) -> dict[str, object]:
+    _require_webhook_token(request)
+    status_payload = update_service.read_status()
+    if task_id and status_payload and status_payload.get("task_id") != task_id:
+        raise HTTPException(status_code=404, detail="Brak statusu dla podanego zadania.")
+    return {
+        "status": status_payload,
         "logs": update_service.read_logs(limit=10),
     }

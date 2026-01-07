@@ -13,6 +13,7 @@ Aplikacja korzysta z pliku `.env` (ładowanego przez `python-dotenv`) w katalogu
 - `UPDATE_REF` – opcjonalny ref (gałąź/tag/commit), do którego ma zostać zresetowane repozytorium; gdy pusty, używana jest wartość z `UPDATE_BRANCH`.
 - `UPDATE_DOCKERFILE` – ścieżka do Dockerfile używanego do budowy obrazu; domyślnie `Dockerfile`.
 - `UPDATE_COMPOSE_FILE` – ścieżka do pliku docker-compose wykorzystywanego do odświeżenia kontenera; domyślnie `docker-compose.yml`.
+- `UPDATE_WEBHOOK_TOKEN` – token wymagany przez webhook aktualizacji (`/admin/update/webhook`).
 
 Przykład `.env`:
 
@@ -24,6 +25,7 @@ UPDATE_REPO_PATH=.
 UPDATE_REF=main
 UPDATE_DOCKERFILE=Dockerfile
 UPDATE_COMPOSE_FILE=docker-compose.yml
+UPDATE_WEBHOOK_TOKEN=super_tajny_token
 ```
 
 ## Uruchomienie
@@ -63,3 +65,50 @@ Domyślne konto administratora zostanie utworzone przy pierwszym uruchomieniu (`
 
 - Testy: `pytest -q` (lub `make test`)
 - Uruchomienie serwera deweloperskiego: `uvicorn app.main:app --reload` (lub `make dev`)
+
+## Webhook aktualizacji i prosty skrypt bash
+
+Endpoint `POST /admin/update/webhook` uruchamia aktualizację repozytorium. Wymaga tokenu przekazanego w nagłówku `X-Webhook-Token` lub jako parametr `token` w query stringu. Status zadania można sprawdzać przez `GET /admin/update/webhook-status` z opcjonalnym `task_id`.
+
+Przykładowy skrypt do ręcznego uruchomienia aktualizacji i sprawdzenia statusu:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE_URL=${BASE_URL:-"http://127.0.0.1:8000"}
+WEBHOOK_TOKEN=${WEBHOOK_TOKEN:?Ustaw WEBHOOK_TOKEN}
+
+WEBHOOK_ENDPOINT="$BASE_URL/admin/update/webhook"
+STATUS_ENDPOINT="$BASE_URL/admin/update/webhook-status"
+
+response=$(curl -sS -X POST "$WEBHOOK_ENDPOINT" \\
+  -H "X-Webhook-Token: $WEBHOOK_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{}')
+
+task_id=$(python - <<'PY' <<<"$response"
+import json, sys
+print(json.load(sys.stdin)["task_id"])
+PY
+)
+
+echo "Uruchomiono zadanie: $task_id"
+
+while true; do
+  status_response=$(curl -sS "$STATUS_ENDPOINT?task_id=$task_id" \\
+    -H "X-Webhook-Token: $WEBHOOK_TOKEN")
+  status=$(python - <<'PY' <<<"$status_response"
+import json, sys
+payload = json.load(sys.stdin)
+status_payload = payload.get("status") or {}
+print(status_payload.get("status") or "")
+PY
+)
+  echo "Status: $status"
+  if [[ "$status" == "success" || "$status" == "error" || "$status" == "blocked" ]]; then
+    break
+  fi
+  sleep 5
+done
+```
