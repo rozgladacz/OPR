@@ -3624,7 +3624,42 @@ function computeTotalCost(
 
   const passiveList = Array.isArray(passiveItems) ? passiveItems : [];
   const passiveState = state && state.passive instanceof Map ? state.passive : new Map();
+  const basePassiveSet = new Set();
+  const selectedPassiveSet = new Set();
   if (passiveList.length) {
+    passiveList.forEach((item) => {
+      if (!item || !item.slug || item.is_army_rule) {
+        return;
+      }
+      const ident = passiveIdentifier(item.slug);
+      if (!ident) {
+        return;
+      }
+      const defaultValue = Number(item.default_count ?? (item.is_default ? 1 : 0));
+      const baseFlag = Number.isFinite(defaultValue) && defaultValue > 0 ? 1 : 0;
+      const storedValue = Number(passiveState.get(String(item.slug)));
+      const selectedFlag = Number.isFinite(storedValue) && storedValue > 0 ? 1 : 0;
+      if (baseFlag) {
+        basePassiveSet.add(ident);
+      }
+      if (selectedFlag) {
+        selectedPassiveSet.add(ident);
+      }
+    });
+  }
+  if (passiveList.length) {
+    const isOdwodyBlocked = (activeSet) =>
+      activeSet.has('rezerwa') || activeSet.has('zwiadowca') || activeSet.has('zasadzka');
+    const effectivePassiveCost = (item, activeSet, costValue) => {
+      const ident = passiveIdentifier(item.slug);
+      if (!ident || !Number.isFinite(costValue)) {
+        return 0;
+      }
+      if (ident === 'odwody' && isOdwodyBlocked(activeSet)) {
+        return 0;
+      }
+      return costValue;
+    };
     passiveList.forEach((item) => {
       if (!item || !item.slug || item.is_army_rule) {
         return;
@@ -3634,10 +3669,6 @@ function computeTotalCost(
       const baseFlag = Number.isFinite(defaultValue) && defaultValue > 0 ? 1 : 0;
       const storedValue = Number(passiveState.get(key));
       const selectedFlag = Number.isFinite(storedValue) && storedValue > 0 ? 1 : 0;
-      const diff = selectedFlag - baseFlag;
-      if (diff === 0) {
-        return;
-      }
       let costValue = passiveCostMap.get(key);
       if (!Number.isFinite(costValue)) {
         costValue = Number(item.cost);
@@ -3645,7 +3676,15 @@ function computeTotalCost(
       if (!Number.isFinite(costValue) || costValue === 0) {
         return;
       }
-      total += costValue * diff * count;
+      const baseCost = baseFlag ? effectivePassiveCost(item, basePassiveSet, costValue) : 0;
+      const selectedCost = selectedFlag
+        ? effectivePassiveCost(item, selectedPassiveSet, costValue)
+        : 0;
+      const diff = selectedCost - baseCost;
+      if (diff === 0) {
+        return;
+      }
+      total += diff * count;
     });
   }
 
