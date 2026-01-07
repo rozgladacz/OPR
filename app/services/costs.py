@@ -999,7 +999,7 @@ def _weapon_cost(
         elif norm in {"niebezposredni", "indirect"}:
             mult *= 1.2
         elif norm in {"zuzywalny", "limited"}:
-            mult *= 0.5
+            mult *= 0.4
         elif norm in {"precyzyjny", "precise"}:
             mult *= 1.5
         elif norm in {"niezawodny", "niezawodna", "reliable"}:
@@ -1024,14 +1024,8 @@ def _weapon_cost(
     chance = max(chance - q, 1.0)
     cost = attacks * 2.0 * range_mod * chance * ap_mod * mult
 
-    # Overcharge is applied exactly once per component (ranged or melee). For
-    # Assault weapons we compute each component separately and apply the 1.4x
-    # multiplier to each path independently instead of stacking.
-    if overcharge:
-        cost *= 1.4
-
     if assault and allow_assault_extra and range_value != 0:
-        cost += _weapon_cost(
+        melee_part_cost = _weapon_cost(
             quality,
             0,
             attacks,
@@ -1040,6 +1034,15 @@ def _weapon_cost(
             unit_traits,
             allow_assault_extra=False,
         )
+        if overcharge:
+            if cost >= melee_part_cost:
+                cost *= 1.4
+            else:
+                melee_part_cost *= 1.4
+        cost += melee_part_cost
+    elif not assault:
+        cost *= 1.4
+        
     return cost
 
 
