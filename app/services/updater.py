@@ -83,14 +83,30 @@ def _validate_repository() -> str:
 
 
 def sync_repository() -> str:
-    origin_url = _validate_repository()
+    return sync_repository_target()
+
+
+def _resolve_target(ref: str | None, tag: str | None) -> tuple[str, str]:
+    if ref and tag:
+        raise UpdateError("Wskaż tylko ref lub tag do aktualizacji.")
+    if ref:
+        return ref, ref
+    if tag:
+        return f"refs/tags/{tag}", f"tag {tag}"
+
     branch = _determine_branch()
+    return f"origin/{branch}", f"origin/{branch}"
+
+
+def sync_repository_target(ref: str | None = None, tag: str | None = None) -> str:
+    origin_url = _validate_repository()
+    target_ref, target_label = _resolve_target(ref, tag)
 
     logger.info(
-        "Rozpoczynam aktualizację repozytorium %s do gałęzi origin/%s", origin_url, branch
+        "Rozpoczynam aktualizację repozytorium %s do %s", origin_url, target_label
     )
-    _run_git_command("fetch", "--all", "--prune")
-    _run_git_command("reset", "--hard", f"origin/{branch}")
-    logger.info("Repozytorium zostało zresetowane do origin/%s", branch)
+    _run_git_command("fetch", "--all", "--tags", "--prune")
+    _run_git_command("reset", "--hard", target_ref)
+    logger.info("Repozytorium zostało zresetowane do %s", target_label)
 
-    return f"Repozytorium zaktualizowane do origin/{branch}."
+    return f"Repozytorium zaktualizowane do {target_label}."

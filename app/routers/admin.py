@@ -3,18 +3,24 @@ from __future__ import annotations
 import logging
 from urllib.parse import quote_plus
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from .. import models
 from ..security import get_current_user
-from ..services import updater
+from ..services import update_service, updater
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory="app/templates")
 current_user_dep = get_current_user()
+
+
+class UpdatePayload(BaseModel):
+    ref: str | None = None
+    tag: str | None = None
 
 
 def _require_admin(user: models.User) -> None:
@@ -76,3 +82,27 @@ def trigger_update(
     )
     redirect_url = f"/admin?status=update-ok&detail={quote_plus(message)}"
     return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/update-job")
+def trigger_update_job(
+    background_tasks: BackgroundTasks,
+    payload: UpdatePayload | None = Body(default=None),
+    current_user: models.User = Depends(current_user_dep),
+) -> dict[str, str | None]:
+    _require_admin(current_user)
+    payload = payload or UpdatePayload()
+    logger.info(
+        "Aktualizacja repozytorium (API) uruchomiona przez użytkownika %s",
+        current_user.username,
+    )
+    status_payload = update_service.queue_update(
+        background_tasks, ref=payload.ref, tag=payload.tag
+    )
+    target = payload.ref or (f"tag {payload.tag}" if payload.tag else None)
+    return {
+        "status": status_payload.status,
+        "detail": status_payload.detail,
+        "target": target,
+        "task_id": status_payload.task_id,
+    }

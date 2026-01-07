@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -13,3 +14,19 @@ DB_URL = os.getenv("DB_URL", "sqlite:///./data/opr.db")
 DEBUG = os.getenv("DEBUG", "false").lower() in {"1", "true", "yes"}
 UPDATE_REPO_URL = os.getenv("UPDATE_REPO_URL", "https://github.com/rozgladacz/OPR")
 UPDATE_BRANCH = os.getenv("UPDATE_BRANCH", "main")
+
+
+def _load_json_list(env_key: str, default: list) -> list:
+    raw_value = os.getenv(env_key)
+    if not raw_value:
+        return default
+    try:
+        parsed = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return default
+    return parsed if isinstance(parsed, list) else default
+
+
+COMMAND_RUNNER_ALLOWED_COMMANDS = _load_json_list("COMMAND_RUNNER_ALLOWED_COMMANDS", [])
+COMMAND_RUNNER_SEQUENCE = _load_json_list("COMMAND_RUNNER_SEQUENCE", [])
+COMMAND_RUNNER_WORKDIR = Path(os.getenv("COMMAND_RUNNER_WORKDIR", "."))
