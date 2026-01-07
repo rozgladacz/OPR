@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from uuid import uuid4
 from urllib.parse import quote_plus
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request, status
@@ -62,6 +63,13 @@ def trigger_update(
     request: Request, current_user: models.User = Depends(current_user_dep)
 ) -> RedirectResponse:
     _require_admin(current_user)
+    task_id = uuid4().hex
+    update_service.set_status(
+        task_id=task_id,
+        status="started",
+        detail="Rozpoczęto aktualizację repozytorium.",
+        progress=0,
+    )
     logger.info(
         "Aktualizacja repozytorium uruchomiona przez użytkownika %s", current_user.username
     )
@@ -73,12 +81,24 @@ def trigger_update(
             current_user.username,
             exc,
         )
+        update_service.set_status(
+            task_id=task_id,
+            status="error",
+            detail="Aktualizacja repozytorium nie powiodła się.",
+            error=str(exc),
+        )
         redirect_url = f"/admin?status=update-error&detail={quote_plus(str(exc))}"
         return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
 
     logger.info(
         "Aktualizacja repozytorium zakończona powodzeniem dla użytkownika %s",
         current_user.username,
+    )
+    update_service.set_status(
+        task_id=task_id,
+        status="success",
+        detail=message,
+        progress=100,
     )
     redirect_url = f"/admin?status=update-ok&detail={quote_plus(message)}"
     return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
@@ -105,4 +125,13 @@ def trigger_update_job(
         "detail": status_payload.detail,
         "target": target,
         "task_id": status_payload.task_id,
+    }
+
+
+@router.get("/update-status")
+def get_update_status(current_user: models.User = Depends(current_user_dep)) -> dict[str, object]:
+    _require_admin(current_user)
+    return {
+        "status": update_service.read_status(),
+        "logs": update_service.read_logs(limit=10),
     }
