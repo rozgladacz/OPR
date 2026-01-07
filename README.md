@@ -9,6 +9,10 @@ Aplikacja korzysta z pliku `.env` (ładowanego przez `python-dotenv`) w katalogu
 - `SECRET_KEY` – klucz używany przez `SessionMiddleware` do podpisywania ciasteczek; w środowisku produkcyjnym ustaw unikalną, długą wartość.
 - `DB_URL` – adres bazy danych zgodny z SQLAlchemy, domyślnie `sqlite:///./data/opr.db`.
 - `DEBUG` – flaga (np. `true`/`false`, `1`/`0`) włączająca tryb debugowania.
+- `UPDATE_REPO_PATH` – ścieżka do repozytorium aktualizowanego przez panel admina; domyślnie `.`.
+- `UPDATE_REF` – opcjonalny ref (gałąź/tag/commit), do którego ma zostać zresetowane repozytorium; gdy pusty, używana jest wartość z `UPDATE_BRANCH`.
+- `UPDATE_DOCKERFILE` – ścieżka do Dockerfile używanego do budowy obrazu; domyślnie `Dockerfile`.
+- `UPDATE_COMPOSE_FILE` – ścieżka do pliku docker-compose wykorzystywanego do odświeżenia kontenera; domyślnie `docker-compose.yml`.
 
 Przykład `.env`:
 
@@ -16,6 +20,10 @@ Przykład `.env`:
 SECRET_KEY=zmien_to_na_bezpieczny_klucz
 DB_URL=sqlite:///./data/opr.db
 DEBUG=false
+UPDATE_REPO_PATH=.
+UPDATE_REF=main
+UPDATE_DOCKERFILE=Dockerfile
+UPDATE_COMPOSE_FILE=docker-compose.yml
 ```
 
 ## Uruchomienie
