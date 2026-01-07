@@ -64,44 +64,59 @@ def trigger_update(
 ) -> RedirectResponse:
     _require_admin(current_user)
     task_id = uuid4().hex
-    update_service.set_status(
-        task_id=task_id,
-        status="started",
-        detail="Rozpoczęto aktualizację repozytorium.",
-        progress=0,
-    )
-    logger.info(
-        "Aktualizacja repozytorium uruchomiona przez użytkownika %s", current_user.username
-    )
     try:
-        message = updater.sync_repository()
-    except updater.UpdateError as exc:
-        logger.error(
-            "Aktualizacja repozytorium nie powiodła się dla użytkownika %s: %s",
-            current_user.username,
-            exc,
-        )
+        update_service.claim_update_slot(task_id)
+    except update_service.UpdateBlockedError as exc:
         update_service.set_status(
             task_id=task_id,
-            status="error",
-            detail="Aktualizacja repozytorium nie powiodła się.",
-            error=str(exc),
+            status="blocked",
+            detail=str(exc),
+            progress=0,
         )
         redirect_url = f"/admin?status=update-error&detail={quote_plus(str(exc))}"
         return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+    try:
+        update_service.set_status(
+            task_id=task_id,
+            status="started",
+            detail="Rozpoczęto aktualizację repozytorium.",
+            progress=0,
+        )
+        logger.info(
+            "Aktualizacja repozytorium uruchomiona przez użytkownika %s",
+            current_user.username,
+        )
+        try:
+            message = updater.sync_repository()
+        except updater.UpdateError as exc:
+            logger.error(
+                "Aktualizacja repozytorium nie powiodła się dla użytkownika %s: %s",
+                current_user.username,
+                exc,
+            )
+            update_service.set_status(
+                task_id=task_id,
+                status="error",
+                detail="Aktualizacja repozytorium nie powiodła się.",
+                error=str(exc),
+            )
+            redirect_url = f"/admin?status=update-error&detail={quote_plus(str(exc))}"
+            return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
 
-    logger.info(
-        "Aktualizacja repozytorium zakończona powodzeniem dla użytkownika %s",
-        current_user.username,
-    )
-    update_service.set_status(
-        task_id=task_id,
-        status="success",
-        detail=message,
-        progress=100,
-    )
-    redirect_url = f"/admin?status=update-ok&detail={quote_plus(message)}"
-    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+        logger.info(
+            "Aktualizacja repozytorium zakończona powodzeniem dla użytkownika %s",
+            current_user.username,
+        )
+        update_service.set_status(
+            task_id=task_id,
+            status="success",
+            detail=message,
+            progress=100,
+        )
+        redirect_url = f"/admin?status=update-ok&detail={quote_plus(message)}"
+        return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+    finally:
+        update_service.release_update_slot()
 
 
 @router.post("/update-job")
@@ -119,6 +134,8 @@ def trigger_update_job(
     status_payload = update_service.queue_update(
         background_tasks, ref=payload.ref, tag=payload.tag
     )
+    if status_payload.status == "blocked":
+        raise HTTPException(status_code=429, detail=status_payload.detail)
     target = payload.ref or (f"tag {payload.tag}" if payload.tag else None)
     return {
         "status": status_payload.status,

@@ -28,8 +28,15 @@
           Pobierz najnowsze zmiany z repozytorium i zaktualizuj środowisko.
         </p>
       </div>
-      <form method="post" action="/admin/update" class="d-inline">
-        <button class="btn btn-primary" type="submit">Uruchom aktualizację</button>
+      <form method="post" action="/admin/update" class="d-inline" id="update-form">
+        <button
+          class="btn btn-primary"
+          type="button"
+          data-bs-toggle="modal"
+          data-bs-target="#confirmUpdateModal"
+        >
+          Uruchom aktualizację
+        </button>
       </form>
     </div>
     <div class="mt-3">
@@ -41,6 +48,33 @@
       <h3 class="h6 mb-2">Ostatnie logi</h3>
       <div class="border rounded bg-light p-2" style="max-height: 220px; overflow-y: auto;">
         <ul class="list-unstyled mb-0" id="update-logs"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div
+  class="modal fade"
+  id="confirmUpdateModal"
+  tabindex="-1"
+  aria-labelledby="confirmUpdateModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="confirmUpdateModalLabel">Potwierdź aktualizację</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zamknij"></button>
+      </div>
+      <div class="modal-body">
+        Czy na pewno chcesz uruchomić aktualizację aplikacji? Proces może potrwać kilka minut i
+        spowodować chwilowe przerwy w działaniu systemu.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Anuluj</button>
+        <button type="button" class="btn btn-primary" id="confirm-update-button">
+          Tak, uruchom
+        </button>
       </div>
     </div>
   </div>
@@ -78,6 +112,14 @@
   const updateStatusEl = document.getElementById("update-status");
   const updateUpdatedAtEl = document.getElementById("update-updated-at");
   const updateLogsEl = document.getElementById("update-logs");
+  const updateFormEl = document.getElementById("update-form");
+  const confirmUpdateButton = document.getElementById("confirm-update-button");
+
+  if (confirmUpdateButton && updateFormEl) {
+    confirmUpdateButton.addEventListener("click", () => {
+      updateFormEl.submit();
+    });
+  }
 
   const formatStatus = (status) => {
     if (!status) {
