@@ -21,8 +21,11 @@ _STATUS_FILE = DATA_DIR / "update_status.json"
 _LOG_FILE = DATA_DIR / "update_logs.jsonl"
 _LOCK_FILE = DATA_DIR / "update.lock"
 _LAST_RUN_FILE = DATA_DIR / "update_last_run.json"
+_STATE_FILE = DATA_DIR / "update_state.json"
+_LAST_STATE_FILE = DATA_DIR / "update_last_state.json"
 _RATE_LIMIT = timedelta(minutes=5)
 _LOCK_STALE_AFTER = timedelta(hours=1)
+_MAX_STATE_LOG_ENTRIES = 50
 
 
 class UpdateBlockedError(RuntimeError):
@@ -90,6 +93,7 @@ def _write_status(status: UpdateStatus) -> None:
     temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     temp_path.replace(_STATUS_FILE)
     _append_log(status)
+    _append_state(status)
 
 
 def _append_log(status: UpdateStatus) -> None:
@@ -104,6 +108,58 @@ def _append_log(status: UpdateStatus) -> None:
     _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with _LOG_FILE.open("a", encoding="utf-8") as log_file:
         log_file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _read_state(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        logger.warning("Nie udało się odczytać stanu aktualizacji z %s", path)
+        return None
+
+
+def _write_state(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_suffix(".tmp")
+    temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp_path.replace(path)
+
+
+def _append_state(status: UpdateStatus) -> None:
+    now_iso = _now_iso()
+    state = _read_state(_STATE_FILE) or {
+        "start": None,
+        "stop": None,
+        "status": "idle",
+        "log": [],
+    }
+    message = status.detail or status.error or status.status
+    entry = {
+        "timestamp": now_iso,
+        "status": status.status,
+        "message": message,
+    }
+    if status.error:
+        entry["error"] = status.error
+    log_entries = list(state.get("log") or [])
+    log_entries.append(entry)
+    state["log"] = log_entries[-_MAX_STATE_LOG_ENTRIES:]
+    if status.status == "queued":
+        state["start"] = None
+        state["stop"] = None
+    elif status.status == "started":
+        state["start"] = now_iso
+        state["stop"] = None
+    elif status.status in {"success", "error", "blocked"}:
+        if status.status == "blocked":
+            state["start"] = None
+        state["stop"] = now_iso
+    state["status"] = status.status
+    _write_state(_STATE_FILE, state)
+    if status.status in {"success", "error", "blocked"}:
+        _write_state(_LAST_STATE_FILE, state)
 
 
 def _read_last_run() -> datetime | None:
@@ -193,6 +249,14 @@ def read_logs(limit: int = 10) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
     return logs
+
+
+def read_current_state() -> dict[str, Any] | None:
+    return _read_state(_STATE_FILE)
+
+
+def read_last_state() -> dict[str, Any] | None:
+    return _read_state(_LAST_STATE_FILE)
 
 
 def claim_update_slot(task_id: str) -> None:
