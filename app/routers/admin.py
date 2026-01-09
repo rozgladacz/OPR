@@ -155,6 +155,30 @@ def trigger_update_job(
     }
 
 
+@router.post("/update-start")
+def trigger_update_start(
+    background_tasks: BackgroundTasks,
+    payload: UpdatePayload | None = Body(default=None),
+    current_user: models.User = Depends(current_user_dep),
+) -> dict[str, str | None]:
+    _require_admin(current_user)
+    payload = payload or UpdatePayload()
+    logger.info(
+        "Aktualizacja repozytorium (API) uruchomiona przez użytkownika %s",
+        current_user.username,
+    )
+    status_payload = update_service.queue_update(
+        background_tasks, ref=payload.ref, tag=payload.tag
+    )
+    target = payload.ref or (f"tag {payload.tag}" if payload.tag else None)
+    return {
+        "status": status_payload.status,
+        "detail": status_payload.detail,
+        "target": target,
+        "task_id": status_payload.task_id,
+    }
+
+
 @router.get("/update-status")
 def get_update_status(current_user: models.User = Depends(current_user_dep)) -> dict[str, object]:
     _require_admin(current_user)
