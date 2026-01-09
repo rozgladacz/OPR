@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -11,7 +12,7 @@ from uuid import uuid4
 
 from fastapi import BackgroundTasks
 
-from ..config import DATA_DIR
+from ..config import DATA_DIR, UPDATE_COMPOSE_FILE, UPDATE_REPO_PATH, UPDATE_SERVICE_NAME
 from . import updater
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,16 @@ class UpdateInProgressError(UpdateBlockedError):
 
 class UpdateRateLimitError(UpdateBlockedError):
     """Raised when updates are triggered too frequently."""
+
+
+class UpdateServiceError(RuntimeError):
+    """Raised when the update service sequence fails."""
+
+    def __init__(self, message: str, *, label: str, output: str, progress: int) -> None:
+        super().__init__(message)
+        self.label = label
+        self.output = output
+        self.progress = progress
 
 
 @dataclass(frozen=True)
@@ -217,6 +228,127 @@ def set_status(
     )
     _write_status(payload)
     return payload
+
+
+def _resolve_update_repo_path() -> Path:
+    repo_path = Path(UPDATE_REPO_PATH)
+    if repo_path.is_absolute():
+        return repo_path
+    project_root = Path(__file__).resolve().parents[2]
+    return project_root / repo_path
+
+
+def _format_command_output(stdout: str, stderr: str) -> str:
+    parts: list[str] = []
+    if stdout:
+        parts.append(f"stdout:\n{stdout}")
+    if stderr:
+        parts.append(f"stderr:\n{stderr}")
+    return "\n".join(parts).strip() or "Brak danych wyjściowych."
+
+
+def _run_update_command(task_id: str, label: str, command: list[str], progress: int) -> None:
+    workdir = _resolve_update_repo_path()
+    result = subprocess.run(
+        command,
+        cwd=workdir,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    output = _format_command_output(result.stdout.strip(), result.stderr.strip())
+    detail = f"{label}\n{output}"
+    if result.returncode != 0:
+        raise UpdateServiceError(
+            f"Polecenie zakończone niepowodzeniem ({' '.join(command)}).",
+            label=label,
+            output=output,
+            progress=progress,
+        )
+    set_status(
+        task_id=task_id,
+        status="progress",
+        detail=detail,
+        progress=progress,
+    )
+
+
+def run_update_service_sequence(task_id: str) -> None:
+    if not UPDATE_SERVICE_NAME:
+        set_status(
+            task_id=task_id,
+            status="error",
+            detail="Brak skonfigurowanej nazwy usługi (UPDATE_SERVICE_NAME).",
+            error="UPDATE_SERVICE_NAME nie został ustawiony.",
+            progress=0,
+        )
+        return
+
+    try:
+        set_status(
+            task_id=task_id,
+            status="started",
+            detail="Rozpoczęto aktualizację usługi.",
+            progress=0,
+        )
+
+        _run_update_command(
+            task_id,
+            "Wykonywanie: git pull",
+            ["git", "pull"],
+            20,
+        )
+        _run_update_command(
+            task_id,
+            "Wykonywanie: docker compose build",
+            [
+                "docker",
+                "compose",
+                "-f",
+                UPDATE_COMPOSE_FILE,
+                "build",
+                UPDATE_SERVICE_NAME,
+            ],
+            60,
+        )
+        _run_update_command(
+            task_id,
+            "Wykonywanie: docker compose up -d",
+            [
+                "docker",
+                "compose",
+                "-f",
+                UPDATE_COMPOSE_FILE,
+                "up",
+                "-d",
+                UPDATE_SERVICE_NAME,
+            ],
+            90,
+        )
+
+        set_status(
+            task_id=task_id,
+            status="success",
+            detail="Usługa została zaktualizowana.",
+            progress=100,
+        )
+    except UpdateServiceError as exc:
+        logger.error("Aktualizacja usługi nie powiodła się: %s", exc)
+        set_status(
+            task_id=task_id,
+            status="error",
+            detail=f"{exc.label}\n{exc.output}",
+            error=exc.output,
+            progress=exc.progress,
+        )
+    except Exception as exc:  # pragma: no cover - unexpected guard
+        logger.exception("Nieoczekiwany błąd aktualizacji usługi")
+        set_status(
+            task_id=task_id,
+            status="error",
+            detail="Aktualizacja usługi nie powiodła się.",
+            error=str(exc),
+        )
 
 
 def queue_update(background_tasks: BackgroundTasks, ref: str | None = None, tag: str | None = None) -> UpdateStatus:
