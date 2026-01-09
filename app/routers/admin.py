@@ -187,6 +187,7 @@ def get_update_status(current_user: models.User = Depends(current_user_dep)) -> 
         "logs": update_service.read_logs(limit=10),
         "busy": update_service.is_update_locked(),
         "lock": update_service.read_lock_status(),
+        "last": update_service.read_last_state(),
     }
 
 
