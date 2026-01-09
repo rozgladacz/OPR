@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from .. import config, models
 from ..security import get_current_user
-from ..services import update_service, updater
+from ..services import update_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
@@ -74,59 +74,46 @@ def trigger_update(
 ) -> RedirectResponse:
     _require_admin(current_user)
     task_id = uuid4().hex
+    logger.info(
+        "Aktualizacja usługi uruchomiona przez użytkownika %s",
+        current_user.username,
+    )
+    update_service.run_update_service_sequence(task_id)
+    status_payload = update_service.read_status() or {}
+    status_value = status_payload.get("status")
+    detail = status_payload.get("detail") or status_payload.get("error")
+    if status_value == "success":
+        message = detail or "Usługa została zaktualizowana."
+        redirect_url = f"/admin?status=update-ok&detail={quote_plus(message)}"
+    else:
+        error_detail = detail or "Aktualizacja usługi nie powiodła się."
+        redirect_url = f"/admin?status=update-error&detail={quote_plus(error_detail)}"
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+def _queue_update_service_sequence(background_tasks: BackgroundTasks) -> update_service.UpdateStatus:
+    task_id = uuid4().hex
     try:
         update_service.claim_update_slot(task_id)
     except update_service.UpdateBlockedError as exc:
-        update_service.set_status(
+        return update_service.set_status(
             task_id=task_id,
             status="blocked",
             detail=str(exc),
             progress=0,
         )
-        redirect_url = f"/admin?status=update-error&detail={quote_plus(str(exc))}"
-        return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
-    try:
-        update_service.set_status(
-            task_id=task_id,
-            status="started",
-            detail="Rozpoczęto aktualizację repozytorium.",
-            progress=0,
-        )
-        logger.info(
-            "Aktualizacja repozytorium uruchomiona przez użytkownika %s",
-            current_user.username,
-        )
-        try:
-            message = updater.sync_repository()
-        except updater.UpdateError as exc:
-            logger.error(
-                "Aktualizacja repozytorium nie powiodła się dla użytkownika %s: %s",
-                current_user.username,
-                exc,
-            )
-            update_service.set_status(
-                task_id=task_id,
-                status="error",
-                detail="Aktualizacja repozytorium nie powiodła się.",
-                error=str(exc),
-            )
-            redirect_url = f"/admin?status=update-error&detail={quote_plus(str(exc))}"
-            return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
-
-        logger.info(
-            "Aktualizacja repozytorium zakończona powodzeniem dla użytkownika %s",
-            current_user.username,
-        )
-        update_service.set_status(
-            task_id=task_id,
-            status="success",
-            detail=message,
-            progress=100,
-        )
-        redirect_url = f"/admin?status=update-ok&detail={quote_plus(message)}"
-        return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
-    finally:
-        update_service.release_update_slot()
+    status_payload = update_service.set_status(
+        task_id=task_id,
+        status="queued",
+        detail="Zadanie oczekuje na uruchomienie.",
+        progress=0,
+    )
+    background_tasks.add_task(
+        update_service.run_update_service_sequence,
+        task_id,
+        claim_slot=False,
+    )
+    return status_payload
 
 
 @router.post("/update-job")
@@ -138,12 +125,10 @@ def trigger_update_job(
     _require_admin(current_user)
     payload = payload or UpdatePayload()
     logger.info(
-        "Aktualizacja repozytorium (API) uruchomiona przez użytkownika %s",
+        "Aktualizacja usługi (API) uruchomiona przez użytkownika %s",
         current_user.username,
     )
-    status_payload = update_service.queue_update(
-        background_tasks, ref=payload.ref, tag=payload.tag
-    )
+    status_payload = _queue_update_service_sequence(background_tasks)
     if status_payload.status == "blocked":
         raise HTTPException(status_code=429, detail=status_payload.detail)
     target = payload.ref or (f"tag {payload.tag}" if payload.tag else None)
@@ -164,12 +149,10 @@ def trigger_update_start(
     _require_admin(current_user)
     payload = payload or UpdatePayload()
     logger.info(
-        "Aktualizacja repozytorium (API) uruchomiona przez użytkownika %s",
+        "Aktualizacja usługi (API) uruchomiona przez użytkownika %s",
         current_user.username,
     )
-    status_payload = update_service.queue_update(
-        background_tasks, ref=payload.ref, tag=payload.tag
-    )
+    status_payload = _queue_update_service_sequence(background_tasks)
     target = payload.ref or (f"tag {payload.tag}" if payload.tag else None)
     return {
         "status": status_payload.status,

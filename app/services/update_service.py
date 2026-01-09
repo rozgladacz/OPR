@@ -362,17 +362,18 @@ def _run_update_command(task_id: str, label: str, command: list[str], progress: 
     )
 
 
-def run_update_service_sequence(task_id: str) -> None:
-    try:
-        claim_update_slot(task_id)
-    except UpdateBlockedError as exc:
-        set_status(
-            task_id=task_id,
-            status="blocked",
-            detail=str(exc),
-            progress=0,
-        )
-        return
+def run_update_service_sequence(task_id: str, *, claim_slot: bool = True) -> None:
+    if claim_slot:
+        try:
+            claim_update_slot(task_id)
+        except UpdateBlockedError as exc:
+            set_status(
+                task_id=task_id,
+                status="blocked",
+                detail=str(exc),
+                progress=0,
+            )
+            return
 
     try:
         if not UPDATE_SERVICE_NAME:
