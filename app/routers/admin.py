@@ -188,6 +188,15 @@ def get_update_status(current_user: models.User = Depends(current_user_dep)) -> 
     }
 
 
+@router.get("/update-state")
+def get_update_state(current_user: models.User = Depends(current_user_dep)) -> dict[str, object | None]:
+    _require_admin(current_user)
+    return {
+        "current": update_service.read_current_state(),
+        "last": update_service.read_last_state(),
+    }
+
+
 @router.post("/update/webhook")
 def trigger_update_webhook(
     background_tasks: BackgroundTasks,
