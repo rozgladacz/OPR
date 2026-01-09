@@ -32,7 +32,7 @@ UPDATE_WEBHOOK_TOKEN=super_tajny_token
 
 ## Konfiguracja aktualizacji
 
-Mechanizm aktualizacji wymaga dostępu do Dockera oraz repozytorium, które ma zostać zbudowane (lokalna ścieżka na serwerze). Podczas aktualizacji aplikacja wykonuje `docker compose build` oraz `docker compose up -d` dla wskazanej usługi.
+Mechanizm aktualizacji wymaga dostępu do Dockera oraz repozytorium, które ma zostać zbudowane (lokalna ścieżka na serwerze). Endpointy panelu admina (`/admin/update`, `/admin/update-job`, `/admin/update-start`) wykonują `git pull`, następnie `docker compose build` i `docker compose up -d` dla wskazanej usługi. Webhook aktualizacji (`/admin/update/webhook`) wykonuje jedynie aktualizację repozytorium (git-only: `fetch` + `reset --hard`) bez uruchamiania Dockera.
 
 Wymagane zmienne środowiskowe:
 
@@ -90,7 +90,7 @@ Domyślne konto administratora zostanie utworzone przy pierwszym uruchomieniu (`
 
 ## Webhook aktualizacji i prosty skrypt bash
 
-Endpoint `POST /admin/update/webhook` uruchamia aktualizację repozytorium. Wymaga tokenu przekazanego w nagłówku `X-Webhook-Token` lub jako parametr `token` w query stringu. Status zadania można sprawdzać przez `GET /admin/update/webhook-status` z opcjonalnym `task_id`.
+Endpoint `POST /admin/update/webhook` uruchamia aktualizację repozytorium (git-only: `fetch` + `reset --hard`). Wymaga tokenu przekazanego w nagłówku `X-Webhook-Token` lub jako parametr `token` w query stringu. Status zadania można sprawdzać przez `GET /admin/update/webhook-status` z opcjonalnym `task_id`. Jeśli chcesz dodatkowo przebudować i zrestartować usługę (`docker compose build` + `docker compose up -d`), użyj endpointów panelu admina.
 
 Przykładowy skrypt do ręcznego uruchomienia aktualizacji i sprawdzenia statusu:
 
