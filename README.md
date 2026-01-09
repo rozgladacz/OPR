@@ -13,6 +13,7 @@ Aplikacja korzysta z pliku `.env` (ładowanego przez `python-dotenv`) w katalogu
 - `UPDATE_REF` – opcjonalny ref (gałąź/tag/commit), do którego ma zostać zresetowane repozytorium; gdy pusty, używana jest wartość z `UPDATE_BRANCH`.
 - `UPDATE_DOCKERFILE` – ścieżka do Dockerfile używanego do budowy obrazu; domyślnie `Dockerfile`.
 - `UPDATE_COMPOSE_FILE` – ścieżka do pliku docker-compose wykorzystywanego do odświeżenia kontenera; domyślnie `docker-compose.yml`.
+- `UPDATE_SERVICE_NAME` – nazwa usługi z pliku docker-compose, która ma zostać zaktualizowana.
 - `UPDATE_WEBHOOK_TOKEN` – token wymagany przez webhook aktualizacji (`/admin/update/webhook`).
 
 Przykład `.env`:
@@ -25,7 +26,28 @@ UPDATE_REPO_PATH=.
 UPDATE_REF=main
 UPDATE_DOCKERFILE=Dockerfile
 UPDATE_COMPOSE_FILE=docker-compose.yml
+UPDATE_SERVICE_NAME=opr-app
 UPDATE_WEBHOOK_TOKEN=super_tajny_token
+```
+
+## Konfiguracja aktualizacji
+
+Mechanizm aktualizacji wymaga dostępu do Dockera oraz repozytorium, które ma zostać zbudowane (lokalna ścieżka na serwerze). Podczas aktualizacji aplikacja wykonuje `docker compose build` oraz `docker compose up -d` dla wskazanej usługi.
+
+Wymagane zmienne środowiskowe:
+
+- `UPDATE_REPO_PATH` – ścieżka do repozytorium, które ma zostać zaktualizowane.
+- `UPDATE_COMPOSE_FILE` – plik `docker-compose.yml` używany przy uruchamianiu aktualizacji.
+- `UPDATE_SERVICE_NAME` – nazwa usługi w `docker-compose`, która ma zostać zbudowana i uruchomiona.
+- `UPDATE_REF` – ref (gałąź/tag/commit) do którego ma zostać zresetowane repozytorium.
+
+Przykład `.env` tylko dla aktualizacji:
+
+```
+UPDATE_REPO_PATH=/srv/opr
+UPDATE_COMPOSE_FILE=docker-compose.yml
+UPDATE_SERVICE_NAME=opr-app
+UPDATE_REF=main
 ```
 
 ## Uruchomienie
