@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 _STATUS_FILE = DATA_DIR / "update_status.json"
 _LOG_FILE = DATA_DIR / "update_logs.jsonl"
-_LOCK_FILE = DATA_DIR / "update.lock"
+_LOCK_FILENAME = ".update.lock"
 _LAST_RUN_FILE = DATA_DIR / "update_last_run.json"
 _RATE_LIMIT = timedelta(minutes=5)
 _LOCK_STALE_AFTER = timedelta(hours=1)
@@ -124,11 +124,24 @@ def _write_last_run(started_at: datetime) -> None:
     )
 
 
+def _resolve_update_repo_path() -> Path:
+    repo_path = Path(UPDATE_REPO_PATH)
+    if repo_path.is_absolute():
+        return repo_path
+    project_root = Path(__file__).resolve().parents[2]
+    return project_root / repo_path
+
+
+def _lock_file_path() -> Path:
+    return _resolve_update_repo_path() / _LOCK_FILENAME
+
+
 def _read_lock() -> dict[str, Any] | None:
-    if not _LOCK_FILE.exists():
+    lock_path = _lock_file_path()
+    if not lock_path.exists():
         return None
     try:
-        return json.loads(_LOCK_FILE.read_text(encoding="utf-8"))
+        return json.loads(lock_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
 
@@ -140,16 +153,17 @@ def _clear_stale_lock() -> None:
     started_at = _parse_iso(info.get("started_at"))
     if started_at and datetime.now(timezone.utc) - started_at > _LOCK_STALE_AFTER:
         try:
-            _LOCK_FILE.unlink()
+            _lock_file_path().unlink()
         except OSError:
             logger.warning("Nie udało się usunąć przeterminowanej blokady aktualizacji.")
 
 
 def _acquire_lock(task_id: str) -> None:
     _clear_stale_lock()
-    _LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = _lock_file_path()
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        fd = os.open(_LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError as exc:
         raise UpdateInProgressError("Aktualizacja już trwa.") from exc
     payload = {"task_id": task_id, "started_at": _now_iso()}
@@ -159,7 +173,7 @@ def _acquire_lock(task_id: str) -> None:
 
 def _release_lock() -> None:
     try:
-        _LOCK_FILE.unlink()
+        _lock_file_path().unlink()
     except FileNotFoundError:
         return
     except OSError:
@@ -230,12 +244,23 @@ def set_status(
     return payload
 
 
-def _resolve_update_repo_path() -> Path:
-    repo_path = Path(UPDATE_REPO_PATH)
-    if repo_path.is_absolute():
-        return repo_path
-    project_root = Path(__file__).resolve().parents[2]
-    return project_root / repo_path
+def read_lock_status() -> dict[str, Any] | None:
+    _clear_stale_lock()
+    info = _read_lock()
+    if not info:
+        return None
+    payload: dict[str, Any] = {
+        "task_id": info.get("task_id"),
+        "started_at": info.get("started_at"),
+    }
+    started_at = _parse_iso(info.get("started_at"))
+    if started_at:
+        payload["age_seconds"] = int((datetime.now(timezone.utc) - started_at).total_seconds())
+    return payload
+
+
+def is_update_locked() -> bool:
+    return read_lock_status() is not None
 
 
 def _format_command_output(stdout: str, stderr: str) -> str:
@@ -274,17 +299,28 @@ def _run_update_command(task_id: str, label: str, command: list[str], progress: 
 
 
 def run_update_service_sequence(task_id: str) -> None:
-    if not UPDATE_SERVICE_NAME:
+    try:
+        claim_update_slot(task_id)
+    except UpdateBlockedError as exc:
         set_status(
             task_id=task_id,
-            status="error",
-            detail="Brak skonfigurowanej nazwy usługi (UPDATE_SERVICE_NAME).",
-            error="UPDATE_SERVICE_NAME nie został ustawiony.",
+            status="blocked",
+            detail=str(exc),
             progress=0,
         )
         return
 
     try:
+        if not UPDATE_SERVICE_NAME:
+            set_status(
+                task_id=task_id,
+                status="error",
+                detail="Brak skonfigurowanej nazwy usługi (UPDATE_SERVICE_NAME).",
+                error="UPDATE_SERVICE_NAME nie został ustawiony.",
+                progress=0,
+            )
+            return
+
         set_status(
             task_id=task_id,
             status="started",
@@ -349,6 +385,8 @@ def run_update_service_sequence(task_id: str) -> None:
             detail="Aktualizacja usługi nie powiodła się.",
             error=str(exc),
         )
+    finally:
+        release_update_slot()
 
 
 def queue_update(background_tasks: BackgroundTasks, ref: str | None = None, tag: str | None = None) -> UpdateStatus:
