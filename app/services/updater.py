@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from ..config import UPDATE_BRANCH, UPDATE_REPO_URL
+from ..config import UPDATE_BRANCH, UPDATE_REF, UPDATE_REPO_URL
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +93,8 @@ def _resolve_target(ref: str | None, tag: str | None) -> tuple[str, str]:
         return ref, ref
     if tag:
         return f"refs/tags/{tag}", f"tag {tag}"
+    if UPDATE_REF:
+        return UPDATE_REF, UPDATE_REF
 
     branch = _determine_branch()
     return f"origin/{branch}", f"origin/{branch}"
