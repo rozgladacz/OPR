@@ -185,6 +185,8 @@ def get_update_status(current_user: models.User = Depends(current_user_dep)) -> 
     return {
         "status": update_service.read_status(),
         "logs": update_service.read_logs(limit=10),
+        "busy": update_service.is_update_locked(),
+        "lock": update_service.read_lock_status(),
     }
 
 
@@ -229,4 +231,6 @@ def get_update_webhook_status(request: Request, task_id: str | None = None) -> d
     return {
         "status": status_payload,
         "logs": update_service.read_logs(limit=10),
+        "busy": update_service.is_update_locked(),
+        "lock": update_service.read_lock_status(),
     }
