@@ -46,6 +46,11 @@
           <button class="btn btn-primary" type="submit" {% if not can_edit %}disabled{% endif %}>Zapisz</button>
         </div>
       </form>
+      <div class="mt-3">
+        <form method="post" action="/rosters/{{ roster.id }}/duplicate">
+          <button class="btn btn-outline-primary" type="submit">Utwórz kopię rozpiski</button>
+        </form>
+      </div>
       {% if can_delete %}
       <hr class="my-4" />
       <form method="post" action="/rosters/{{ roster.id }}/delete" onsubmit="return confirm('Usunąć rozpiskę? Tej operacji nie można cofnąć.');">
