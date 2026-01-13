@@ -575,6 +575,68 @@ def update_roster(
     return RedirectResponse(url=f"/rosters/{roster.id}", status_code=303)
 
 
+@router.post("/{roster_id}/duplicate")
+def duplicate_roster(
+    roster_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    roster_stmt = (
+        select(models.Roster)
+        .options(
+            selectinload(models.Roster.roster_units),
+            selectinload(models.Roster.roster_unit_pairs),
+        )
+        .where(models.Roster.id == roster_id)
+    )
+    roster = db.execute(roster_stmt).scalars().unique().one_or_none()
+    if not roster:
+        raise HTTPException(status_code=404)
+    _ensure_roster_view_access(roster, current_user)
+
+    copy_name = f"{roster.name} (kopia)"
+    roster_copy = models.Roster(
+        name=copy_name,
+        army_id=roster.army_id,
+        owner_id=current_user.id,
+        points_limit=roster.points_limit,
+    )
+    db.add(roster_copy)
+    db.flush()
+
+    unit_id_map: dict[int, int] = {}
+    for roster_unit in roster.roster_units:
+        clone = models.RosterUnit(
+            roster_id=roster_copy.id,
+            unit_id=roster_unit.unit_id,
+            count=roster_unit.count,
+            extra_weapons_json=roster_unit.extra_weapons_json,
+            cached_cost=roster_unit.cached_cost,
+            custom_name=roster_unit.custom_name,
+            position=roster_unit.position,
+        )
+        db.add(clone)
+        db.flush()
+        if roster_unit.id is not None and clone.id is not None:
+            unit_id_map[roster_unit.id] = clone.id
+
+    for pair in roster.roster_unit_pairs:
+        first_id = unit_id_map.get(pair.first_roster_unit_id)
+        second_id = unit_id_map.get(pair.second_roster_unit_id)
+        if first_id is None or second_id is None:
+            continue
+        db.add(
+            models.RosterUnitPair(
+                roster_id=roster_copy.id,
+                first_roster_unit_id=first_id,
+                second_roster_unit_id=second_id,
+            )
+        )
+
+    db.commit()
+    return RedirectResponse(url=f"/rosters/{roster_copy.id}", status_code=303)
+
+
 @router.post("/{roster_id}/delete")
 def delete_roster(
     roster_id: int,
