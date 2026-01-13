@@ -5850,12 +5850,9 @@ function createClassificationPayload(warriorTotal, shooterTotal, availableSlugs)
     preferred = 'wojownik';
   } else if (shooter > warrior) {
     preferred = 'strzelec';
-  } else if (pool.has('wojownik') || pool.size === 0) {
-    preferred = 'wojownik';
-  } else if (pool.has('strzelec')) {
-    preferred = 'strzelec';
+  } else if (pool.size === 0) {
+    return null;
   }
-  const fallbackSlug = 'wojownik';
   let slug = null;
   if (pool.size) {
     if (preferred && pool.has(preferred)) {
@@ -5879,7 +5876,16 @@ function createClassificationPayload(warriorTotal, shooterTotal, availableSlugs)
       }
     }
   } else {
-    slug = preferred || fallbackSlug;
+    slug = preferred;
+  }
+  if (!slug && pool.size) {
+    if (pool.has('strzelec')) {
+      slug = 'strzelec';
+    } else if (pool.has('wojownik')) {
+      slug = 'wojownik';
+    } else {
+      slug = pool.values().next().value || null;
+    }
   }
   if (!slug) {
     return null;
