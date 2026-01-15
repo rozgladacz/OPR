@@ -90,3 +90,8 @@ app.include_router(export.router)
 app.include_router(export_xlsx.router)
 app.include_router(users.router)
 app.include_router(admin.router)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> RedirectResponse:
+    return RedirectResponse(url="/static/favicon.svg")
