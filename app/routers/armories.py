@@ -224,9 +224,7 @@ def _update_weapon_cost(weapon: models.Weapon) -> bool:
 def _refresh_costs(db: Session, weapons: Iterable[models.Weapon]) -> None:
     updated = False
     for weapon in weapons:
-        cached = weapon.cached_cost
-        needs_refresh = cached is None or not math.isfinite(float(cached))
-        if needs_refresh and _update_weapon_cost(weapon):
+        if _update_weapon_cost(weapon):
             updated = True
     if updated:
         db.flush()
