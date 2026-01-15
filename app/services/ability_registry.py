@@ -154,7 +154,7 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
     for definition in definitions:
         entry = ability_catalog.to_dict(definition)
         entry["value_kind"] = None
-        if definition.slug == "rozkaz":
+        if definition.slug in {"rozkaz", "klatwa", "oznaczenie"}:
             entry["value_choices"] = [
                 {
                     "value": passive.slug,
