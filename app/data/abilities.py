@@ -17,7 +17,7 @@ class AbilityDefinition:
 
     def display_name(self) -> str:
         if self.value_label:
-            if self.slug in {"aura", "rozkaz"}:
+            if self.slug in {"aura", "rozkaz", "klatwa", "oznaczenie"}:
                 return f"{self.name}: {self.value_label}"
             return f"{self.name}({self.value_label})"
         return self.name
@@ -407,6 +407,25 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         value_label="Zdolność",
         value_type="text",
     ),
+    AbilityDefinition(
+        slug="klatwa",
+        name="Klątwa",
+        type="active",
+        description="Raz na rundę możesz przerwać, aby wrogi oddział w zasięgu 12” od teraz do końca aktywacji (nie)miał zdolność X.",
+        value_label="Zdolność",
+        value_type="text",
+    ),
+    AbilityDefinition(
+        slug="oznaczenie",
+        name="Oznaczenie",
+        type="active",
+        description=(
+            "Raz na rundę możesz przerwać, aby sojuszniczy oddział który atakuje oddział w zasięgu 12” "
+            "od teraz do końca aktywacji (nie)miał zdolność X."
+        ),
+        value_label="Zdolność",
+        value_type="text",
+    ),
     # Aura abilities
     AbilityDefinition(
         slug="aura",
@@ -571,7 +590,7 @@ def find_definition(slug: str) -> AbilityDefinition | None:
 
 
 def display_with_value(definition: AbilityDefinition, value: str | None) -> str:
-    if definition.slug == "rozkaz":
+    if definition.slug in {"rozkaz", "klatwa", "oznaczenie"}:
         value_text = (value or "").strip()
         ability_slug = slug_for_name(value_text) or value_text
         ability_def = find_definition(ability_slug) if ability_slug else None
@@ -616,7 +635,7 @@ def description_with_value(definition: AbilityDefinition, value: str | None) -> 
     if not value_text:
         return description
 
-    if definition.slug == "rozkaz":
+    if definition.slug in {"rozkaz", "klatwa", "oznaczenie"}:
         ability_slug = slug_for_name(value_text) or value_text
         ability_def = find_definition(ability_slug) if ability_slug else None
         ability_label = ability_def.name if ability_def else value_text
