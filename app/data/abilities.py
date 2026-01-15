@@ -201,8 +201,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Szpica",
         type="passive",
         description=(
-            "+1 do testów ataku przeciwko oddziałom, które nie rozpoczęły swojej aktywacji w tej turze. "
-            "+1 do testów obrony po zakończeniu swojej aktywacji."
+            "Podczas ataku przeciwko oddziałom które nie rozpoczęły swojej aktywacji w tej turze, naturalne 6 dają dodatkowe zwykłe trafienie."
         ),
     ),
     AbilityDefinition(
