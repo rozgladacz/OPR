@@ -1024,6 +1024,9 @@ def _weapon_cost(
     chance = max(chance - q, 1.0)
     cost = attacks * 2.0 * range_mod * chance * ap_mod * mult
 
+    if overcharge and (not assault or range_value != 0):
+        cost *= 1.4
+
     if assault and allow_assault_extra and range_value != 0:
         melee_part_cost = _weapon_cost(
             quality,
@@ -1034,14 +1037,7 @@ def _weapon_cost(
             unit_traits,
             allow_assault_extra=False,
         )
-        if overcharge:
-            if cost >= melee_part_cost:
-                cost *= 1.4
-            else:
-                melee_part_cost *= 1.4
         cost += melee_part_cost
-    elif not assault:
-        cost *= 1.4
         
     return cost
 
