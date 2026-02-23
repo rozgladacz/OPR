@@ -669,6 +669,8 @@ def passive_cost(
         return 3.0 * tou
     if slug == "rezerwa":
         return -3.0 * tou
+    if slug == "roj":
+        return 0.25 * tou
         
     if aura:
         if slug in {"nieustraszony", "ucieczka", "stracency"}:
@@ -682,6 +684,8 @@ def passive_cost(
         if slug == "furia":
             return 3.0 * tou
         if slug == "przygotowanie":
+            return 3.5 * tou
+        if slug == "ostrozny":
             return 3.5 * tou
 
     if slug == "strach":
@@ -814,6 +818,13 @@ def ability_cost_from_name(
             if ability_set & options:
                 multiplier = value
         base_result = capacity * multiplier
+    if desc.startswith("otwarty_transport") or desc.startswith("platforma_strzelecka"):
+        capacity = extract_number(value or name)
+        multiplier = 1.0
+        for options, value in TRANSPORT_MULTIPLIERS:
+            if ability_set & options:
+                multiplier = value
+        base_result = capacity * (multiplier + 0.25)
     elif desc.startswith("aura"):
         ability_slug, aura_range = _parse_aura_value(name, value)
         cost = passive_cost(ability_slug, 8.0, True)
@@ -834,7 +845,7 @@ def ability_cost_from_name(
         base_result = 45.0
     elif slug == "presja":
         base_result = 45.0
-    elif desc.startswith("rozkaz"):
+    elif desc.startswith("rozkaz") or desc.startswith("klatwa") or desc.startswith("oznaczenie"):
         ability_ref = value or (desc.split(":", 1)[1].strip() if ":" in desc else "")
         ability_slug = ability_catalog.slug_for_name(ability_ref) or ability_identifier(ability_ref)
         base_result = passive_cost(ability_slug, 10.0, True)
@@ -1013,9 +1024,9 @@ def _weapon_cost(
         elif norm in {"podkrecenie", "overcharge", "overclock"}:
             overcharge = True
         elif norm in {"burzaca"}:
-            mult *= 1.75
+            mult *= 1.5
         elif norm in {"unik"}:
-            mult *= 1.25
+            mult *= 1.2
 
     if waagh_penalty:
         ap_mod = max(ap_mod - waagh_penalty, 0.0)

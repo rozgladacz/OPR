@@ -20,12 +20,15 @@ EXCLUDED_AURA_AND_ORDER_SLUGS: set[str] = {
     "zle_strzela",
     "bohater",
     "transport",
+    "otwarty_transport",
+    "platforma_strzelecka",
     "strach",
     "waagh",
     "odrodzenie",
     "odwody",
     "rezerwa",
     "wrak",
+    "roj",
 }
 
 

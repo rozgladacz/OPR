@@ -40,9 +40,8 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Zasadzka",
         type="passive",
         description=(
-            "Odział można odłożyć przed rozstawieniem."
-            "Na początku każdej rundy (poza pierwszą) można rozstawić go w dowolnym legalnym miejscu."
-            "Gracze na zmianę rozmieszczają jednostki zasadzki, zaczynając od gracza, który dokonuje aktywacji jako następny."
+            "Nie rozstawia się przed grą. Podczas pierwszej rundy, zamiast normalnej aktywacji rozstaw w dowolnym dozwolonym miejscu."
+            "Nie kontroluje celów w pierwszej rundzie."
         ),
     ),
     AbilityDefinition(
@@ -50,9 +49,8 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Zwiadowca",
         type="passive",
         description=(
-            "Można go odłożyć przed rozstawieniem. Rozstawia się po rozstawieniu wszystkich pozostałych jednostek, w odległości "
-            "do 12” od normalnie dozwolonej pozycji. Gracze na zmianę rozmieszczają jednostki zwiadowcy, zaczynając od gracza, "
-            "który dokonuje aktywacji jako następny."
+            "Rozstawia się po rozstawieniu wszystkich pozostałych jednostek, w odległości do 12” od normalnie dozwolonej pozycji. "
+            "Gracze na zmianę rozmieszczają jednostki zwiadowcy, zaczynając od gracza, który dokonuje aktywacji jako następny."
         ),
     ),
     AbilityDefinition(
@@ -130,8 +128,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         type="passive",
         description=(
             "Cały oddział reprezentowany jest przez jeden model z wydzielonymi elementami, "
-            "który może przyjmować rany ponad maksimum. Wpływ na koszt: 0, zdolności z kosztem "
-            "za model liczysz raz (np Transport)."
+            "który może przyjmować rany ponad maksimum."
         ),
     ),
     AbilityDefinition(
@@ -261,12 +258,33 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Transport",
         type="passive",
         description=(
-            "Odziały o maksymalnej sumarycznej wytrzymałości X mogą być do niego przypisane. Mogą być w nich modele o wytrzymałości "
-            "do 3. Gdy aktywujesz taki odział, możesz zamiast ruchu rozstawić go tak, aby każdy jego model był do 3” od transportera. "
-            "Przestaje być przypisany i może wykonać akcję. Jeżeli nie zostanie rozstawiony, nie robi nic podczas swojej aktywacji. "
+            "Odziały o maksymalnej sumarycznej wytrzymałości X mogą być do niego przypisane. Mogą być w nich modele o wytrzymałości do 3."
+            "Gdy aktywujesz taki odział, możesz zamiast ruchu rozstawić go tak, aby każdy jego model był do 3” od transportera."
+            "Przestaje być przypisany i może wykonać akcję. Jeżeli nie zostanie rozstawiony, może oddziaływać tylko na transporter (zawsze ma zasięg). "
             "Jeżeli transporter zostanie zniszczony, przed jego zdjęciem każdy odział do niego przypisany zostaje rozstawiony jak wyżej, "
             "zostaje przyszpilony i wykonuje test jakości. W przypadku porażki zostaje wyczerpany i wykonuje test trudnego terenu. "
             "Odział który spełnia warunki rozstawienia z transportera, jako akcję możesz zostać zdjęty z planszy i do niego przypisany."
+        ),
+        value_label="X",
+        value_type="number",
+    ),
+    AbilityDefinition(
+        slug="platforma_strzelecka",
+        name="Platforma strzelecka",
+        type="passive",
+        description=(
+            "Jak Transport(X)t, ale odziały mogą strzelać tak jakby znajdowały się w miejscu transportera."
+        ),
+        value_label="X",
+        value_type="number",
+    ),
+    AbilityDefinition(
+        slug="otwarty_transport",
+        name="Otwarty transport",
+        type="passive",
+        description=(
+            "Jak Platforma strzelecka(X), ale odziały mogą zostać Wyczerpana, aby zaatakować wręcz razem z Transporterem. "
+            "Mogą również być atakowane jakby były w miejscu transportera i w osłonie."
         ),
         value_label="X",
         value_type="number",
@@ -317,7 +335,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Rezerwa",
         type="passive",
         description=(
-            "Ten odział jest wystawiany na początku drugiej tury, 12” od krawędzi stołu wybranej przez przeciwnika."
+            "Jak zasadzka, ale 12” od Twojej krawędzi stołu (jeżeli nie określają jej zasady rozstawienia wybiera przeciwnik na początku pierwszej rundy)"
         ),
     ),
     AbilityDefinition(
@@ -334,7 +352,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         type="passive",
         description=(
             "Gdy ten odział jest celem, ignoruj zdolność Zabójczy na broni,"
-            "ale bronie z Rozprysk(X), są traktowane jakby miały również Zabójczy(x)."
+            "ale bronie z Rozprysk(X), działają zawsze z pełną efektywnością."
         ),
     ),
     AbilityDefinition(
@@ -377,7 +395,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="latanie",
         name="Łatanie",
         type="active",
-        description="Oddział w zasięgu 2” odrzuca k3 znaczniki ran.",
+        description="Na końcu towjej aktywacji oddział w zasięgu 2” odzyskuje k3 rany.",
     ),
     AbilityDefinition(
         slug="mobilizacja",
@@ -560,9 +578,9 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
     ),
     AbilityDefinition(
         slug="burzaca",
-        name="Burząca",
+        name="Przełamanie",
         type="weapon",
-        description="Jeżeli cel jest wewnątrz terenu lub 1” od blokującego terenu,  wykonuje podwójną liczbę ataków.",
+        description="Jeżeli cel jest w zasięgu celu misji, wykonuje podwójną liczbę ataków.",
     ),
     AbilityDefinition(
         slug="unik",
