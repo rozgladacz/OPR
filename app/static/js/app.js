@@ -3827,6 +3827,8 @@ function initRosterEditor() {
   const items = [];
   const itemRegistry = new WeakSet();
   const moveFormRegistry = new WeakSet();
+  let refreshRosterCostBadgesInProgress = false;
+  let lastRefreshRosterCostCycleToken = null;
   function ensureRosterList() {
     if (rosterListEl && rosterListEl.isConnected) {
       return rosterListEl;
@@ -5641,67 +5643,83 @@ function initRosterEditor() {
     };
   }
 
-  function refreshRosterCostBadges(totalOverride = null) {
-    const listElement = rosterListEl || ensureRosterList();
-    if (!listElement) {
+  function refreshRosterCostBadges(totalOverride = null, cycleToken = null) {
+    if (cycleToken && cycleToken === lastRefreshRosterCostCycleToken) {
+      return;
+    }
+    if (refreshRosterCostBadgesInProgress) {
       return;
     }
 
-    const rosterItems = Array.from(listElement.querySelectorAll('[data-roster-item]'));
-    if (!rosterItems.length) {
+    refreshRosterCostBadgesInProgress = true;
+    try {
+      const listElement = rosterListEl || ensureRosterList();
+      if (!listElement) {
+        return;
+      }
+
+      const rosterItems = Array.from(listElement.querySelectorAll('[data-roster-item]'));
+      if (!rosterItems.length) {
+        if (Number.isFinite(totalOverride)) {
+          updateTotalSummary(totalOverride);
+        }
+        return;
+      }
+
+      const contextCache = new Map();
+      const getContext = (item) => {
+        if (!item) {
+          return null;
+        }
+        const unitId = item.getAttribute('data-roster-unit-id') || '';
+        if (contextCache.has(unitId)) {
+          return contextCache.get(unitId);
+        }
+        const context = buildClassificationContextFromItem(item);
+        contextCache.set(unitId, context);
+        return context;
+      };
+
+      let aggregatedTotal = 0;
+      rosterItems.forEach((item) => {
+        const context = getContext(item);
+        if (!context) {
+          return;
+        }
+        const unitId = item.getAttribute('data-roster-unit-id') || '';
+        const partnerId = getPartnerId(unitId);
+        const partnerItem = partnerId
+          ? listElement.querySelector(`[data-roster-item][data-roster-unit-id="${partnerId}"]`)
+          : null;
+        const partnerContext = partnerItem ? getContext(partnerItem) : null;
+
+        const result = computeRosterItemCost(context, partnerContext);
+        if (!result || !Number.isFinite(result.total)) {
+          return;
+        }
+
+        const formatted = formatPoints(result.total);
+        const badgeEl = item.querySelector('[data-roster-unit-cost]');
+        if (badgeEl) {
+          badgeEl.textContent = `${formatted} pkt`;
+        }
+        item.setAttribute('data-unit-cost', String(result.total));
+        aggregatedTotal += result.total;
+      });
+
       if (Number.isFinite(totalOverride)) {
         updateTotalSummary(totalOverride);
+      } else if (Number.isFinite(aggregatedTotal)) {
+        updateTotalSummary(aggregatedTotal);
       }
-      return;
-    }
-
-    const contextCache = new Map();
-    const getContext = (item) => {
-      if (!item) {
-        return null;
+    } finally {
+      refreshRosterCostBadgesInProgress = false;
+      if (cycleToken) {
+        lastRefreshRosterCostCycleToken = cycleToken;
       }
-      const unitId = item.getAttribute('data-roster-unit-id') || '';
-      if (contextCache.has(unitId)) {
-        return contextCache.get(unitId);
-      }
-      const context = buildClassificationContextFromItem(item);
-      contextCache.set(unitId, context);
-      return context;
-    };
-
-    let aggregatedTotal = 0;
-    rosterItems.forEach((item) => {
-      const context = getContext(item);
-      if (!context) {
-        return;
-      }
-      const unitId = item.getAttribute('data-roster-unit-id') || '';
-      const partnerId = getPartnerId(unitId);
-      const partnerItem = partnerId
-        ? listElement.querySelector(`[data-roster-item][data-roster-unit-id="${partnerId}"]`)
-        : null;
-      const partnerContext = partnerItem ? getContext(partnerItem) : null;
-
-      const result = computeRosterItemCost(context, partnerContext);
-      if (!result || !Number.isFinite(result.total)) {
-        return;
-      }
-
-      const formatted = formatPoints(result.total);
-      const badgeEl = item.querySelector('[data-roster-unit-cost]');
-      if (badgeEl) {
-        badgeEl.textContent = `${formatted} pkt`;
-      }
-      item.setAttribute('data-unit-cost', String(result.total));
-      aggregatedTotal += result.total;
-    });
-
-    if (Number.isFinite(totalOverride)) {
-      updateTotalSummary(totalOverride);
-    } else if (Number.isFinite(aggregatedTotal)) {
-      updateTotalSummary(aggregatedTotal);
     }
   }
+
 
   function applyClassificationToState(state, classification) {
     if (!state || !(state.passive instanceof Map)) {
@@ -5784,6 +5802,17 @@ function initRosterEditor() {
       loadoutInput.value = serializeLoadoutState(loadoutState);
     }
     updateCostDisplays();
+    let stateChangeCycleToken = null;
+    if (activeItem) {
+      const activeEntry = getEntryElementFromItem(activeItem);
+      const activeId = getUnitIdFromEntry(activeEntry);
+      const classificationSlug =
+        currentClassification && typeof currentClassification === 'object' && currentClassification.slug
+          ? String(currentClassification.slug)
+          : '';
+      stateChangeCycleToken = [activeId, String(currentCount), classificationSlug, loadoutInput?.value || ''].join('::');
+    }
+    refreshRosterCostBadges(null, stateChangeCycleToken);
     if (activeItem && loadoutInput) {
       activeItem.setAttribute('data-loadout', loadoutInput.value || '{}');
       invalidateCachedAttribute(activeItem, 'data-loadout');
