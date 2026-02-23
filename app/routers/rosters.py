@@ -391,7 +391,7 @@ def edit_roster(
         select(models.Unit)
         .where(models.Unit.army_id == roster.army_id)
         .options(*_unit_eager_options())
-        .order_by(models.Unit.name)
+        .order_by(models.Unit.position, models.Unit.id)
     )
     available_units = (
         db.execute(available_units_stmt)
