@@ -109,6 +109,57 @@ def test_loadout_state_preserves_aura_variant_counts() -> None:
     assert result["reloadedCounts"] == [3, 1]
 
 
+def test_compute_total_cost_uses_open_transport_multiplier_with_active_traits() -> None:
+    script_body = """
+        const passiveItems = [
+          {
+            slug: 'otwarty_transport(2)',
+            value: '2',
+            label: 'Otwarty Transport(2)',
+            raw: 'Otwarty Transport(2)',
+            default_count: 0,
+            is_army_rule: false,
+            cost: 999,
+          },
+          {
+            slug: 'transport(2)',
+            value: '2',
+            label: 'Transport(2)',
+            raw: 'Transport(2)',
+            default_count: 0,
+            is_army_rule: false,
+            cost: 999,
+          },
+        ];
+        const state = sandbox.createLoadoutState({
+          active: [
+            { id: 'samolot', count: 1 },
+          ],
+          passive: [
+            { id: 'otwarty_transport(2)', count: 1 },
+            { id: 'transport(2)', count: 1 },
+          ],
+        });
+        const total = sandbox.computeTotalCost(
+          0,
+          1,
+          [],
+          state,
+          { active: new Map(), passive: new Map() },
+          passiveItems,
+          new Map(),
+        );
+        console.log(JSON.stringify({ total }));
+    """
+
+    script = _build_sandbox_script(script_body)
+    result = _run_node(script)
+
+    # transport(2) with 'samolot' => 2 * 3.5 = 7
+    # otwarty_transport(2) with 'samolot' => 2 * (3.5 + 0.25) = 7.5
+    assert result["total"] == 14.5
+
+
 def test_handle_state_change_refreshes_roster_total_immediately_without_server_update() -> None:
     script_body = """
         const source = code;
