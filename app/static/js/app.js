@@ -3626,6 +3626,27 @@ function computeTotalCost(
   const passiveState = state && state.passive instanceof Map ? state.passive : new Map();
   const basePassiveSet = new Set();
   const selectedPassiveSet = new Set();
+  const collectSectionIdentifiers = (section, labelsMap, targetSet) => {
+    if (!(section instanceof Map) || !(targetSet instanceof Set)) {
+      return;
+    }
+    section.forEach((value, rawKey) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || numeric <= 0) {
+        return;
+      }
+      const keyIdent = passiveIdentifier(rawKey);
+      if (keyIdent) {
+        targetSet.add(keyIdent);
+      }
+      if (labelsMap instanceof Map) {
+        const labelIdent = passiveIdentifier(labelsMap.get(rawKey));
+        if (labelIdent) {
+          targetSet.add(labelIdent);
+        }
+      }
+    });
+  };
   if (passiveList.length) {
     passiveList.forEach((item) => {
       if (!item || !item.slug || item.is_army_rule) {
@@ -3648,6 +3669,12 @@ function computeTotalCost(
     });
   }
   if (passiveList.length) {
+    const baseAbilitySet = new Set(basePassiveSet);
+    const selectedAbilitySet = new Set(selectedPassiveSet);
+    collectSectionIdentifiers(state && state.active, state && state.activeLabels, baseAbilitySet);
+    collectSectionIdentifiers(state && state.active, state && state.activeLabels, selectedAbilitySet);
+    collectSectionIdentifiers(state && state.aura, state && state.auraLabels, baseAbilitySet);
+    collectSectionIdentifiers(state && state.aura, state && state.auraLabels, selectedAbilitySet);
     const isOdwodyBlocked = (activeSet) =>
       activeSet.has('rezerwa') || activeSet.has('zwiadowca') || activeSet.has('zasadzka');
     const effectivePassiveCost = (item, activeSet, costValue) => {
@@ -3676,9 +3703,9 @@ function computeTotalCost(
       if (!Number.isFinite(costValue) || costValue === 0) {
         return;
       }
-      const baseCost = baseFlag ? effectivePassiveCost(item, basePassiveSet, costValue) : 0;
+      const baseCost = baseFlag ? effectivePassiveCost(item, baseAbilitySet, costValue) : 0;
       const selectedCost = selectedFlag
-        ? effectivePassiveCost(item, selectedPassiveSet, costValue)
+        ? effectivePassiveCost(item, selectedAbilitySet, costValue)
         : 0;
       const diff = selectedCost - baseCost;
       if (diff === 0) {
