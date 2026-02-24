@@ -5624,7 +5624,7 @@ function initRosterEditor() {
 
     refreshRosterCostBadges({
       totalOverride: Number.isFinite(totalCostValue) ? totalCostValue : null,
-      recomputeItems: false,
+      recomputeItems: true,
     });
   }
 
