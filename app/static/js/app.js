@@ -3677,6 +3677,24 @@ function computeTotalCost(
     collectSectionIdentifiers(state && state.aura, state && state.auraLabels, selectedAbilitySet);
     const isOdwodyBlocked = (activeSet) =>
       activeSet.has('rezerwa') || activeSet.has('zwiadowca') || activeSet.has('zasadzka');
+    const transportMultiplier = (activeSet) => {
+      if (!(activeSet instanceof Set)) {
+        return 1;
+      }
+      if (activeSet.has('samolot')) {
+        return 3.5;
+      }
+      if (activeSet.has('zasadzka') || activeSet.has('zwiadowca')) {
+        return 2.5;
+      }
+      if (activeSet.has('latajacy')) {
+        return 1.5;
+      }
+      if (activeSet.has('szybki') || activeSet.has('zwinny')) {
+        return 1.25;
+      }
+      return 1;
+    };
     const effectivePassiveCost = (item, activeSet, costValue) => {
       const ident = passiveIdentifier(item.slug);
       if (!ident || !Number.isFinite(costValue)) {
@@ -3684,6 +3702,19 @@ function computeTotalCost(
       }
       if (ident === 'odwody' && isOdwodyBlocked(activeSet)) {
         return 0;
+      }
+      const isTransport = ident === 'transport';
+      const isOpenTransport = ident === 'otwarty_transport'
+        || ident === 'platforma_strzelecka'
+        || ident === 'otwarty transport'
+        || ident === 'platforma strzelecka';
+      if (isTransport || isOpenTransport) {
+        const capacity = extractNumber(item.value ?? item.label ?? item.raw ?? item.slug);
+        if (Number.isFinite(capacity) && capacity > 0) {
+          const baseMultiplier = transportMultiplier(activeSet);
+          const openTransportExtra = isOpenTransport ? 0.25 : 0;
+          return capacity * (baseMultiplier + openTransportExtra);
+        }
       }
       return costValue;
     };
