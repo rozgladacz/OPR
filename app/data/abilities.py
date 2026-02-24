@@ -673,17 +673,15 @@ def description_with_value(definition: AbilityDefinition, value: str | None) -> 
             ability_ref = value_text
         ability_slug = slug_for_name(ability_ref) or ability_ref
         ability_def = find_definition(ability_slug) if ability_slug else None
-        ability_label = ability_def.name if ability_def else ability_ref
         ability_description = ability_def.description if ability_def else ""
         range_clean = range_ref.replace("\"", "").replace("”", "").strip()
-        summary: list[str] = [description]
-        if ability_label:
-            summary.append(f"Wybrana zdolność: {ability_label}.")
-        if ability_description:
-            summary.append(ability_description)
-        if range_clean:
-            summary.append(f"Zasięg: {range_clean}\".")
-        return " ".join(part.strip() for part in summary if part).strip()
+        prefix = (
+            'Aura(12\"): Modele w oddziałach w zasięgu 12\" otrzymują zdolność:'
+            if range_clean == "12"
+            else "Bez X: Modele w twoim oddziale otrzymują zdolność:"
+        )
+        detail = ability_description.strip() or description
+        return f"{prefix} {detail}".strip()
 
     return description.replace("X", value_text)
 
