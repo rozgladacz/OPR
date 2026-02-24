@@ -5564,7 +5564,10 @@ function initRosterEditor() {
       updateTotalSummary(totalCostValue);
     }
 
-    refreshRosterCostBadges(Number.isFinite(totalCostValue) ? totalCostValue : null);
+    refreshRosterCostBadges({
+      totalOverride: Number.isFinite(totalCostValue) ? totalCostValue : null,
+      recomputeItems: false,
+    });
   }
 
   function updateCostDisplays() {
@@ -5643,7 +5646,14 @@ function initRosterEditor() {
     };
   }
 
-  function refreshRosterCostBadges(totalOverride = null, cycleToken = null) {
+  function refreshRosterCostBadges(options = null, cycleToken = null) {
+    const normalizedOptions = options && typeof options === 'object'
+      ? options
+      : { totalOverride: options };
+    const totalOverride = Number.isFinite(normalizedOptions.totalOverride)
+      ? normalizedOptions.totalOverride
+      : null;
+    const recomputeItems = normalizedOptions.recomputeItems !== false;
     if (cycleToken && cycleToken === lastRefreshRosterCostCycleToken) {
       return;
     }
@@ -5663,6 +5673,19 @@ function initRosterEditor() {
         if (Number.isFinite(totalOverride)) {
           updateTotalSummary(totalOverride);
         }
+        return;
+      }
+
+      if (!recomputeItems) {
+        if (Number.isFinite(totalOverride)) {
+          updateTotalSummary(totalOverride);
+          return;
+        }
+        const summedTotal = rosterItems.reduce((sum, item) => {
+          const value = Number(item?.getAttribute?.('data-unit-cost'));
+          return Number.isFinite(value) ? sum + value : sum;
+        }, 0);
+        updateTotalSummary(summedTotal);
         return;
       }
 
@@ -5812,7 +5835,7 @@ function initRosterEditor() {
           : '';
       stateChangeCycleToken = [activeId, String(currentCount), classificationSlug, loadoutInput?.value || ''].join('::');
     }
-    refreshRosterCostBadges(null, stateChangeCycleToken);
+    refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, stateChangeCycleToken);
     if (activeItem && loadoutInput) {
       activeItem.setAttribute('data-loadout', loadoutInput.value || '{}');
       invalidateCachedAttribute(activeItem, 'data-loadout');
