@@ -2170,7 +2170,7 @@ def move_army_spell(
     if not moved:
         return RedirectResponse(url=f"/armies/{army_id}/spells", status_code=303)
 
-    _resequence_spells(army)
+    _resequence_army_units(spells)
     db.commit()
 
     return RedirectResponse(url=f"/armies/{army_id}/spells", status_code=303)
