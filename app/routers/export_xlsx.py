@@ -197,7 +197,7 @@ def export_xlsx(
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
 
-    costs.ensure_cached_costs(roster.roster_units)
+    costs.update_cached_costs(roster.roster_units)
     workbook = Workbook()
     unit_cache: dict[int, dict[str, Any]] = {}
     entries = [
@@ -221,4 +221,3 @@ def export_xlsx(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers=headers,
     )
-
