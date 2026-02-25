@@ -307,11 +307,7 @@ def roster_pdf(
         army_name = roster.army.name if roster.army else "---"
         pdf.drawString(40, y, f"Armia: {army_name}")
         y -= 14
-        pdf.drawString(40, y, f"Limit punktów: {roster.points_limit or 'brak'}")
-        y -= 14
-        pdf.drawString(40, y, f"Suma punktów: {total_cost_rounded} pkt")
-        y -= 14
-        pdf.drawString(40, y, f"Wygenerowano: {generated_at.strftime('%Y-%m-%d %H:%M')} UTC")
+        pdf.drawString(40, y, f"Suma punktów: {total_cost_rounded} pkt | Wygenerowano: {generated_at.strftime('%Y-%m-%d %H:%M')} UTC")
         y -= 14
         if army_rules:
             rule_line = f"Zasady armii: {', '.join(army_rules)}"

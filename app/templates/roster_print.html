@@ -77,8 +77,7 @@
   <div class="print-header">
     <h1 class="h3 mb-2">{{ roster.name }}</h1>
     <div>Armia: {{ roster.army.name if roster.army else '---' }}</div>
-    <div>Limit: {{ roster.points_limit or 'brak' }} | Suma: {{ total_cost_rounded }} pkt</div>
-    <div>Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC</div>
+    <div>Suma: {{ total_cost_rounded }} pkt | Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC</div>
     {% if army_rules %}
     <div>Zasady armii: {{ army_rules | join(', ') }}</div>
     {% endif %}
