@@ -5893,7 +5893,6 @@ function initRosterEditor() {
           : '';
       stateChangeCycleToken = [activeId, String(currentCount), classificationSlug, loadoutInput?.value || ''].join('::');
     }
-    refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, stateChangeCycleToken);
     if (activeItem && loadoutInput) {
       activeItem.setAttribute('data-loadout', loadoutInput.value || '{}');
       invalidateCachedAttribute(activeItem, 'data-loadout');
@@ -5901,6 +5900,7 @@ function initRosterEditor() {
     if (activeItem) {
       updateItemClassification(activeItem, currentClassification);
       activeItem.setAttribute('data-unit-count', String(currentCount));
+      invalidateCachedAttribute(activeItem, 'data-unit-count');
       const activeEntry = getEntryElementFromItem(activeItem);
       const activeId = getUnitIdFromEntry(activeEntry);
       const partnerId = getPartnerId(activeId);
@@ -5914,6 +5914,7 @@ function initRosterEditor() {
         }
       }
     }
+    refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, stateChangeCycleToken);
     if (ignoreNextSave) {
       ignoreNextSave = false;
       return;
