@@ -201,7 +201,7 @@ def roster_print(
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
 
-    costs.ensure_cached_costs(roster.roster_units)
+    costs.update_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
     total_cost_rounded = utils.round_points(total_cost)
     roster_items = _export_roster_unit_entries(db, roster)
@@ -237,7 +237,7 @@ def roster_export_list(
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
 
-    costs.ensure_cached_costs(roster.roster_units)
+    costs.update_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
     total_cost_rounded = utils.round_points(total_cost)
 
@@ -275,7 +275,7 @@ def roster_pdf(
     _ensure_roster_view_access(roster, current_user)
 
     generated_at = datetime.utcnow()
-    costs.ensure_cached_costs(roster.roster_units)
+    costs.update_cached_costs(roster.roster_units)
     total_cost = costs.roster_total(roster)
     total_cost_rounded = utils.round_points(total_cost)
     roster_items = _export_roster_unit_entries(db, roster)
