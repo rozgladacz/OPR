@@ -188,7 +188,13 @@ def test_handle_state_change_refreshes_roster_total_immediately_without_server_u
         const makeBadge = () => ({ textContent: '' });
         const createItem = (id) => {
           const badge = makeBadge();
-          const attrs = new Map([['data-roster-unit-id', id], ['data-unit-cost', '0']]);
+          const attrs = new Map([
+            ['data-roster-unit-id', id],
+            ['data-unit-cost', '0'],
+            ['data-unit-count', '1'],
+            ['data-loadout', '{}'],
+            ['data-unit-classification', 'null'],
+          ]);
           return {
             _badge: badge,
             _attrs: attrs,
@@ -231,18 +237,27 @@ def test_handle_state_change_refreshes_roster_total_immediately_without_server_u
         let lastRefreshRosterCostCycleToken = null;
         const buildClassificationContextFromItem = (item) => ({
           id: item.getAttribute('data-roster-unit-id'),
-          loadoutState: {},
+          count: Number(item.getAttribute('data-unit-count') || '1'),
+          loadoutState: JSON.parse(item.getAttribute('data-loadout') || '{}'),
+          currentClassification: JSON.parse(item.getAttribute('data-unit-classification') || 'null'),
         });
         const getPartnerId = (unitId) => (unitId === 'u1' ? 'u2' : unitId === 'u2' ? 'u1' : '');
         const computeRosterItemCost = (context, partnerContext = null) => {
-          state.computeCalls.push({ unitId: context.id, partnerId: partnerContext ? partnerContext.id : null });
-          if (context.id === 'u1') {
-            return { total: partnerContext ? 120 : 100 };
-          }
-          if (context.id === 'u2') {
-            return { total: partnerContext ? 80 : 70 };
-          }
-          return { total: 0 };
+          state.computeCalls.push({
+            unitId: context.id,
+            count: context.count,
+            edited: Boolean(context.loadoutState && context.loadoutState.edited),
+            classification: context.currentClassification ? context.currentClassification.slug : null,
+            partnerId: partnerContext ? partnerContext.id : null,
+            partnerClassification: partnerContext && partnerContext.currentClassification
+              ? partnerContext.currentClassification.slug
+              : null,
+          });
+          const base = context.id === 'u1' ? 10 : 20;
+          const ownClassificationBonus = context.currentClassification && context.currentClassification.slug === 'strzelec' ? 1000 : 0;
+          const partnerClassificationBonus = partnerContext && partnerContext.currentClassification && partnerContext.currentClassification.slug === 'strzelec' ? 10000 : 0;
+          const editedBonus = context.loadoutState && context.loadoutState.edited ? 100 : 0;
+          return { total: base + context.count + editedBonus + ownClassificationBonus + partnerClassificationBonus };
         };
         const formatPoints = (value) => String(value);
         const updateTotalSummary = (value) => state.totals.push(value);
@@ -261,7 +276,7 @@ def test_handle_state_change_refreshes_roster_total_immediately_without_server_u
         let activeItem = primaryItem;
         const loadoutInput = { value: '{"before":1}' };
         const renderEditors = () => {};
-        const serializeLoadoutState = () => '{"after":2}';
+        const serializeLoadoutState = () => '{"edited":true}';
         const updateCostDisplays = () => {
           state.updateCostDisplaysCalls += 1;
           primaryItem.setAttribute('data-unit-cost', '120');
@@ -273,7 +288,9 @@ def test_handle_state_change_refreshes_roster_total_immediately_without_server_u
         const estimateCombinedClassification = () => ({ classification: { slug: 'strzelec' }, weaponMap: new Map() });
         const applyClassificationToState = () => {};
         const invalidateCachedAttribute = () => {};
-        const updateItemClassification = () => {};
+        const updateItemClassification = (item, classification) => {
+          item.setAttribute('data-unit-classification', JSON.stringify(classification ?? null));
+        };
         let ignoreNextSave = false;
         let autoSaveEnabled = false;
         const setSaveStatus = () => {};
@@ -300,9 +317,23 @@ def test_handle_state_change_refreshes_roster_total_immediately_without_server_u
     result = _run_node(script)
 
     assert result["updateCostDisplaysCalls"] == 1
-    assert result["latestTotal"] == 200
-    assert result["unitBadge"] == "120 pkt"
-    assert result["unitCostAttr"] == "120"
-    assert {"unitId": "u1", "partnerId": "u2"} in result["computeCalls"]
-    assert {"unitId": "u2", "partnerId": "u1"} in result["computeCalls"]
+    assert result["latestTotal"] == 22137
+    assert result["unitBadge"] == "11116 pkt"
+    assert result["unitCostAttr"] == "11116"
+    assert {
+        "unitId": "u1",
+        "count": 6,
+        "edited": True,
+        "classification": "strzelec",
+        "partnerId": "u2",
+        "partnerClassification": "strzelec",
+    } in result["computeCalls"]
+    assert {
+        "unitId": "u2",
+        "count": 1,
+        "edited": False,
+        "classification": "strzelec",
+        "partnerId": "u1",
+        "partnerClassification": "strzelec",
+    } in result["computeCalls"]
     assert result["applyServerUpdateCalls"] == 0
