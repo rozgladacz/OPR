@@ -21,9 +21,7 @@
   <h1>{{ roster.name }}</h1>
   <p class="meta">
     Armia: {{ roster.army.name if roster.army else '---' }} ·
-    Limit: {{ roster.points_limit or 'brak' }} ·
-    Suma: {{ total_cost_rounded }} pkt{% if generated_at %} ·
-    Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC{% endif %}
+    Suma: {{ total_cost_rounded }} pkt{% if generated_at %} · Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC{% endif %}
   </p>
   {% if army_rules %}
   <p class="meta">
