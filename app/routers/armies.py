@@ -2134,6 +2134,48 @@ def update_army_spell(
     )
 
 
+@router.post("/{army_id}/spells/{spell_id}/move")
+def move_army_spell(
+    army_id: int,
+    spell_id: int,
+    direction: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    _ensure_army_edit_access(army, current_user)
+
+    normalized_direction = (direction or "").strip().lower()
+    if normalized_direction not in {"up", "down"}:
+        raise HTTPException(status_code=400, detail="Nieprawidłowy kierunek")
+
+    spells = (
+        db.execute(
+            select(models.ArmySpell)
+            .where(models.ArmySpell.army_id == army.id)
+            .order_by(models.ArmySpell.position, models.ArmySpell.id)
+        )
+        .scalars()
+        .all()
+    )
+
+    try:
+        target = next(item for item in spells if item.id == spell_id)
+    except StopIteration:
+        raise HTTPException(status_code=404)
+
+    moved = _move_unit_in_sequence(spells, target.id, normalized_direction)
+    if not moved:
+        return RedirectResponse(url=f"/armies/{army_id}/spells", status_code=303)
+
+    _resequence_spells(army)
+    db.commit()
+
+    return RedirectResponse(url=f"/armies/{army_id}/spells", status_code=303)
+
+
 @router.post("/{army_id}/spells/{spell_id}/delete")
 def delete_army_spell(
     army_id: int,
