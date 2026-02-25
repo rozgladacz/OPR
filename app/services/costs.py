@@ -61,8 +61,8 @@ AP_BRUTAL = {-1: 0.14, 0: 0.15, 1: 0.23, 2: 0.33, 3: 0.45, 4: 0.55, 5: 0.65}
 PENETRATING_MULTIPLIER = {-1: 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2.9, 5: 3.0}
 WAAGH_AP_MODIFIER = {-1: 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02}
 
-BLAST_MULTIPLIER = {2: 1.95, 3: 2.8, 6: 4.3}
-DEADLY_MULTIPLIER = {2: 1.9, 3: 2.6, 6: 3.8}
+BLAST_MULTIPLIER = {2: 1.9, 3: 2.7, 6: 4.3}
+DEADLY_MULTIPLIER = {2: 1.8, 3: 2.5, 6: 3.8}
 
 TRANSPORT_MULTIPLIERS = [
     ({"samolot"}, 3.5),
@@ -686,7 +686,7 @@ def passive_cost(
         if slug == "przygotowanie":
             return 3.5 * tou
         if slug == "ostrozny":
-            return 3.5 * tou
+            return 4.25 * tou
 
     if slug == "strach":
         value = extract_number(ability_name)
