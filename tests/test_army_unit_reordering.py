@@ -34,3 +34,25 @@ def test_move_unit_in_sequence_prevents_out_of_range_moves() -> None:
     assert armies._move_unit_in_sequence(units, 1, "up") is False
     assert armies._move_unit_in_sequence(units, 2, "down") is False
     assert [unit.id for unit in units] == [1, 2]
+
+
+@dataclass
+class DummySpell:
+    id: int
+    position: int = 0
+
+
+def test_move_spell_in_sequence_handles_equal_positions() -> None:
+    spells = [DummySpell(id=11, position=0), DummySpell(id=12, position=0), DummySpell(id=13, position=0)]
+
+    moved = armies._move_unit_in_sequence(spells, 12, "up")
+
+    assert moved is True
+    assert [spell.id for spell in spells] == [12, 11, 13]
+
+
+def test_move_spell_in_sequence_rejects_invalid_direction() -> None:
+    spells = [DummySpell(id=11, position=0), DummySpell(id=12, position=1)]
+
+    assert armies._move_unit_in_sequence(spells, 11, "left") is False
+    assert [spell.id for spell in spells] == [11, 12]
