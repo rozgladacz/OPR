@@ -170,7 +170,7 @@ def _export_roster_unit_entries(
         if unit_id is None:
             continue
         loadouts[unit_id] = _roster_unit_loadout(roster_unit)
-    classifications, _totals = _classification_map(
+    classifications, totals_by_id = _classification_map(
         roster.roster_units, loadouts
     )
     entries: list[dict[str, Any]] = []
@@ -182,6 +182,7 @@ def _export_roster_unit_entries(
                 unit_cache=unit_cache,
                 loadout_override=loadouts.get(unit_id),
                 classification=classifications.get(unit_id),
+                totals=totals_by_id.get(unit_id),
             )
         )
     return entries
@@ -202,9 +203,9 @@ def roster_print(
     _ensure_roster_view_access(roster, current_user)
 
     costs.update_cached_costs(roster.roster_units)
-    total_cost = costs.roster_total(roster)
-    total_cost_rounded = utils.round_points(total_cost)
     roster_items = _export_roster_unit_entries(db, roster)
+    total_cost = sum(float(item.get("total_cost") or 0.0) for item in roster_items)
+    total_cost_rounded = utils.round_points(total_cost)
     spell_entries = _army_spell_entries(roster, roster_items)
     army_rules = _army_rule_labels(getattr(roster, "army", None))
     return templates.TemplateResponse(
@@ -238,10 +239,10 @@ def roster_export_list(
     _ensure_roster_view_access(roster, current_user)
 
     costs.update_cached_costs(roster.roster_units)
-    total_cost = costs.roster_total(roster)
+    entries = _export_roster_unit_entries(db, roster)
+    total_cost = sum(float(entry.get("total_cost") or 0.0) for entry in entries)
     total_cost_rounded = utils.round_points(total_cost)
 
-    entries = _export_roster_unit_entries(db, roster)
     spell_entries = _army_spell_entries(roster, entries)
     army_rules = _army_rule_labels(getattr(roster, "army", None))
 
@@ -276,9 +277,9 @@ def roster_pdf(
 
     generated_at = datetime.utcnow()
     costs.update_cached_costs(roster.roster_units)
-    total_cost = costs.roster_total(roster)
-    total_cost_rounded = utils.round_points(total_cost)
     roster_items = _export_roster_unit_entries(db, roster)
+    total_cost = sum(float(item.get("total_cost") or 0.0) for item in roster_items)
+    total_cost_rounded = utils.round_points(total_cost)
     spell_entries = _army_spell_entries(roster, roster_items)
     army_rules = _army_rule_labels(getattr(roster, "army", None))
 

@@ -17,7 +17,12 @@ from .export import (
     _army_spell_entries,
     _load_roster_for_export,
 )
-from .rosters import _ensure_roster_view_access, _roster_unit_export_data
+from .rosters import (
+    _classification_map,
+    _ensure_roster_view_access,
+    _roster_unit_export_data,
+    _roster_unit_loadout,
+)
 
 
 router = APIRouter(prefix="/export", tags=["export"])
@@ -200,10 +205,25 @@ def export_xlsx(
     costs.update_cached_costs(roster.roster_units)
     workbook = Workbook()
     unit_cache: dict[int, dict[str, Any]] = {}
-    entries = [
-        _roster_unit_export_data(ru, unit_cache=unit_cache)
-        for ru in roster.roster_units
-    ]
+    loadouts: dict[int, dict[str, Any]] = {}
+    for roster_unit in roster.roster_units:
+        unit_id = getattr(roster_unit, "id", None)
+        if unit_id is None:
+            continue
+        loadouts[unit_id] = _roster_unit_loadout(roster_unit)
+    classifications, totals_by_id = _classification_map(roster.roster_units, loadouts)
+    entries = []
+    for roster_unit in roster.roster_units:
+        unit_id = getattr(roster_unit, "id", None)
+        entries.append(
+            _roster_unit_export_data(
+                roster_unit,
+                unit_cache=unit_cache,
+                loadout_override=loadouts.get(unit_id),
+                classification=classifications.get(unit_id),
+                totals=totals_by_id.get(unit_id),
+            )
+        )
     spell_entries = _army_spell_entries(roster, entries)
     army_rules = _army_rule_labels(getattr(roster, "army", None))
     total_cost = _append_roster_sheet(
