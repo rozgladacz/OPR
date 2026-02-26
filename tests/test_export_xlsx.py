@@ -37,7 +37,8 @@ def test_army_rules_rendered_in_xlsx_header() -> None:
 
 
 class DummyRosterUnit:
-    def __init__(self, *, count: int, cached_cost: float) -> None:
+    def __init__(self, *, id: int, count: int, cached_cost: float) -> None:
+        self.id = id
         self.count = count
         self.cached_cost = cached_cost
 
@@ -49,16 +50,22 @@ class DummyRoster:
 
 
 def test_export_xlsx_refreshes_cached_costs_before_building_entries_and_total(monkeypatch) -> None:
-    roster_unit = DummyRosterUnit(count=4, cached_cost=10.0)
+    roster_unit = DummyRosterUnit(id=1, count=4, cached_cost=10.0)
     roster = DummyRoster([roster_unit])
 
     monkeypatch.setattr(export_xlsx, "_load_roster_for_export", lambda db, roster_id: roster)
     monkeypatch.setattr(export_xlsx, "_ensure_roster_view_access", lambda roster, user: None)
     monkeypatch.setattr(export_xlsx.costs, "roster_unit_cost", lambda ru: ru.count * 11.6)
+    monkeypatch.setattr(export_xlsx, "_roster_unit_loadout", lambda ru: {"mode": "per_model"})
+    monkeypatch.setattr(
+        export_xlsx,
+        "_classification_map",
+        lambda roster_units, loadouts: ({ru.id: None for ru in roster_units}, {ru.id: {"wojownik": ru.cached_cost, "strzelec": ru.cached_cost} for ru in roster_units}),
+    )
     monkeypatch.setattr(
         export_xlsx,
         "_roster_unit_export_data",
-        lambda ru, unit_cache=None: {
+        lambda ru, unit_cache=None, loadout_override=None, classification=None, totals=None: {
             "rounded_total_cost": export_xlsx.utils.round_points(ru.cached_cost),
             "total_cost": ru.cached_cost,
             "weapon_details": [],

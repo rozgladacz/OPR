@@ -2591,6 +2591,7 @@ def _roster_unit_export_data(
     unit_cache: dict[int, dict[str, Any]] | None = None,
     loadout_override: dict[str, Any] | None = None,
     classification: dict[str, Any] | None = None,
+    totals: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     unit = roster_unit.unit
     if unit is None:  # pragma: no cover - defensive fallback
@@ -2699,7 +2700,14 @@ def _roster_unit_export_data(
         for entry in selected_auras
         if entry
     ]
-    total_value = float(roster_unit.cached_cost or costs.roster_unit_cost(roster_unit))
+    totals_map: Mapping[str, float]
+    if isinstance(totals, Mapping):
+        totals_map = totals
+    else:
+        totals_map = costs.roster_unit_role_totals(roster_unit, loadout)
+    warrior_total = float(totals_map.get("wojownik") or 0.0)
+    shooter_total = float(totals_map.get("strzelec") or 0.0)
+    total_value = max(warrior_total, shooter_total)
     rounded_total = utils.round_points(total_value)
 
     active_slugs: list[str] = []
