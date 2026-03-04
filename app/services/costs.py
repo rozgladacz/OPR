@@ -632,7 +632,8 @@ def passive_cost(
                 ability_slugs.add(identifier)
         if ability_slugs & {"rezerwa", "zwiadowca", "zasadzka"}:
             return 0
-        return -1.75 * tou
+        return -2.5 * tou
+        return -2.5 * tou
     if slug == "szybki":
         return 1.0 * tou
     if slug == "wolny":
@@ -667,10 +668,10 @@ def passive_cost(
         return 3.0 * tou
     if slug == "cierpliwy":
         return 3.0 * tou
-    if slug == "rezerwa":
-        return -3.0 * tou
     if slug == "roj":
         return 0.25 * tou
+    if slug == "zwrot":
+        return -0.25 * tou
         
     if aura:
         if slug in {"nieustraszony", "ucieczka", "stracency"}:
@@ -957,7 +958,9 @@ def _weapon_cost(
     if not melee and "dobrze_strzela" in unit_set:
         q = 4
     if "zemsta" in unit_set:
-        mult *= 1.1
+        mult *= 1.2
+    if "rezerwa" in unit_set:
+        mult *= 0.6
 
     assault = False
     overcharge = False
@@ -1036,7 +1039,7 @@ def _weapon_cost(
     cost = attacks * 2.0 * range_mod * chance * ap_mod * mult
 
     if overcharge and (not assault or range_value != 0):
-        cost *= 1.4
+        cost *= 1.05
 
     if assault and allow_assault_extra and range_value != 0:
         melee_part_cost = _weapon_cost(

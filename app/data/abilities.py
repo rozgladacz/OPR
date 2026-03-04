@@ -110,17 +110,23 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="latajacy",
         name="Latający",
         type="passive",
-        description="Ignoruje teren i jednostki podczas ruchu.",
+        description="Ignoruje teren i jednostki podczas ruchu. Wciąż jest uznawany za przechodzący przez punkt końcowy.",
     ),
     AbilityDefinition(
         slug="samolot",
         name="Samolot",
         type="passive",
         description=(
-            "Jest latający. Podczas ruchu musi przemieścić się dodatkowe 30” w jednej linii. Nie może być przyszpilony, "
-            "nie może kontrolować punktów, szarżować, ani być celem szarży. Nie blokuje ruchu ani widzenia innych jednostek. "
-            "Jednostki strzelające do niego mają -12” zasięgu i -1 do trafienia. Nie może być atakowany bronią Niebezpośrednią."
+            "Wysoki. Podczas ruchu ignoruje teren i musi przemieścić się 30”-36” się w jednej linii. Nie blokuje ruchu ani widzenia innych jednostek."
+            "Nie może być przyszpilony, kontrolować punktów, szarżować, ani być celem szarży lub broni Niebezpośredniej. "
+            "Jednostki strzelające do niego mają -12” zasięgu i -1 do trafienia."
         ),
+    ),
+    AbilityDefinition(
+        slug="wysoki",
+        name="Wysoki",
+        type="passive",
+        description="Sprawdza linię wzroku jakby był na podwyższeniu.",
     ),
     AbilityDefinition(
         slug="masywny",
@@ -130,14 +136,6 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
             "Cały oddział reprezentowany jest przez jeden model z wydzielonymi elementami, "
             "który może przyjmować rany ponad maksimum."
         ),
-    ),
-    AbilityDefinition(
-        slug="strach",
-        name="Strach",
-        type="passive",
-        description="Ten model liczy się jako ten, który zadał +X ran podczas sprawdzania, kto wygrał walkę wręcz.",
-        value_label="X",
-        value_type="number",
     ),
     AbilityDefinition(
         slug="nieustraszony",
@@ -239,7 +237,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="tarcza",
         name="Tarcza",
         type="passive",
-        description="Zawsze ma osłonę.",
+        description="+1 do testów obrony, gdy nie jest przyszpilony.",
     ),
     AbilityDefinition(
         slug="okopany",
@@ -300,7 +298,10 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Zemsta",
         type="passive",
         description=(
-            "Zamiast przydzielać rany do oddziału możesz położyć je obok niego i przydzielić je na końcu jego aktywacji."
+            "Gdy przydzielasz rany, nie musisz od razu pokonywać modeli."
+            "Zamiast tego na końcu aktywacji oddziału, przed przegrupowaniem, "
+            "pokonaj tyle modeli, aby liczba ran była niższa od wytrzymałości oddziału. "
+            "Przeciwnik przydzielający rany, nie może używać wcześniej przydzielonych ran do pokonania modelu."
         ),
     ),
     AbilityDefinition(
@@ -360,8 +361,9 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Zwrot",
         type="passive",
         description=(
-            "Rusza się o dodatkowe 2”, ale może się poruszać tylko do przodu, każdy obrót kosztuje 2”." "Jego usytuowanie wyznacza 4 nakładające się strefy, każda o kącie 180’: przód, tył, lewo, prawo."
-            "Jeżeli oddział który go atakuje jest cały w przedniej strefie, otrzymuje +1 do obrony."
+            "Na końcu ruchu w swojej aktywacji wybiera w która stronę jest zwrócony (nie może tego zmienić poza swoją aktywacją). "
+            "Jego usytuowanie wyznacza 4 nakładające się strefy, każda o kącie 180’: przód, tył, lewo, prawo."
+            "Jeżeli oddział który go atakuje jest cały w tylnej strefie, otrzymuje -1 do obrony."
             "Co najmniej połowa jego broni musi być przypisana do strefy i może atakować tylko cele które w pełni się w niej znajdują. Pozostałe muszą atakować jeden oddział."
         ),
     ),
@@ -485,7 +487,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="zabojczy",
         name="Zabójczy",
         type="weapon",
-        description="Zamiast jednej przydziel jednocześnie X ran.",
+        description= (
+            "Zamiast jednej przydziel X ran, "
+            "ale nie więcej niż wytrzymałość wybranego modelu, który, jeżeli to możliwe, zostaje pokonany."
+            "Jeżeli w wyniku tego, zmieniała się maksymalna wytrzymałość oddziału, "
+            "odrzuć tyle ran, aby nie było ich mniej niż ona."
+        ),
         value_label="X",
         value_type="number",
         value_choices=("2", "3", "6"),
@@ -520,7 +527,10 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="zuzywalny",
         name="Zużywalny",
         type="weapon",
-        description="Można użyć tylko raz na grę.",
+        description=(
+            "Można użyć tylko raz na grę. "
+            "Limit jeden rodzaj broni z tą zdolnością na oddział."
+        ),
     ),
     AbilityDefinition(
         slug="niezawodny",
@@ -574,7 +584,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="podkrecenie",
         name="Podkręcenie",
         type="weapon",
-        description="Raz na grę może być użyta dodatkowy raz.",
+        description="W ostatniej rundzie wykonuje podwójną liczbę ataków.",
     ),
     AbilityDefinition(
         slug="burzaca",
