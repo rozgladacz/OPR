@@ -56,7 +56,6 @@ CAUTIOUS_HIT_BONUS = {0: 0.0, 12: 0.0, 18: 0.6, 24: 0.7, 30: 0.8, 36: 0.9}
 
 AP_BASE = {-1: 0.8, 0: 1.0, 1: 1.5, 2: 1.9, 3: 2.25, 4: 2.5, 5: 2.65}
 AP_LANCE = {-1: 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05}
-AP_NO_COVER = {-1: 0.1, 0: 0.25, 1: 0.2, 2: 0.15, 3: 0.1, 4: 0.1, 5: 0.05}
 AP_BRUTAL = {-1: 0.14, 0: 0.15, 1: 0.23, 2: 0.33, 3: 0.45, 4: 0.55, 5: 0.65}
 PENETRATING_MULTIPLIER = {-1: 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2.9, 5: 3.0}
 WAAGH_AP_MODIFIER = {-1: 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02}
@@ -621,7 +620,7 @@ def passive_cost(
     tou = float(tou)
 
     if slug == "zasadzka":
-        return 2.0 * tou
+        return 4.0 * tou
     if slug == "zwiadowca":
         return 2.0 * tou
     if slug == "odwody":
@@ -688,11 +687,7 @@ def passive_cost(
             return 3.5 * tou
         if slug == "ostrozny":
             return 4.25 * tou
-
-    if slug == "strach":
-        value = extract_number(ability_name)
-        return 0.75 * value
-
+            
     return 0.0
 
 
@@ -961,6 +956,8 @@ def _weapon_cost(
         mult *= 1.2
     if "rezerwa" in unit_set:
         mult *= 0.6
+    if "zasadzka" in unit_set and not melee:
+        mult *= 0.6
 
     assault = False
     overcharge = False
@@ -997,11 +994,8 @@ def _weapon_cost(
         elif norm in {"namierzanie", "lock on"}:
             chance += 0.35
             mult *= 1.1
-            ap_mod += lookup_with_nearest(AP_NO_COVER, base_ap)
         elif norm in {"impet", "impact"}:
             ap_mod += lookup_with_nearest(AP_LANCE, base_ap)
-        elif norm in {"bez oslon", "bez oslony", "no cover"}:
-            ap_mod += lookup_with_nearest(AP_NO_COVER, base_ap)
         elif norm in {"przebijajaca", "przebijajacy", "penetrating"}:
             mult *= lookup_with_nearest(PENETRATING_MULTIPLIER, base_ap)
         elif norm in {
