@@ -983,6 +983,9 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
   if (!melee && traitSet.has('dobrze_strzela')) {
     q = 4;
   }
+  if (!melee && traitSet.has('zasadzka')) {
+    mult *= 0.6;
+  }
 
   let assault = false;
   let overcharge = false;
