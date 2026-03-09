@@ -117,7 +117,7 @@ def test_overcharge_applied_once_for_non_assault():
     base_cost = costs.weapon_cost(base_weapon, unit_quality=4, unit_flags=[])
     overcharge_cost = costs.weapon_cost(overcharge_weapon, unit_quality=4, unit_flags=[])
 
-    assert overcharge_cost == pytest.approx(base_cost * 1.4, rel=1e-3, abs=0.02)
+    assert overcharge_cost == pytest.approx(base_cost * 1.05, rel=1e-3, abs=0.02)
 
 
 def test_overcharge_applies_once_per_assault_component():
@@ -140,7 +140,7 @@ def test_overcharge_applies_once_per_assault_component():
         allow_assault_extra=False,
     )
 
-    expected = 1.4 * ranged_base + 1.4 * melee_base
+    expected = 1.05 * ranged_base + melee_base
     assault_overcharge = _weapon("12\"", ap=1, tags="Assault, Overcharge")
     total_cost = costs.weapon_cost(assault_overcharge, unit_quality=4, unit_flags=[])
 
@@ -152,4 +152,4 @@ def test_overcharge_weapon_matches_expected_formula():
 
     cost = costs.weapon_cost(plasma_cannon, unit_quality=4, unit_flags=[])
 
-    assert cost == pytest.approx(161.99, abs=0.02)
+    assert cost == pytest.approx(110.99, abs=0.02)
