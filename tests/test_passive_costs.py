@@ -357,3 +357,8 @@ def test_instynkt_aura_and_order_costs() -> None:
 
 def test_dywersant_aura_cost() -> None:
     assert costs.passive_cost("dywersant", 8, True) == pytest.approx(10)
+
+
+def test_regeneracja_has_fixed_toughness_multiplier() -> None:
+    assert costs.passive_cost("regeneracja", 8) == pytest.approx(10)
+    assert costs.passive_cost("regeneracja", 8, True) == pytest.approx(10)
