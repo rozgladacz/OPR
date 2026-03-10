@@ -569,12 +569,6 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Można nią wykonywać ataki wręcz.",
     ),
     AbilityDefinition(
-        slug="bez_oslon",
-        name="Bez osłon",
-        type="weapon",
-        description="Ignoruje osłonę.",
-    ),
-    AbilityDefinition(
         slug="brutalny",
         name="Brutalny",
         type="weapon",
