@@ -215,7 +215,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="maskowanie",
         name="Maskowanie",
         type="passive",
-        description="Atakujący ma -1 do rzutów na trafienie, gdy jest dalej niż 6\".",
+        description="Ma osłonę, gdy jest dalej niż 3\" od wrogów.",
     ),
     AbilityDefinition(
         slug="waagh",
@@ -243,7 +243,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="okopany",
         name="Okopany",
         type="passive",
-        description="Jego premia za osłonę wzrasta do +2.",
+        description="+1 do testów obrony, gdy ma osłonę z terenu.",
     ),
     AbilityDefinition(
         slug="zdobywca",
@@ -397,7 +397,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="latanie",
         name="Łatanie",
         type="active",
-        description="Na końcu towjej aktywacji oddział w zasięgu 2” odzyskuje k3 rany.",
+        description="Na końcu towjej aktywacji oddział w zasięgu 3” odzyskuje k3 rany.",
     ),
     AbilityDefinition(
         slug="mobilizacja",
@@ -569,12 +569,6 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Można nią wykonywać ataki wręcz.",
     ),
     AbilityDefinition(
-        slug="bez_oslon",
-        name="Bez osłon",
-        type="weapon",
-        description="Ignoruje osłonę.",
-    ),
-    AbilityDefinition(
         slug="brutalny",
         name="Brutalny",
         type="weapon",
@@ -686,9 +680,9 @@ def description_with_value(definition: AbilityDefinition, value: str | None) -> 
         ability_description = ability_def.description if ability_def else ""
         range_clean = range_ref.replace("\"", "").replace("”", "").strip()
         prefix = (
-            'Aura(12\"): Modele w oddziałach w zasięgu 12\" otrzymują zdolność:'
+            'Modele w oddziałach w zasięgu 12\" otrzymują zdolność:'
             if range_clean == "12"
-            else "Bez X: Modele w twoim oddziale otrzymują zdolność:"
+            else "Modele w twoim oddziale otrzymują zdolność:"
         )
         detail = ability_description.strip() or description
         return f"{prefix} {detail}".strip()

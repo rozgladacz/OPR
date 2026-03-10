@@ -54,7 +54,7 @@ UNWIELDY_RANGE_PENALTY = {
 
 CAUTIOUS_HIT_BONUS = {0: 0.0, 12: 0.0, 18: 0.6, 24: 0.7, 30: 0.8, 36: 0.9}
 
-AP_BASE = {-1: 0.8, 0: 1.0, 1: 1.5, 2: 1.9, 3: 2.25, 4: 2.5, 5: 2.65}
+AP_BASE = {-1: 0.8, 0: 1.0, 1: 1.4, 2: 1.8, 3: 2.1, 4: 2.3, 5: 2.4}
 AP_LANCE = {-1: 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05}
 AP_BRUTAL = {-1: 0.14, 0: 0.15, 1: 0.23, 2: 0.33, 3: 0.45, 4: 0.55, 5: 0.65}
 PENETRATING_MULTIPLIER = {-1: 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2.9, 5: 3.0}
@@ -914,7 +914,7 @@ def _weapon_cost(
     unit_traits: Sequence[str],
     allow_assault_extra: bool = True,
 ) -> float:
-    chance = 7.0
+    chance = 6.5
     attacks = float(attacks if attacks is not None else 1.0)
     attacks = max(attacks, 0.0)
     base_ap = int(ap or 0)
@@ -992,7 +992,7 @@ def _weapon_cost(
         elif norm in {"lanca", "lance"}:
             chance += 0.65
         elif norm in {"namierzanie", "lock on"}:
-            chance += 0.35
+            chance += 0.5
             mult *= 1.1
         elif norm in {"impet", "impact"}:
             ap_mod += lookup_with_nearest(AP_LANCE, base_ap)
