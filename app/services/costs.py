@@ -24,7 +24,6 @@ DEFENSE_BASE_VALUES = {2: 2.0, 3: 1.67, 4: 1.33, 5: 1.0, 6: 0.8}
 DEFENSE_ABILITY_MODIFIERS = {
     "delikatny": {2: -0.05, 3: -0.07, 4: -0.08, 5: -0.1, 6: -0.13},
     "niewrazliwy": {2: 0.05, 3: 0.1, 4: 0.2, 5: 0.3, 6: 0.35},
-    "regeneracja": {2: 0.5, 3: 0.45, 4: 0.4, 5: 0.35, 6: 0.3},
     "szpica": {2: 0.15, 3: 0.12, 4: 0.1, 5: 0.08, 6: 0.06},
     "waagh": {2: -0.03, 3: -0.03, 4: -0.03, 5: -0.02, 6: -0.01},
     "odrodzenie": {2: 0.3, 3: 0.38, 4: 0.5, 5: 0.62, 6: 0.75},
@@ -659,6 +658,8 @@ def passive_cost(
         return 1.0 * tou
     if slug == "tarcza":
         return 1.25 * tou
+    if slug == "regeneracja":
+        return 1.25 * tou
     if slug == "dywersant":
         return 1.25 * (tou if aura else 1.0)
     if slug == "zdobywca":
@@ -679,8 +680,6 @@ def passive_cost(
             return 0.5 * tou
         if slug == "niewrazliwy":
             return 1.5 * tou
-        if slug == "regeneracja":
-            return 2.25 * tou
         if slug == "furia":
             return 3.0 * tou
         if slug == "przygotowanie":
