@@ -37,7 +37,6 @@ WEAPON_SYNONYMS = {
     "penetrating": "przebijajaca",
     "corrosive": "zracy",
     "assault": "szturmowa",
-    "no cover": "bez_oslon",
     "brutal": "brutalny",
     "brutalny": "brutalny",
     "brutalna": "brutalny",

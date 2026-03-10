@@ -337,3 +337,46 @@ def test_handle_state_change_refreshes_roster_total_immediately_without_server_u
         "partnerClassification": "strzelec",
     } in result["computeCalls"]
     assert result["applyServerUpdateCalls"] == 0
+
+
+def test_build_weapon_cost_map_applies_ambush_multiplier_for_ranged_weapon() -> None:
+    script_body = """
+        const weapon = {
+          id: 101,
+          range: 24,
+          attacks: 2,
+          ap: 1,
+          traits: '',
+        };
+
+        const withoutAmbush = sandbox.buildWeaponCostMap(
+          [weapon],
+          4,
+          {},
+          [],
+          new Map(),
+          null,
+        ).get(weapon.id);
+
+        const withAmbush = sandbox.buildWeaponCostMap(
+          [weapon],
+          4,
+          { 'Zasadzka?!': true },
+          [],
+          new Map(),
+          null,
+        ).get(weapon.id);
+
+        console.log(JSON.stringify({
+          withoutAmbush,
+          withAmbush,
+          ratio: withAmbush / withoutAmbush,
+        }));
+    """
+
+    script = _build_sandbox_script(script_body)
+    result = _run_node(script)
+
+    assert result["withoutAmbush"] > 0
+    assert result["withAmbush"] < result["withoutAmbush"]
+    assert result["ratio"] == 0.6

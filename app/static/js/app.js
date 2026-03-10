@@ -638,13 +638,19 @@ function initAbilityPickers() {
 }
 
 const RANGE_TABLE = { 0: 0.6, 12: 0.65, 18: 1.0, 24: 1.25, 30: 1.45, 36: 1.55 };
+const ARTILLERY_RANGE_BONUS = { 0: 0.0, 12: 0.85, 18: 0.55, 24: 0.35, 30: 0.2, 36: 0.15 };
+const UNWIELDY_RANGE_PENALTY = { 0: 0.0, 12: 0.6, 18: 0.4, 24: 0.4, 30: 0.3, 36: 0.15 };
+const CAUTIOUS_HIT_BONUS = { 0: 0.0, 12: 0.0, 18: 0.6, 24: 0.7, 30: 0.8, 36: 0.9 };
 const AP_BASE = { '-1': 0.8, 0: 1.0, 1: 1.5, 2: 1.9, 3: 2.25, 4: 2.5, 5: 2.65 };
-const AP_NO_COVER = { '-1': 0.1, 0: 0.25, 1: 0.2, 2: 0.15, 3: 0.1, 4: 0.1, 5: 0.05 };
 const AP_LANCE = { '-1': 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05 };
-const AP_CORROSIVE = { '-1': 0.05, 0: 0.05, 1: 0.1, 2: 0.25, 3: 0.4, 4: 0.5, 5: 0.55 };
+const AP_BRUTAL = { '-1': 0.14, 0: 0.15, 1: 0.23, 2: 0.33, 3: 0.45, 4: 0.55, 5: 0.65 };
 const PENETRATING_MULTIPLIER = { '-1': 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2.9, 5: 3.0 };
-const BLAST_MULTIPLIER = { 2: 1.95, 3: 2.8, 6: 4.3 };
-const DEADLY_MULTIPLIER = { 2: 1.9, 3: 2.6, 6: 3.8 };
+const WAAGH_AP_MODIFIER = { '-1': 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02 };
+const BLAST_MULTIPLIER = { 2: 1.9, 3: 2.7, 6: 4.3 };
+const DEADLY_MULTIPLIER = { 2: 1.8, 3: 2.5, 6: 3.8 };
+const ARTILLERY_RANGE_BONUS = { 0: 0.0, 12: 0.85, 18: 0.55, 24: 0.35, 30: 0.2, 36: 0.15 };
+const UNWIELDY_RANGE_PENALTY = { 0: 0.0, 12: 0.6, 18: 0.4, 24: 0.4, 30: 0.3, 36: 0.15 };
+const CAUTIOUS_HIT_BONUS = { 0: 0.0, 12: 0.0, 18: 0.6, 24: 0.7, 30: 0.8, 36: 0.9 };
 const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
 const ABILITY_NAME_MAX_LENGTH = 60;
 
@@ -955,7 +961,7 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
   const attacksValue = Math.max(Number(attacks) || 0, 0);
   const apValue = Number.isFinite(Number(ap)) ? Number(ap) : 0;
   const normalizedRange = normalizeRangeValue(rangeValue);
-  const rangeMod = rangeMultiplier(normalizedRange);
+  let rangeMod = rangeMultiplier(normalizedRange);
   let apMod = lookupWithNearest(AP_BASE, apValue);
   let mult = 1;
   let q = Number(quality);
@@ -964,12 +970,19 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
   }
   const traitSet = new Set((Array.isArray(unitTraits) ? unitTraits : []).map((trait) => abilityIdentifier(trait)));
   const melee = normalizedRange === 0;
+  const waaghPenalty = traitSet.has('waagh') ? lookupWithNearest(WAAGH_AP_MODIFIER, apValue) : 0
 
   if (melee && traitSet.has('furia')) {
     chance += 0.65;
   }
   if (!melee && traitSet.has('przygotowanie')) {
     chance += 0.65;
+  }
+  if (traitSet.has('szpica')) {
+    chance += 0.5;
+  }
+  if (traitSet.has('ostrozny')) {
+    chance += lookupWithNearest(CAUTIOUS_HIT_BONUS, normalizedRange);
   }
   if (!melee && traitSet.has('wojownik')) {
     mult *= 0.5;
@@ -983,9 +996,20 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
   if (!melee && traitSet.has('dobrze_strzela')) {
     q = 4;
   }
+  if (traitSet.has('zemsta')) {
+    mult *= 1.2;
+  }
+  if (traitSet.has('rezerwa')) {
+    mult *= 0.6;
+  }
+  if (!melee && traitSet.has('zasadzka')) {
+    mult *= 0.6;
+  }
 
   let assault = false;
   let overcharge = false;
+  let rangeBonus = 0;
+  let rangePenalty = 0;
   const traitList = Array.isArray(weaponTraits) ? weaponTraits : splitTraits(weaponTraits);
 
   traitList.forEach((trait) => {
@@ -1018,25 +1042,26 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
     } else if (['namierzanie', 'lock on'].includes(norm)) {
       chance += 0.35;
       mult *= 1.1;
-      apMod += lookupWithNearest(AP_NO_COVER, apValue);
     } else if (['impet', 'impact'].includes(norm)) {
       apMod += lookupWithNearest(AP_LANCE, apValue);
-    } else if (['bez oslon', 'bez oslony', 'no cover'].includes(norm)) {
-      apMod += lookupWithNearest(AP_NO_COVER, apValue);
     } else if (['przebijajaca', 'przebijajacy', 'penetrating'].includes(norm)) {
       mult *= lookupWithNearest(PENETRATING_MULTIPLIER, apValue);
-    } else if (['zracy', 'corrosive'].includes(norm)) {
-      apMod += lookupWithNearest(AP_CORROSIVE, apValue);
+    } else if (['brutalny', 'brutalna', 'brutal'].includes(norm)) {
+      apMod += lookupWithNearest(AP_BRUTAL, apValue);
     } else if (['niebezposredni', 'indirect'].includes(norm)) {
       mult *= 1.2;
     } else if (['zuzywalny', 'limited'].includes(norm)) {
-      mult *= 0.5;
+      mult *= 0.4;
     } else if (['precyzyjny', 'precise'].includes(norm)) {
       mult *= 1.5;
     } else if (['niezawodny', 'niezawodna', 'reliable'].includes(norm)) {
       q = 2;
     } else if (['szturmowy', 'szturmowa', 'assault'].includes(norm)) {
       assault = true;
+    } else if (['artyleria', 'artillery'].includes(norm)) {
+      rangeBonus += lookupWithNearest(ARTILLERY_RANGE_BONUS, normalizedRange);
+    } else if (['nieporeczny', 'unwieldy'].includes(norm)) {
+      rangePenalty += lookupWithNearest(UNWIELDY_RANGE_PENALTY, normalizedRange);
     } else if (
       [
         'brutalny',
@@ -1051,14 +1076,24 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
       mult *= 1.1;
     } else if (['podkrecenie', 'overcharge', 'overclock'].includes(norm)) {
       overcharge = true;
+    } else if (['burzaca'].includes(norm)) {
+      mult *= 1.5;
+    } else if (['unik'].includes(norm)) {
+      mult *= 1.2;
     }
   });
 
+  if (waaghPenalty) {
+    apMod = Math.max(apMod - waaghPenalty, 0);
+  }
+
+  const adjustedRangeMod = Math.max(rangeMod + rangeBonus - rangePenalty, 0);
+
   chance = Math.max(chance - q, 1);
-  let cost = attacksValue * 2 * rangeMod * chance * apMod * mult;
+  let cost = attacksValue * 2 * adjustedRangeMod * chance * apMod * mult;
 
   if (overcharge && (!assault || normalizedRange !== 0)) {
-    cost *= 1.4;
+    cost *= 1.05;
   }
 
   if (assault && allowAssaultExtra && normalizedRange !== 0) {
