@@ -648,9 +648,6 @@ const PENETRATING_MULTIPLIER = { '-1': 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2
 const WAAGH_AP_MODIFIER = { '-1': 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02 };
 const BLAST_MULTIPLIER = { 2: 1.9, 3: 2.7, 6: 4.3 };
 const DEADLY_MULTIPLIER = { 2: 1.8, 3: 2.5, 6: 3.8 };
-const ARTILLERY_RANGE_BONUS = { 0: 0.0, 12: 0.85, 18: 0.55, 24: 0.35, 30: 0.2, 36: 0.15 };
-const UNWIELDY_RANGE_PENALTY = { 0: 0.0, 12: 0.6, 18: 0.4, 24: 0.4, 30: 0.3, 36: 0.15 };
-const CAUTIOUS_HIT_BONUS = { 0: 0.0, 12: 0.0, 18: 0.6, 24: 0.7, 30: 0.8, 36: 0.9 };
 const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
 const ABILITY_NAME_MAX_LENGTH = 60;
 
@@ -1046,7 +1043,17 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
       apMod += lookupWithNearest(AP_LANCE, apValue);
     } else if (['przebijajaca', 'przebijajacy', 'penetrating'].includes(norm)) {
       mult *= lookupWithNearest(PENETRATING_MULTIPLIER, apValue);
-    } else if (['brutalny', 'brutalna', 'brutal'].includes(norm)) {
+    } else if (
+      [
+        'brutalny',
+        'brutalna',
+        'brutal',
+        'bez regeneracji',
+        'bez regegenracji',
+        'no regen',
+        'no regeneration',
+      ].includes(norm)
+    ) {
       apMod += lookupWithNearest(AP_BRUTAL, apValue);
     } else if (['niebezposredni', 'indirect'].includes(norm)) {
       mult *= 1.2;
@@ -1062,18 +1069,6 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
       rangeBonus += lookupWithNearest(ARTILLERY_RANGE_BONUS, normalizedRange);
     } else if (['nieporeczny', 'unwieldy'].includes(norm)) {
       rangePenalty += lookupWithNearest(UNWIELDY_RANGE_PENALTY, normalizedRange);
-    } else if (
-      [
-        'brutalny',
-        'brutalna',
-        'brutal',
-        'bez regeneracji',
-        'bez regegenracji',
-        'no regen',
-        'no regeneration',
-      ].includes(norm)
-    ) {
-      mult *= 1.1;
     } else if (['podkrecenie', 'overcharge', 'overclock'].includes(norm)) {
       overcharge = true;
     } else if (['burzaca'].includes(norm)) {
