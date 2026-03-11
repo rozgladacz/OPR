@@ -1470,6 +1470,109 @@ function initWeaponDefaults() {
   });
 }
 
+
+function initSpellWeaponCostPreview() {
+  document.querySelectorAll('form[data-spell-weapon-form]').forEach((form) => {
+    const costValueEl = form.querySelector('[data-spell-weapon-cost]');
+    if (!costValueEl) {
+      return;
+    }
+
+    const toFiniteNumber = (value, fallback = 0) => {
+      const parsed = Number.parseFloat(String(value ?? '').replace(',', '.'));
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+
+    const parseIntValue = (value, fallback = 0) => {
+      const parsed = Number.parseInt(String(value ?? '').trim(), 10);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+
+    const collectTraits = () => {
+      const hidden = form.querySelector('#weapon-abilities');
+      if (!hidden) {
+        return [];
+      }
+      try {
+        const payload = JSON.parse(hidden.value || '[]');
+        if (!Array.isArray(payload)) {
+          return [];
+        }
+        return payload
+          .map((entry) => {
+            if (!entry || typeof entry !== 'object') {
+              return '';
+            }
+            const raw = String(entry.raw || '').trim();
+            if (raw) {
+              return raw;
+            }
+            const label = String(entry.label || '').trim();
+            return label;
+          })
+          .filter((entry) => entry.length > 0);
+      } catch (err) {
+        return [];
+      }
+    };
+
+    const updatePreview = () => {
+      const rangeInput = form.querySelector('input[name="range"]');
+      const attacksInput = form.querySelector('input[name="attacks"]');
+      const apInput = form.querySelector('input[name="ap"]');
+      const rangeValue = rangeInput ? rangeInput.value : '';
+      const attacksValue = toFiniteNumber(attacksInput ? attacksInput.value : '', 1);
+      const apValue = parseIntValue(apInput ? apInput.value : '', 0);
+      const traits = collectTraits();
+      const rawCost = weaponCostInternal(4, rangeValue, attacksValue, apValue, traits, [], true);
+      if (!Number.isFinite(rawCost)) {
+        return;
+      }
+      const spellCost = Math.ceil(Math.max(rawCost, 0) / 7);
+      costValueEl.textContent = String(spellCost);
+    };
+
+    updatePreview();
+
+    ['input', 'change'].forEach((eventName) => {
+      form.addEventListener(eventName, (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        if (
+          target.matches('#name')
+          || target.matches('#notes')
+          || target.matches('.ability-picker-select')
+          || target.matches('.ability-picker-value-input')
+          || target.matches('.ability-picker-value-select')
+          || target.matches('.ability-picker-add')
+          || target.closest('.ability-picker-list')
+          || target.matches('.range-picker-select')
+          || target.matches('.range-picker-custom')
+          || target.matches('.number-picker-select')
+          || target.matches('.number-picker-custom')
+          || target.matches('input[name="range"]')
+          || target.matches('input[name="attacks"]')
+          || target.matches('input[name="ap"]')
+        ) {
+          updatePreview();
+        }
+      });
+    });
+
+    const abilitiesInput = form.querySelector('#weapon-abilities');
+    if (abilitiesInput) {
+      const observer = new MutationObserver(() => {
+        updatePreview();
+      });
+      observer.observe(abilitiesInput, { attributes: true, attributeFilter: ['value'] });
+      abilitiesInput.addEventListener('input', updatePreview);
+      abilitiesInput.addEventListener('change', updatePreview);
+    }
+  });
+}
+
 function initWeaponPicker(root) {
   const treePayloadRaw =
     root.dataset.weaponTreePayload ||
@@ -7020,4 +7123,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initWeaponDefaults();
   initSpellAbilityForms();
   initArmoryWeaponTree();
+  initSpellWeaponCostPreview();
 });
