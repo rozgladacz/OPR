@@ -54,7 +54,7 @@ function initAbilityPicker(root) {
       }
       return definition.display_name || definition.name;
     }
-    if (definition.slug === 'rozkaz') {
+    if (definition.slug === 'rozkaz' || definition.slug === 'klatwa' || definition.slug === 'oznaczenie') {
       const valueLabel = displayValue || value || '';
       return valueLabel
         ? `${definition.name}: ${valueLabel}`
@@ -117,7 +117,7 @@ function initAbilityPicker(root) {
     if (!slug || slug === '__custom__') {
       return raw ? `custom::${raw}` : '';
     }
-    if (slug === 'aura' || slug === 'rozkaz') {
+    if (slug === 'aura' || slug === 'rozkaz' || slug === 'klatwa' || slug === 'oznaczenie') {
       return `${slug}::${value || raw}`;
     }
     if (slug === 'rozprysk' || slug === 'zabojczy') {

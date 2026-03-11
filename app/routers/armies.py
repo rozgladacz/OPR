@@ -647,7 +647,7 @@ def _ability_spell_details(
         value,
         ability.description if ability else None,
     )
-    if ability.cost_hint is not None:
+    if ability.cost_hint is not None and not costs.ability_uses_order_like_cost(ability):
         base_cost = float(ability.cost_hint)
     else:
         base_cost = costs.ability_cost_from_name(ability.name or "", value)
