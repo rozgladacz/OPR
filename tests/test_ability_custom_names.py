@@ -158,3 +158,19 @@ def test_definition_payload_excludes_disallowed_aura_and_order_choices():
     assert order_entry["value_choices"]
     for choice in order_entry["value_choices"]:
         assert str(choice["value"]) not in disallowed
+
+
+def test_definition_payload_has_separate_long_range_aura_entry():
+    session = DummySession()
+
+    aura_payload = ability_registry.definition_payload(session, "aura")
+    aura_entry = next(item for item in aura_payload if item["slug"] == "aura")
+    aura_12_entry = next(item for item in aura_payload if item["slug"] == "aura_12")
+
+    assert aura_entry["value_choices"]
+    assert aura_12_entry["value_choices"]
+    assert all(str(choice["value"]).endswith("|6") for choice in aura_entry["value_choices"])
+    assert all(str(choice["value"]).endswith("|12") for choice in aura_12_entry["value_choices"])
+    assert [choice["label"] for choice in aura_entry["value_choices"]] == [
+        choice["label"] for choice in aura_12_entry["value_choices"]
+    ]

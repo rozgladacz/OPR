@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..data import abilities as ability_catalog
 
-AURA_RANGE_OPTIONS = (6, 12)
+LONG_RANGE_AURA_SLUG = "aura_12"
 ABILITY_NAME_MAX_LENGTH = 60
 EXCLUDED_AURA_AND_ORDER_SLUGS: set[str] = {
     "zasadzka",
@@ -168,26 +168,32 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
             ]
             entry["value_kind"] = "passive"
         elif definition.slug == "aura":
-            aura_choices: list[dict] = []
-            for passive in passive_definitions:
-                for range_value in AURA_RANGE_OPTIONS:
-                    prefix = (
-                        f"{definition.name}(12\")"
-                        if int(range_value) == 12
-                        else definition.name
-                    )
-                    aura_choices.append(
-                        {
-                            "value": f"{passive.slug}|{range_value}",
-                            "label": f"{prefix}: {passive.name}",
-                            "description": passive.description,
-                        }
-                    )
-            entry["value_choices"] = aura_choices
+            entry["value_choices"] = [
+                {
+                    "value": f"{passive.slug}|6",
+                    "label": passive.name,
+                    "description": passive.description,
+                }
+                for passive in passive_definitions
+            ]
             entry["value_kind"] = "passive"
         ability = ability_by_slug.get(definition.slug)
         entry["ability_id"] = ability.id if ability else None
         payload.append(entry)
+        if definition.slug == "aura":
+            long_range_entry = dict(entry)
+            long_range_entry["slug"] = LONG_RANGE_AURA_SLUG
+            long_range_entry["name"] = f'{definition.name}(12")'
+            long_range_entry["display_name"] = f'{definition.name}(12")'
+            long_range_entry["value_choices"] = [
+                {
+                    "value": f"{passive.slug}|12",
+                    "label": passive.name,
+                    "description": passive.description,
+                }
+                for passive in passive_definitions
+            ]
+            payload.append(long_range_entry)
     cache[ability_type] = payload
     return payload
 
@@ -307,6 +313,8 @@ def build_unit_abilities(
             ability = by_id.get(int(ability_id))
         if ability is None:
             slug = item.get("slug")
+            if slug == LONG_RANGE_AURA_SLUG:
+                slug = "aura"
             if slug:
                 ability = by_slug.get(str(slug))
         if ability is None:

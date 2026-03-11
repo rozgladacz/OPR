@@ -40,15 +40,18 @@ function initAbilityPicker(root) {
     if (!definition) {
       return displayValue;
     }
-    if (definition.slug === 'aura') {
+    if (definition.slug === 'aura' || definition.slug === 'aura_12') {
       if (choiceLabel) {
         return choiceLabel;
       }
       if (value) {
         const [abilityRef, rangeRefRaw] = String(value).split('|', 2);
         const rangeRef = (rangeRefRaw || '').trim().replace(/["”]/g, '');
-        const isLongRange = rangeRef === '12';
-        const prefix = isLongRange ? `${definition.name}(12")` : definition.name;
+        const isLongRange = definition.slug === 'aura_12' || rangeRef === '12';
+        const baseName = definition.slug === 'aura_12'
+          ? definition.name.replace(/\(12"\)$/, '').trim() || definition.name
+          : definition.name;
+        const prefix = isLongRange ? `${baseName}(12")` : baseName;
         const abilityLabel = (abilityRef || '').trim();
         return abilityLabel ? `${prefix}: ${abilityLabel}` : prefix;
       }
@@ -117,7 +120,7 @@ function initAbilityPicker(root) {
     if (!slug || slug === '__custom__') {
       return raw ? `custom::${raw}` : '';
     }
-    if (slug === 'aura' || slug === 'rozkaz' || slug === 'klatwa' || slug === 'oznaczenie') {
+    if (slug === 'aura' || slug === 'aura_12' || slug === 'rozkaz' || slug === 'klatwa' || slug === 'oznaczenie') {
       return `${slug}::${value || raw}`;
     }
     if (slug === 'rozprysk' || slug === 'zabojczy') {
