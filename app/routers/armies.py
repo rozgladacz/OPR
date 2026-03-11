@@ -666,6 +666,13 @@ def _spell_page_context(
 ) -> dict:
     spells = list(getattr(army, "spells", []) or [])
     spells.sort(key=lambda item: ((getattr(item, "position", 0) or 0), getattr(item, "id", 0) or 0))
+    for spell in spells:
+        if getattr(spell, "kind", "") != "weapon" or not getattr(spell, "weapon", None):
+            continue
+        base_label, description, cost = _weapon_spell_details(spell.weapon)
+        spell.base_label = base_label
+        spell.description = description
+        spell.cost = cost
     ability_options = [
         entry
         for entry in ability_registry.definition_payload(db, "active")
