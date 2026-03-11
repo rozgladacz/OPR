@@ -954,7 +954,7 @@ function buildWeaponFlags(baseFlags, passiveItems, passiveState) {
 }
 
 function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unitTraits, allowAssaultExtra = true) {
-  let chance = 7;
+  let chance = 6.5;
   const attacksValue = Math.max(Number(attacks) || 0, 0);
   const apValue = Number.isFinite(Number(ap)) ? Number(ap) : 0;
   const normalizedRange = normalizeRangeValue(rangeValue);
@@ -1037,7 +1037,7 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
     } else if (['lanca', 'lance'].includes(norm)) {
       chance += 0.65;
     } else if (['namierzanie', 'lock on'].includes(norm)) {
-      chance += 0.35;
+      chance += 0.5;
       mult *= 1.1;
     } else if (['impet', 'impact'].includes(norm)) {
       apMod += lookupWithNearest(AP_LANCE, apValue);
