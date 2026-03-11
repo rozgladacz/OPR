@@ -380,3 +380,22 @@ def test_build_weapon_cost_map_applies_ambush_multiplier_for_ranged_weapon() -> 
     assert result["withoutAmbush"] > 0
     assert result["withAmbush"] < result["withoutAmbush"]
     assert result["ratio"] == 0.6
+
+
+def test_weapon_cost_internal_applies_overcharge_multiplier_1_4() -> None:
+    script_body = """
+        const baseCost = sandbox.weaponCostInternal(4, 18, 2, 1, [], []);
+        const overchargeCost = sandbox.weaponCostInternal(4, 18, 2, 1, ['Overcharge'], []);
+        console.log(JSON.stringify({
+          baseCost,
+          overchargeCost,
+          ratio: overchargeCost / baseCost,
+        }));
+    """
+
+    script = _build_sandbox_script(script_body)
+    result = _run_node(script)
+
+    assert result["baseCost"] > 0
+    assert result["overchargeCost"] > result["baseCost"]
+    assert result["ratio"] == 1.4

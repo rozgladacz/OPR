@@ -1088,7 +1088,7 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
   let cost = attacksValue * 2 * adjustedRangeMod * chance * apMod * mult;
 
   if (overcharge && (!assault || normalizedRange !== 0)) {
-    cost *= 1.05;
+    cost *= 1.4;
   }
 
   if (assault && allowAssaultExtra && normalizedRange !== 0) {
