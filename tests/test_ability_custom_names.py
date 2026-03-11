@@ -132,15 +132,35 @@ def test_ability_label_with_count_uses_custom_name():
 
 
 def test_definition_payload_excludes_disallowed_aura_and_order_choices():
-    disallowed = {
+    aura_disallowed = {
         "zasadzka",
         "zwiadowca",
         "nieruchomy",
         "samolot",
         "dobrze_strzela",
         "zle_strzela",
+        "roj",
+        "zwrot",
         "bohater",
         "transport",
+        "sekcje",
+        "rezerwa",
+        "odwody",
+    }
+    order_disallowed = {
+        "zasadzka",
+        "zwiadowca",
+        "samolot",
+        "dobrze_strzela",
+        "zle_strzela",
+        "roj",
+        "zwrot",
+        "bohater",
+        "transport",
+        "sekcje",
+        "rezerwa",
+        "odwody",
+        "zdobywca",
     }
 
     session = DummySession()
@@ -151,13 +171,13 @@ def test_definition_payload_excludes_disallowed_aura_and_order_choices():
     for choice in aura_entry["value_choices"]:
         value = str(choice["value"])
         ability_slug = value.split("|", 1)[0]
-        assert ability_slug not in disallowed
+        assert ability_slug not in aura_disallowed
 
     active_payload = ability_registry.definition_payload(session, "active")
     order_entry = next(item for item in active_payload if item["slug"] == "rozkaz")
     assert order_entry["value_choices"]
     for choice in order_entry["value_choices"]:
-        assert str(choice["value"]) not in disallowed
+        assert str(choice["value"]) not in order_disallowed
 
 
 def test_definition_payload_has_separate_long_range_aura_entry():
