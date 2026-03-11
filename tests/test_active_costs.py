@@ -10,6 +10,7 @@ if str(ROOT_DIR) not in sys.path:
 
 
 from app.data import abilities as ability_catalog
+from app import models
 from app.services import costs
 
 
@@ -31,3 +32,31 @@ def test_ability_identifier_ignores_diacritics():
 
 def test_catalog_slug_lookup_handles_diacritics():
     assert ability_catalog.slug_for_name("Łatanie") == "latanie"
+
+
+def test_order_like_abilities_ignore_cost_hint_for_dynamic_cost() -> None:
+    unit = models.Unit(name="U", quality=4, defense=4, toughness=1, army_id=1)
+    ability = models.Ability(
+        name="Klątwa: Wolny",
+        type="active",
+        description="",
+        cost_hint=0,
+        config_json='{"slug":"klatwa"}',
+    )
+    link = models.UnitAbility(unit=unit, ability=ability, params_json='{"value":"wolny"}')
+
+    assert costs.ability_cost(link, [], toughness=1) == -10.0
+
+
+def test_non_order_like_ability_still_uses_cost_hint() -> None:
+    unit = models.Unit(name="U", quality=4, defense=4, toughness=1, army_id=1)
+    ability = models.Ability(
+        name="Mobilizacja",
+        type="active",
+        description="",
+        cost_hint=0,
+        config_json='{"slug":"mobilizacja"}',
+    )
+    link = models.UnitAbility(unit=unit, ability=ability, params_json=None)
+
+    assert costs.ability_cost(link, [], toughness=1) == 0.0

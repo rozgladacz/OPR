@@ -75,6 +75,8 @@ _RULESET_FALLBACK_PATH = (
     Path(__file__).resolve().parent.parent / "rulesets" / "default.json"
 )
 
+ORDER_LIKE_ACTIVE_SLUGS = {"rozkaz", "klatwa", "oznaczenie"}
+
 
 @lru_cache()
 def default_ruleset_config() -> dict[str, Any]:
@@ -1171,7 +1173,7 @@ def ability_cost(
     ability = ability_link.ability
     if not ability:
         return 0.0
-    if ability.cost_hint is not None:
+    if ability.cost_hint is not None and not ability_uses_order_like_cost(ability):
         return float(ability.cost_hint)
     unit = getattr(ability_link, "unit", None)
     value = None
@@ -1193,6 +1195,23 @@ def ability_cost(
         defense=getattr(unit, "defense", None) if unit is not None else None,
         weapons=unit_default_weapons(unit) if unit is not None else None,
     )
+
+
+def ability_uses_order_like_cost(ability: models.Ability | None) -> bool:
+    if ability is None:
+        return False
+    slug = ""
+    raw_config = getattr(ability, "config_json", None)
+    if raw_config:
+        try:
+            parsed = json.loads(raw_config)
+        except json.JSONDecodeError:
+            parsed = {}
+        if isinstance(parsed, dict):
+            slug = str(parsed.get("slug") or "").strip().casefold()
+    if not slug:
+        slug = ability_identifier(getattr(ability, "name", "") or "")
+    return slug in ORDER_LIKE_ACTIVE_SLUGS
 
 
 def unit_total_cost(unit: models.Unit) -> float:
