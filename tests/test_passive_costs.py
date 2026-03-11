@@ -229,7 +229,7 @@ def test_delikatny_cost_matches_defense_row_difference() -> None:
 
 def test_defense_abilities_stack_additively() -> None:
     base_kwargs = dict(quality=4, defense=4, toughness=6)
-    traits_with_both = ["niewrazliwy", "regeneracja"]
+    traits_with_both = ["niewrazliwy", "odrodzenie"]
     cost_with_both = costs.base_model_cost(
         base_kwargs["quality"],
         base_kwargs["defense"],
@@ -240,9 +240,9 @@ def test_defense_abilities_stack_additively() -> None:
         base_kwargs["quality"],
         base_kwargs["defense"],
         base_kwargs["toughness"],
-        ["regeneracja"],
+        ["odrodzenie"],
     )
-    cost_without_regeneracja = costs.base_model_cost(
+    cost_without_odrodzenie = costs.base_model_cost(
         base_kwargs["quality"],
         base_kwargs["defense"],
         base_kwargs["toughness"],
@@ -257,9 +257,9 @@ def test_defense_abilities_stack_additively() -> None:
 
     diff_both = cost_with_both - cost_without_both
     diff_niewrazliwy = cost_with_both - cost_without_niewrazliwy
-    diff_regeneracja = cost_with_both - cost_without_regeneracja
+    diff_odrodzenie = cost_with_both - cost_without_odrodzenie
 
-    assert diff_both == pytest.approx(diff_niewrazliwy + diff_regeneracja, rel=1e-6)
+    assert diff_both == pytest.approx(diff_niewrazliwy + diff_odrodzenie, rel=1e-6)
 
 
 def test_szpica_defense_modifier_matches_table() -> None:
@@ -362,3 +362,48 @@ def test_dywersant_aura_cost() -> None:
 def test_regeneracja_has_fixed_toughness_multiplier() -> None:
     assert costs.passive_cost("regeneracja", 8) == pytest.approx(10)
     assert costs.passive_cost("regeneracja", 8, True) == pytest.approx(10)
+
+
+def test_regeneracja_cost_delta_is_defense_independent() -> None:
+    quality = 4
+    toughness = 5
+    expected_delta = 1.25 * toughness
+
+    for defense in range(2, 7):
+        with_regeneracja = costs.base_model_cost(
+            quality,
+            defense,
+            toughness,
+            ["regeneracja"],
+        )
+        without_regeneracja = costs.base_model_cost(
+            quality,
+            defense,
+            toughness,
+            [],
+        )
+
+        assert with_regeneracja - without_regeneracja == pytest.approx(
+            expected_delta,
+            rel=1e-6,
+        )
+
+
+def test_regeneracja_is_not_treated_as_defense_ability() -> None:
+    assert "regeneracja" not in costs.DEFENSE_ABILITY_SLUGS
+
+
+def test_ability_cost_from_name_for_regeneracja_is_defense_independent() -> None:
+    quality = 4
+    toughness = 5
+    expected = 1.25 * toughness
+
+    for defense in range(2, 7):
+        assert costs.ability_cost_from_name(
+            "Regeneracja",
+            None,
+            ["Regeneracja"],
+            toughness=toughness,
+            quality=quality,
+            defense=defense,
+        ) == pytest.approx(expected, rel=1e-6)
