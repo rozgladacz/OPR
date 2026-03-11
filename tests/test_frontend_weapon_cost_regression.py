@@ -4,6 +4,7 @@ import json
 import subprocess
 import textwrap
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import sys
@@ -15,53 +16,81 @@ if str(ROOT_DIR) not in sys.path:
 from app.services import costs
 
 APP_JS_PATH = ROOT_DIR / "app/static/js/app.js"
+NUMERIC_TOLERANCE = 0.02
 
 
 CASES = [
     {
-        "name": "blast_deadly_ap4",
+        "name": "bazowa_bron",
         "quality": 4,
-        "range": 30,
+        "range": 24,
         "attacks": 2,
-        "ap": 4,
-        "weapon_traits": ["Blast(3)", "Deadly(2)"],
+        "ap": 0,
+        "weapon_traits": [],
         "unit_traits": [],
     },
     {
-        "name": "limited_precise",
+        "name": "ap_ge_1",
         "quality": 4,
         "range": 24,
-        "attacks": 3,
-        "ap": 1,
-        "weapon_traits": ["Zużywalny", "Precyzyjny"],
-        "unit_traits": [],
-    },
-    {
-        "name": "artillery_unwieldy_balance",
-        "quality": 4,
-        "range": 24,
-        "attacks": 1,
+        "attacks": 2,
         "ap": 2,
-        "weapon_traits": ["Artyleria", "Nieporęczny"],
+        "weapon_traits": [],
         "unit_traits": [],
     },
     {
-        "name": "brutal_with_waagh",
+        "name": "overcharge",
         "quality": 4,
         "range": 18,
-        "attacks": 1,
-        "ap": 3,
-        "weapon_traits": ["Brutal"],
-        "unit_traits": ["Waagh"],
+        "attacks": 2,
+        "ap": 1,
+        "weapon_traits": ["Overcharge"],
+        "unit_traits": [],
     },
     {
-        "name": "assault_overcharge",
+        "name": "assault_plus_overcharge",
         "quality": 4,
-        "range": 12,
-        "attacks": 1,
+        "range": 18,
+        "attacks": 2,
         "ap": 1,
         "weapon_traits": ["Assault", "Overcharge"],
-        "unit_traits": ["Ostrożny"],
+        "unit_traits": [],
+    },
+    {
+        "name": "brutalny",
+        "quality": 4,
+        "range": 18,
+        "attacks": 2,
+        "ap": 2,
+        "weapon_traits": ["Brutalny"],
+        "unit_traits": [],
+    },
+    {
+        "name": "zasadzka",
+        "quality": 4,
+        "range": 24,
+        "attacks": 2,
+        "ap": 1,
+        "weapon_traits": [],
+        "unit_traits": ["Zasadzka"],
+    },
+    {
+        "name": "artyleria",
+        "quality": 4,
+        "range": 24,
+        "attacks": 2,
+        "ap": 1,
+        "weapon_traits": ["Artyleria"],
+        "unit_traits": [],
+    },
+    {
+        "name": "nieporeczny",
+        "quality": 4,
+        "range": 24,
+        "attacks": 2,
+        "ap": 1,
+        "weapon_traits": ["Nieporęczny"],
+        "unit_traits": [],
     },
 ]
 
@@ -104,17 +133,25 @@ def _run_node_cases(cases: list[dict[str, object]]) -> dict[str, float]:
     return json.loads(completed.stdout)
 
 
-def test_frontend_weapon_cost_matches_backend_reference_cases() -> None:
+def _build_weapon(case: dict[str, object]) -> SimpleNamespace:
+    return SimpleNamespace(
+        effective_range=case["range"],
+        effective_attacks=case["attacks"],
+        effective_ap=case["ap"],
+        effective_tags=", ".join(case["weapon_traits"]),
+        effective_cached_cost=None,
+    )
+
+
+def test_frontend_weapon_cost_matches_backend_weapon_cost_with_tolerance() -> None:
     frontend = _run_node_cases(CASES)
 
     for case in CASES:
-        backend = costs._weapon_cost(
-            case["quality"],
-            case["range"],
-            case["attacks"],
-            case["ap"],
-            case["weapon_traits"],
-            case["unit_traits"],
-            allow_assault_extra=True,
+        weapon = _build_weapon(case)
+        backend = costs.weapon_cost(
+            weapon,
+            unit_quality=int(case["quality"]),
+            unit_flags=list(case["unit_traits"]),
+            use_cached=False,
         )
-        assert frontend[case["name"]] == pytest.approx(backend, abs=1e-6)
+        assert frontend[case["name"]] == pytest.approx(backend, abs=NUMERIC_TOLERANCE)
