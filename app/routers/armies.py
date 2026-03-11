@@ -923,7 +923,7 @@ def _spell_weapon_form_values(weapon: models.Weapon | None) -> dict:
 def _spell_weapon_cost(
     weapon: models.Weapon | None, form_values: dict | None
 ) -> int | None:
-    if weapon:
+    if not form_values and weapon:
         _, _, cost = _weapon_spell_details(weapon)
         return cost
 
