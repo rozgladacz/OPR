@@ -11,24 +11,47 @@ from ..data import abilities as ability_catalog
 
 LONG_RANGE_AURA_SLUG = "aura_12"
 ABILITY_NAME_MAX_LENGTH = 60
-EXCLUDED_AURA_AND_ORDER_SLUGS: set[str] = {
+EXCLUDED_AURA_SLUGS: set[str] = {
     "zasadzka",
     "zwiadowca",
     "nieruchomy",
     "samolot",
     "dobrze_strzela",
     "zle_strzela",
+    "roj",
+    "zwrot",
     "bohater",
     "transport",
+    "sekcje",
+    "rezerwa",
+    "odwody",
+}
+
+EXCLUDED_ORDER_AND_MARK_SLUGS: set[str] = {
+    "zasadzka",
+    "zwiadowca",
+    "samolot",
+    "dobrze_strzela",
+    "zle_strzela",
+    "roj",
+    "zwrot",
+    "bohater",
+    "transport",
+    "sekcje",
+    "rezerwa",
+    "odwody",
+    "zdobywca",
+}
+
+EXCLUDED_AURA_AND_ORDER_SLUGS: set[str] = {
+    *EXCLUDED_AURA_SLUGS,
+    *EXCLUDED_ORDER_AND_MARK_SLUGS,
     "otwarty_transport",
     "platforma_strzelecka",
     "strach",
     "waagh",
     "odrodzenie",
-    "odwody",
-    "rezerwa",
     "wrak",
-    "roj",
 }
 
 
@@ -138,11 +161,7 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
         sync_definitions(session)
         cache = _get_definition_payload_cache(session)
     definitions = ability_catalog.definitions_by_type(ability_type)
-    passive_definitions = [
-        definition
-        for definition in ability_catalog.definitions_by_type("passive")
-        if definition.slug not in EXCLUDED_AURA_AND_ORDER_SLUGS
-    ]
+    passive_definitions = ability_catalog.definitions_by_type("passive")
     records = (
         session.execute(
             select(models.Ability)
@@ -158,23 +177,35 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
         entry = ability_catalog.to_dict(definition)
         entry["value_kind"] = None
         if definition.slug in {"rozkaz", "klatwa", "oznaczenie"}:
+            order_definitions = [
+                passive
+                for passive in passive_definitions
+                if passive.slug not in EXCLUDED_AURA_AND_ORDER_SLUGS
+                and passive.slug not in EXCLUDED_ORDER_AND_MARK_SLUGS
+            ]
             entry["value_choices"] = [
                 {
                     "value": passive.slug,
                     "label": passive.name,
                     "description": passive.description,
                 }
-                for passive in passive_definitions
+                for passive in order_definitions
             ]
             entry["value_kind"] = "passive"
         elif definition.slug == "aura":
+            aura_definitions = [
+                passive
+                for passive in passive_definitions
+                if passive.slug not in EXCLUDED_AURA_AND_ORDER_SLUGS
+                and passive.slug not in EXCLUDED_AURA_SLUGS
+            ]
             entry["value_choices"] = [
                 {
                     "value": f"{passive.slug}|6",
                     "label": passive.name,
                     "description": passive.description,
                 }
-                for passive in passive_definitions
+                for passive in aura_definitions
             ]
             entry["value_kind"] = "passive"
         ability = ability_by_slug.get(definition.slug)
@@ -191,7 +222,7 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
                     "label": passive.name,
                     "description": passive.description,
                 }
-                for passive in passive_definitions
+                for passive in aura_definitions
             ]
             payload.append(long_range_entry)
     cache[ability_type] = payload

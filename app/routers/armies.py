@@ -22,10 +22,13 @@ FORBIDDEN_SPELL_SLUGS = {"mag", "przekaznik"}
 FORBIDDEN_SPELL_WEAPON_TRAITS = {
     "impet",
     "zuzywalny",
-    "podkrecenie",
     "niezawodny",
-    "rozrywajacy",
     "szturmowa",
+    "rozrywajacy",
+    "nieporeczny",
+    "burzaca",
+    "unik",
+    "podkrecenie",
     "atak_wrecz",
 }
 
@@ -855,6 +858,31 @@ def _filter_spell_weapon_abilities(items: list[dict]) -> list[dict]:
     return filtered
 
 
+
+
+def _ensure_spell_weapon_has_lock_on(items: list[dict]) -> list[dict]:
+    has_lock_on = any(
+        (_spell_normalized_trait_slug(entry) or "") == "namierzanie"
+        for entry in (items or [])
+    )
+    if has_lock_on:
+        return list(items or [])
+
+    definition = SPELL_WEAPON_DEFINITION_MAP.get("namierzanie")
+    label = definition.display_name() if definition else "Namierzanie"
+    description = definition.description if definition else ""
+    normalized = _filter_spell_weapon_abilities(items)
+    normalized.append(
+        {
+            "slug": "namierzanie",
+            "value": "",
+            "label": label,
+            "raw": label,
+            "description": description,
+        }
+    )
+    return normalized
+
 def _parse_spell_weapon_ability_payload(text: str | None) -> list[dict]:
     if not text:
         return []
@@ -923,7 +951,7 @@ def _spell_weapon_form_values(weapon: models.Weapon | None) -> dict:
         "attacks": str(weapon.display_attacks),
         "ap": str(weapon.effective_ap),
         "notes": weapon.effective_notes or "",
-        "abilities": _spell_weapon_tags_payload(weapon.effective_tags),
+        "abilities": _ensure_spell_weapon_has_lock_on(_spell_weapon_tags_payload(weapon.effective_tags)),
     }
 
 
@@ -945,7 +973,7 @@ def _spell_weapon_cost(
 
     attacks = 1.0 if attacks_value is None else attacks_value
     ap = 0 if ap_value is None else ap_value
-    weapon_tags = _serialize_spell_weapon_tags(form_values.get("abilities") or [])
+    weapon_tags = _serialize_spell_weapon_tags(_ensure_spell_weapon_has_lock_on(form_values.get("abilities") or []))
 
     temp_weapon = models.Weapon(
         name=form_values.get("name", ""),
@@ -1728,9 +1756,9 @@ def create_spell_weapon(
     if capacity_response is not None:
         return capacity_response
 
-    ability_items = _filter_spell_weapon_abilities(
+    ability_items = _ensure_spell_weapon_has_lock_on(_filter_spell_weapon_abilities(
         _parse_spell_weapon_ability_payload(abilities)
-    )
+    ))
     form_values = {
         "name": name,
         "range": range,
@@ -1872,9 +1900,9 @@ def update_spell_weapon(
     _ensure_army_edit_access(army, current_user)
     weapon = _get_spell_weapon(db, army, weapon_id)
 
-    ability_items = _filter_spell_weapon_abilities(
+    ability_items = _ensure_spell_weapon_has_lock_on(_filter_spell_weapon_abilities(
         _parse_spell_weapon_ability_payload(abilities)
-    )
+    ))
     form_values = {
         "name": name,
         "range": range,
