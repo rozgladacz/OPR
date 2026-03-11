@@ -60,3 +60,16 @@ def test_non_order_like_ability_still_uses_cost_hint() -> None:
     link = models.UnitAbility(unit=unit, ability=ability, params_json=None)
 
     assert costs.ability_cost(link, [], toughness=1) == 0.0
+
+
+def test_order_like_cost_detection_normalizes_slug_from_config() -> None:
+    ability = models.Ability(
+        name="Klątwa: Wolny",
+        type="active",
+        description="",
+        cost_hint=0,
+        config_json='{"slug":"Klątwa"}',
+    )
+
+    assert costs.ability_uses_order_like_cost(ability) is True
+

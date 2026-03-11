@@ -1208,10 +1208,19 @@ def ability_uses_order_like_cost(ability: models.Ability | None) -> bool:
         except json.JSONDecodeError:
             parsed = {}
         if isinstance(parsed, dict):
-            slug = str(parsed.get("slug") or "").strip().casefold()
+            slug = str(parsed.get("slug") or "").strip()
+    normalized_slug = slug.casefold() if slug else ""
+    if slug and not normalized_slug:
+        normalized_slug = ""
+    if not normalized_slug and slug:
+        normalized_slug = ability_identifier(slug)
+    elif slug:
+        normalized_slug = ability_identifier(normalized_slug) or normalized_slug
+    if normalized_slug and normalized_slug in ORDER_LIKE_ACTIVE_SLUGS:
+        return True
     if not slug:
-        slug = ability_identifier(getattr(ability, "name", "") or "")
-    return slug in ORDER_LIKE_ACTIVE_SLUGS
+        normalized_slug = ability_identifier(getattr(ability, "name", "") or "")
+    return normalized_slug in ORDER_LIKE_ACTIVE_SLUGS
 
 
 def unit_total_cost(unit: models.Unit) -> float:
