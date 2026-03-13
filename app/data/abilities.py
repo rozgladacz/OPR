@@ -36,6 +36,15 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         ),
     ),
     AbilityDefinition(
+        slug="ochroniarz",
+        name="Ochroniarz",
+        type="passive",
+        description=(
+            "Bohater. Oddział może korzystać z twojej obrony. "
+            "Kontrolujący nie może pokonywać innych modeli w oddziale."
+        ),
+    ),
+    AbilityDefinition(
         slug="zasadzka",
         name="Zasadzka",
         type="passive",
@@ -472,6 +481,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Spaczenie",
         type="aura",
         description="Teren w zasięgu 12” jest uznawany za niebezpieczny dla wrogich oddziałów.",
+    ),
+    AbilityDefinition(
+        slug="meczennik",
+        name="Męczennik",
+        type="aura",
+        description="Jeżeli wróg może cię pokonać, musi to zrobić.",
     ),
     # Weapon abilities
     AbilityDefinition(

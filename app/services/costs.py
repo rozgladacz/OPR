@@ -853,6 +853,8 @@ def ability_cost_from_name(
         base_result = 10.0
     elif desc == "spaczenie":
         base_result = 30.0
+    elif slug == "meczennik":
+        base_result = 5.0
     else:
         tou_value = float(toughness) if toughness is not None else 1.0
         definition = ability_catalog.find_definition(slug) if slug else None
