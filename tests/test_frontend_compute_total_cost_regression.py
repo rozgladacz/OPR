@@ -115,3 +115,69 @@ def test_compute_total_cost_massive_and_non_massive_modes_regression() -> None:
     assert totals["massive_total"] == 58
     assert totals["regular_per_model"] == 114
     assert totals["regular_total"] == 58
+
+
+def test_compute_total_cost_passives_use_backend_multiplier_for_all_passives() -> None:
+    passive_items = [
+        {"slug": "cierpliwy", "default_count": 0, "cost": 2},
+        {"slug": "nieruchomy", "default_count": 0, "cost": 3},
+        {"slug": "straznik", "default_count": 0, "cost": 5},
+    ]
+    selected_passives = {item["slug"]: 1 for item in passive_items}
+    passive_costs = {item["slug"]: item["cost"] for item in passive_items}
+
+    cases = [
+        {
+            "name": "passives_per_model",
+            "mode": "per_model",
+            "basePerModel": 0,
+            "modelCount": 3,
+            "weaponOptions": [],
+            "passiveItems": passive_items,
+            "passive": selected_passives,
+            "passiveCosts": passive_costs,
+        },
+        {
+            "name": "passives_total",
+            "mode": "total",
+            "basePerModel": 0,
+            "modelCount": 3,
+            "weaponOptions": [],
+            "passiveItems": passive_items,
+            "passive": selected_passives,
+            "passiveCosts": passive_costs,
+        },
+        {
+            "name": "passives_massive_per_model",
+            "mode": "per_model",
+            "basePerModel": 0,
+            "modelCount": 3,
+            "weaponOptions": [],
+            "passiveItems": [
+                {"slug": "masywny", "default_count": 1, "cost": 0},
+                *passive_items,
+            ],
+            "passive": selected_passives,
+            "passiveCosts": passive_costs,
+        },
+        {
+            "name": "passives_massive_total",
+            "mode": "total",
+            "basePerModel": 0,
+            "modelCount": 3,
+            "weaponOptions": [],
+            "passiveItems": [
+                {"slug": "masywny", "default_count": 1, "cost": 0},
+                *passive_items,
+            ],
+            "passive": selected_passives,
+            "passiveCosts": passive_costs,
+        },
+    ]
+
+    totals = _run_compute_total_cost_cases(cases)
+
+    assert totals["passives_per_model"] == 30
+    assert totals["passives_total"] == 10
+    assert totals["passives_massive_per_model"] == 10
+    assert totals["passives_massive_total"] == 10
