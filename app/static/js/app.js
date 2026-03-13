@@ -3731,6 +3731,36 @@ function computeTotalCost(
 
   const activeCostMap = costMaps && costMaps.active instanceof Map ? costMaps.active : new Map();
   const passiveCostMap = costMaps && costMaps.passive instanceof Map ? costMaps.passive : new Map();
+  const passiveEntryMap = costMaps && costMaps.passiveEntries instanceof Map ? costMaps.passiveEntries : new Map();
+  [state && state.active, state && state.aura].forEach((section) => {
+    if (!(section instanceof Map)) {
+      return;
+    }
+    section.forEach((value, abilityId) => {
+      const totalCount = toTotal(value);
+      if (totalCount <= 0) {
+        return;
+      }
+      const canonicalKey = normalizeLoadoutKey(abilityId) || String(abilityId);
+      let costValue = activeCostMap.get(canonicalKey);
+      if (!Number.isFinite(costValue) && canonicalKey !== abilityId) {
+        costValue = activeCostMap.get(abilityId);
+      }
+      if (!Number.isFinite(costValue)) {
+        const numericKey = Number(canonicalKey);
+        if (Number.isFinite(numericKey)) {
+          costValue = activeCostMap.get(String(numericKey));
+          if (!Number.isFinite(costValue)) {
+            costValue = activeCostMap.get(numericKey);
+          }
+        }
+      }
+      if (Number.isFinite(costValue)) {
+        total += costValue * totalCount;
+      }
+    });
+  });
+
   const passiveList = Array.isArray(passiveItems) ? passiveItems : [];
   const passiveState = state && state.passive instanceof Map ? state.passive : new Map();
   const basePassiveSet = new Set();
@@ -3873,16 +3903,18 @@ function computeTotalCost(
       const baseFlag = Number.isFinite(defaultValue) && defaultValue > 0 ? 1 : 0;
       const storedValue = Number(passiveState.get(key));
       const selectedFlag = Number.isFinite(storedValue) && storedValue > 0 ? 1 : 0;
+      const mappedItem = passiveEntryMap.get(key);
+      const sourceItem = mappedItem && typeof mappedItem === 'object' ? mappedItem : item;
       let costValue = passiveCostMap.get(key);
       if (!Number.isFinite(costValue)) {
-        costValue = Number(item.cost);
+        costValue = Number(sourceItem.cost);
       }
       if (!Number.isFinite(costValue) || costValue === 0) {
         return;
       }
-      const baseCost = baseFlag ? effectivePassiveCost(item, baseAbilitySet, costValue) : 0;
+      const baseCost = baseFlag ? effectivePassiveCost(sourceItem, baseAbilitySet, costValue) : 0;
       const selectedCost = selectedFlag
-        ? effectivePassiveCost(item, selectedAbilitySet, costValue)
+        ? effectivePassiveCost(sourceItem, selectedAbilitySet, costValue)
         : 0;
       const diff = selectedCost - baseCost;
       if (diff === 0) {
@@ -5183,6 +5215,7 @@ function initRosterEditor() {
     const safeAbilityCosts = {
       active: costs.active instanceof Map ? costs.active : new Map(),
       passive: costs.passive instanceof Map ? costs.passive : new Map(),
+      passiveEntries: costs.passiveEntries instanceof Map ? costs.passiveEntries : new Map(),
     };
     const evaluateRole = (slug) => {
       const classification = { slug };
@@ -5292,6 +5325,7 @@ function initRosterEditor() {
   function buildAbilityCostMap(activeItems, auraItems, passiveItems) {
     const activeMap = new Map();
     const passiveMap = new Map();
+    const passiveEntries = new Map();
     [...(Array.isArray(activeItems) ? activeItems : []), ...(Array.isArray(auraItems) ? auraItems : [])].forEach((item) => {
       if (!item) {
         return;
@@ -5306,12 +5340,14 @@ function initRosterEditor() {
       if (!item || !item.slug || item.is_army_rule) {
         return;
       }
+      const key = String(item.slug);
+      passiveEntries.set(key, item);
       const costValue = Number(item.cost);
       if (Number.isFinite(costValue)) {
-        passiveMap.set(String(item.slug), costValue);
+        passiveMap.set(key, costValue);
       }
     });
-    return { active: activeMap, passive: passiveMap };
+    return { active: activeMap, passive: passiveMap, passiveEntries };
   }
 
   function updateTotalSummary(total) {
