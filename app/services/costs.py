@@ -634,7 +634,6 @@ def passive_cost(
         if ability_slugs & {"rezerwa", "zwiadowca", "zasadzka"}:
             return 0
         return -2.5 * tou
-        return -2.5 * tou
     if slug == "szybki":
         return 1.0 * tou
     if slug == "wolny":
@@ -644,7 +643,7 @@ def passive_cost(
     if slug == "instynkt":
         return (-1.0 if not aura else 1.0) * tou
     if slug == "nieruchomy":
-        return 2.5 * tou
+        return -2.5 * tou
     if slug == "zwinny":
         return 0.5 * tou
     if slug == "niezgrabny":
