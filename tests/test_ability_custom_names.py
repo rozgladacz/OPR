@@ -11,7 +11,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app import models
-from app.services import ability_registry, utils
+from app.services import ability_registry, costs, utils
 
 if not hasattr(utils, "HIDDEN_TRAIT_SLUGS"):
     utils.HIDDEN_TRAIT_SLUGS = set()
@@ -142,6 +142,7 @@ def test_definition_payload_excludes_disallowed_aura_and_order_choices():
         "roj",
         "zwrot",
         "bohater",
+        "ochroniarz",
         "transport",
         "sekcje",
         "rezerwa",
@@ -156,6 +157,7 @@ def test_definition_payload_excludes_disallowed_aura_and_order_choices():
         "roj",
         "zwrot",
         "bohater",
+        "ochroniarz",
         "transport",
         "sekcje",
         "rezerwa",
@@ -194,3 +196,8 @@ def test_definition_payload_has_separate_long_range_aura_entry():
     assert [choice["label"] for choice in aura_entry["value_choices"]] == [
         choice["label"] for choice in aura_12_entry["value_choices"]
     ]
+
+
+def test_meczennik_aura_has_fixed_cost():
+    assert costs.ability_cost_from_name("Męczennik") == 5.0
+
