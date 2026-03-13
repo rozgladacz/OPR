@@ -3703,12 +3703,13 @@ function computeTotalCost(
     total = 0;
   }
   const stateMode = state && state.mode === 'total' ? 'total' : 'per_model';
+  const weaponMultiplier = stateMode === 'total' ? 1 : count;
   const toWeaponTotal = (value) => {
     const numeric = Number(value);
     if (!Number.isFinite(numeric) || numeric <= 0) {
       return 0;
     }
-    return stateMode === 'total' ? numeric : numeric * count;
+    return numeric * weaponMultiplier;
   };
   const weaponCostMap = new Map();
   if (weaponCostOverrides instanceof Map) {
@@ -3799,22 +3800,22 @@ function computeTotalCost(
     });
   }
   const hasMassiveTrait = selectedPassiveSet.has('masywny') || basePassiveSet.has('masywny');
-  const abilityMultiplier = stateMode === 'total'
-    ? 1
-    : (count <= 0 ? 0 : (hasMassiveTrait ? 1 : count));
-  const toAbilityTotal = (value) => {
+  const abilityMultiplier = count <= 0 ? 0 : (hasMassiveTrait ? 1 : count);
+  const activeAuraMultiplier = stateMode === 'total' ? 1 : abilityMultiplier;
+  const passiveMultiplier = stateMode === 'total' ? 1 : abilityMultiplier;
+  const toActiveAuraTotal = (value) => {
     const numeric = Number(value);
     if (!Number.isFinite(numeric) || numeric <= 0) {
       return 0;
     }
-    return numeric * abilityMultiplier;
+    return numeric * activeAuraMultiplier;
   };
   [state && state.active, state && state.aura].forEach((section) => {
     if (!(section instanceof Map)) {
       return;
     }
     section.forEach((value, abilityId) => {
-      const totalCount = toAbilityTotal(value);
+      const totalCount = toActiveAuraTotal(value);
       if (totalCount <= 0) {
         return;
       }
@@ -3913,7 +3914,7 @@ function computeTotalCost(
       if (diff === 0) {
         return;
       }
-      total += diff * abilityMultiplier;
+      total += diff * passiveMultiplier;
     });
   }
 
