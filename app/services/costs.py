@@ -670,7 +670,7 @@ def passive_cost(
     if slug == "straznik":
         return 3.0 * tou
     if slug == "cierpliwy":
-        return 3.0 * tou
+        return 1.0 * tou
     if slug == "roj":
         return 0.25 * tou
     if slug == "zwrot":

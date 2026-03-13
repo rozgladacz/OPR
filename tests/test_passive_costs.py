@@ -364,6 +364,21 @@ def test_regeneracja_has_fixed_toughness_multiplier() -> None:
     assert costs.passive_cost("regeneracja", 8, True) == pytest.approx(10)
 
 
+def test_cierpliwy_cost_scaling_with_toughness() -> None:
+    assert costs.passive_cost("cierpliwy", 5) == pytest.approx(5)
+
+
+def test_ability_cost_from_name_for_cierpliwy_matches_passive_cost() -> None:
+    assert costs.ability_cost_from_name(
+        "Cierpliwy",
+        None,
+        ["Cierpliwy"],
+        toughness=6,
+        quality=4,
+        defense=4,
+    ) == pytest.approx(6)
+
+
 def test_regeneracja_cost_delta_is_defense_independent() -> None:
     quality = 4
     toughness = 5
