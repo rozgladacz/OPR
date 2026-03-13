@@ -449,3 +449,135 @@ def test_passive_cost_delta_depends_on_other_traits_frontend_matches_backend() -
     assert frontend["noTrait"] == backend_no_trait
     assert frontend["withPlane"] == backend_with_plane
     assert frontend["delta"] == backend_with_plane - backend_no_trait
+
+
+def test_render_editors_show_mode_indicator_and_cost_labels_after_mode_switch() -> None:
+    script_body = """
+        class Element {
+          constructor(tag) {
+            this.tagName = String(tag || '').toUpperCase();
+            this.children = [];
+            this.className = '';
+            this.textContent = '';
+            this.title = '';
+            this.value = '';
+            this.type = '';
+            this.min = '';
+            this.max = '';
+            this.parentNode = null;
+            this._listeners = new Map();
+            this._innerHTML = '';
+          }
+          appendChild(child) {
+            if (child && typeof child === 'object') {
+              child.parentNode = this;
+              this.children.push(child);
+            }
+            return child;
+          }
+          setAttribute(name, value) {
+            this[name] = String(value);
+          }
+          set innerHTML(value) {
+            this._innerHTML = String(value || '');
+            this.children = [];
+          }
+          get innerHTML() {
+            return this._innerHTML;
+          }
+          addEventListener(type, handler) {
+            this._listeners.set(type, handler);
+          }
+          get childElementCount() {
+            return this.children.length;
+          }
+          querySelectorAllByClass(className) {
+            const wanted = String(className || '').trim();
+            const out = [];
+            const hasClass = (node, cls) => {
+              const classes = String(node.className || '').split(/\\s+/).filter(Boolean);
+              return classes.includes(cls);
+            };
+            const walk = (node) => {
+              if (!node || !Array.isArray(node.children)) {
+                return;
+              }
+              node.children.forEach((child) => {
+                if (hasClass(child, wanted)) {
+                  out.push(child);
+                }
+                walk(child);
+              });
+            };
+            walk(this);
+            return out;
+          }
+        }
+
+        sandbox.document.createElement = (tag) => new Element(tag);
+
+        const makeContainer = () => {
+          const root = new Element('div');
+          root.innerHTML = '';
+          return root;
+        };
+        const extractTexts = (root, className) => root
+          .querySelectorAllByClass(className)
+          .map((node) => node.textContent);
+
+        const weaponContainer = makeContainer();
+        const abilityContainer = makeContainer();
+
+        const weaponOptions = [{
+          id: 7,
+          name: 'Karabin',
+          cost: 5,
+          range: 24,
+          attacks: 1,
+          ap: 0,
+          traits: '',
+          default_count: 1,
+          is_default: true,
+          is_primary: true,
+        }];
+        const abilityItems = [{
+          ability_id: 11,
+          label: 'Szarża',
+          cost: 3,
+          default_count: 1,
+        }];
+
+        const noop = () => {};
+
+        sandbox.renderWeaponEditor(weaponContainer, weaponOptions, new Map(), 3, true, noop, 'total');
+        sandbox.renderAbilityEditor(abilityContainer, abilityItems, new Map(), null, 3, true, noop, 'total');
+        const totalWeaponCosts = extractTexts(weaponContainer, 'roster-ability-cost');
+        const totalAbilityCosts = extractTexts(abilityContainer, 'roster-ability-cost');
+        const totalIndicators = extractTexts(weaponContainer, 'roster-mode-indicator')
+          .concat(extractTexts(abilityContainer, 'roster-mode-indicator'));
+
+        sandbox.renderWeaponEditor(weaponContainer, weaponOptions, new Map(), 3, true, noop, 'per_model');
+        sandbox.renderAbilityEditor(abilityContainer, abilityItems, new Map(), null, 3, true, noop, 'per_model');
+        const perModelWeaponCosts = extractTexts(weaponContainer, 'roster-ability-cost');
+        const perModelAbilityCosts = extractTexts(abilityContainer, 'roster-ability-cost');
+        const perModelIndicators = extractTexts(weaponContainer, 'roster-mode-indicator')
+          .concat(extractTexts(abilityContainer, 'roster-mode-indicator'));
+
+        console.log(JSON.stringify({
+          totalWeaponCosts,
+          totalAbilityCosts,
+          totalIndicators,
+          perModelWeaponCosts,
+          perModelAbilityCosts,
+          perModelIndicators,
+        }));
+    """
+
+    result = _run_node(_build_sandbox_script(script_body))
+
+    assert result["totalWeaponCosts"] == ["+5 pkt"]
+    assert result["totalAbilityCosts"] == ["+3 pkt"]
+    assert result["totalIndicators"] == ["Tryb: suma", "Tryb: suma"]
+    assert result["perModelWeaponCosts"] == ["+5 pkt/model"]
+    assert result["perModelAbilityCosts"] == ["+3 pkt/model"]
+    assert result["perModelIndicators"] == ["Tryb: pkt/model", "Tryb: pkt/model"]

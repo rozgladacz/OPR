@@ -183,6 +183,12 @@ body {
   margin-top: 0;
 }
 
+
+.roster-mode-indicator {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
 .roster-count-input {
   max-width: 5rem;
 }
