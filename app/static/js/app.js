@@ -3682,7 +3682,7 @@ function computeTotalCost(
     total = 0;
   }
   const stateMode = state && state.mode === 'total' ? 'total' : 'per_model';
-  const toTotal = (value) => {
+  const toWeaponTotal = (value) => {
     const numeric = Number(value);
     if (!Number.isFinite(numeric) || numeric <= 0) {
       return 0;
@@ -3717,7 +3717,7 @@ function computeTotalCost(
 
   if (state && state.weapons instanceof Map) {
     state.weapons.forEach((value, weaponId) => {
-      const totalCount = toTotal(value);
+      const totalCount = toWeaponTotal(value);
       if (totalCount <= 0) {
         return;
       }
@@ -3730,35 +3730,6 @@ function computeTotalCost(
 
   const activeCostMap = costMaps && costMaps.active instanceof Map ? costMaps.active : new Map();
   const passiveCostMap = costMaps && costMaps.passive instanceof Map ? costMaps.passive : new Map();
-  [state && state.active, state && state.aura].forEach((section) => {
-    if (!(section instanceof Map)) {
-      return;
-    }
-    section.forEach((value, abilityId) => {
-      const totalCount = toTotal(value);
-      if (totalCount <= 0) {
-        return;
-      }
-      const canonicalKey = normalizeLoadoutKey(abilityId) || String(abilityId);
-      let costValue = activeCostMap.get(canonicalKey);
-      if (!Number.isFinite(costValue) && canonicalKey !== abilityId) {
-        costValue = activeCostMap.get(abilityId);
-      }
-      if (!Number.isFinite(costValue)) {
-        const numericKey = Number(canonicalKey);
-        if (Number.isFinite(numericKey)) {
-          costValue = activeCostMap.get(String(numericKey));
-          if (!Number.isFinite(costValue)) {
-            costValue = activeCostMap.get(numericKey);
-          }
-        }
-      }
-      if (Number.isFinite(costValue)) {
-        total += costValue * totalCount;
-      }
-    });
-  });
-
   const passiveList = Array.isArray(passiveItems) ? passiveItems : [];
   const passiveState = state && state.passive instanceof Map ? state.passive : new Map();
   const basePassiveSet = new Set();
@@ -3805,6 +3776,43 @@ function computeTotalCost(
       }
     });
   }
+  const hasMassiveTrait = selectedPassiveSet.has('masywny') || basePassiveSet.has('masywny');
+  const abilityMultiplier = count <= 0 ? 0 : (hasMassiveTrait ? 1 : count);
+  const toAbilityTotal = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return 0;
+    }
+    return stateMode === 'total' ? numeric : numeric * abilityMultiplier;
+  };
+  [state && state.active, state && state.aura].forEach((section) => {
+    if (!(section instanceof Map)) {
+      return;
+    }
+    section.forEach((value, abilityId) => {
+      const totalCount = toAbilityTotal(value);
+      if (totalCount <= 0) {
+        return;
+      }
+      const canonicalKey = normalizeLoadoutKey(abilityId) || String(abilityId);
+      let costValue = activeCostMap.get(canonicalKey);
+      if (!Number.isFinite(costValue) && canonicalKey !== abilityId) {
+        costValue = activeCostMap.get(abilityId);
+      }
+      if (!Number.isFinite(costValue)) {
+        const numericKey = Number(canonicalKey);
+        if (Number.isFinite(numericKey)) {
+          costValue = activeCostMap.get(String(numericKey));
+          if (!Number.isFinite(costValue)) {
+            costValue = activeCostMap.get(numericKey);
+          }
+        }
+      }
+      if (Number.isFinite(costValue)) {
+        total += costValue * totalCount;
+      }
+    });
+  });
   if (passiveList.length) {
     const baseAbilitySet = new Set(basePassiveSet);
     const selectedAbilitySet = new Set(selectedPassiveSet);
@@ -3879,7 +3887,7 @@ function computeTotalCost(
       if (diff === 0) {
         return;
       }
-      total += diff * count;
+      total += diff * (stateMode === 'total' ? 1 : abilityMultiplier);
     });
   }
 
