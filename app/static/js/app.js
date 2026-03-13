@@ -3255,6 +3255,30 @@ function formatAbilityDisplayLabel(baseLabel, customName) {
   return base;
 }
 
+function normalizeLoadoutMode(mode) {
+  return mode === 'per_model' ? 'per_model' : 'total';
+}
+
+function formatLoadoutCostLabel(costValue, mode) {
+  if (costValue === undefined || costValue === null) {
+    return 'wliczone';
+  }
+  const normalizedMode = normalizeLoadoutMode(mode);
+  const suffix = normalizedMode === 'per_model' ? 'pkt/model' : 'pkt';
+  return `+${formatPoints(costValue)} ${suffix}`;
+}
+
+function createModeIndicator(mode) {
+  const normalizedMode = normalizeLoadoutMode(mode);
+  const indicator = document.createElement('span');
+  indicator.className = 'badge rounded-pill text-bg-light border roster-mode-indicator';
+  indicator.textContent = normalizedMode === 'per_model' ? 'Tryb: pkt/model' : 'Tryb: suma';
+  indicator.title = normalizedMode === 'per_model'
+    ? 'Wartość dotyczy pojedynczego modelu.'
+    : 'Wartość dotyczy całej jednostki (suma).';
+  return indicator;
+}
+
 function renderAbilityEditor(
   container,
   items,
@@ -3263,6 +3287,7 @@ function renderAbilityEditor(
   modelCount,
   editable,
   onChange,
+  stateMode = 'total',
 ) {
 
   if (!container) {
@@ -3275,6 +3300,7 @@ function renderAbilityEditor(
   }
   const wrapper = document.createElement('div');
   wrapper.className = 'd-flex flex-column gap-2';
+  const normalizedMode = normalizeLoadoutMode(stateMode);
   const safeLabelMap = labelMap instanceof Map ? labelMap : null;
   const maxCount = Math.max(Number(modelCount) || 0, 0);
   safeItems.forEach((item) => {
@@ -3326,11 +3352,7 @@ function renderAbilityEditor(
     info.appendChild(name);
     const cost = document.createElement('span');
     cost.className = 'roster-ability-cost';
-    if (item.cost !== undefined && item.cost !== null) {
-      cost.textContent = `+${formatPoints(item.cost)} pkt/model`;
-    } else {
-      cost.textContent = 'wliczone';
-    }
+    cost.textContent = formatLoadoutCostLabel(item.cost, normalizedMode);
     info.appendChild(cost);
 
     if (!editable && customName) {
@@ -3345,6 +3367,7 @@ function renderAbilityEditor(
     const controls = document.createElement('div');
     controls.className = 'roster-ability-controls text-end';
     if (editable) {
+      controls.appendChild(createModeIndicator(normalizedMode));
       const input = document.createElement('input');
       input.type = 'number';
       input.className = 'form-control form-control-sm roster-count-input';
@@ -3427,7 +3450,7 @@ function renderWeaponEditor(
   if (!safeOptions.length) {
     return false;
   }
-  const normalizedMode = stateMode === 'per_model' ? 'per_model' : 'total';
+  const normalizedMode = normalizeLoadoutMode(stateMode);
   const numericModelCount = Math.max(Number(modelCount) || 0, 0);
   const weaponInfoMap = new Map();
   const classInfoMap = new Map();
@@ -3533,11 +3556,7 @@ function renderWeaponEditor(
     info.appendChild(name);
     const cost = document.createElement('span');
     cost.className = 'roster-ability-cost';
-    if (option.cost !== undefined && option.cost !== null) {
-      cost.textContent = `+${formatPoints(option.cost)} pkt/model`;
-    } else {
-      cost.textContent = 'wliczone';
-    }
+    cost.textContent = formatLoadoutCostLabel(option.cost, normalizedMode);
     info.appendChild(cost);
     const statsLine = document.createElement('div');
     statsLine.className = 'text-muted small mt-1';
@@ -3554,6 +3573,7 @@ function renderWeaponEditor(
     const controls = document.createElement('div');
     controls.className = 'roster-ability-controls text-end';
     if (editable) {
+      controls.appendChild(createModeIndicator(normalizedMode));
       const input = document.createElement('input');
       input.type = 'number';
       input.className = 'form-control form-control-sm roster-count-input';
@@ -6255,6 +6275,7 @@ function renderEditors(precomputedWeaponMap = null) {
       currentCount,
       isEditable,
       handleStateChange,
+      loadoutState ? loadoutState.mode : 'total',
     );
     toggleSectionVisibility(activeContainer, hasActives);
     const hasAuras = renderAbilityEditor(
@@ -6265,6 +6286,7 @@ function renderEditors(precomputedWeaponMap = null) {
       currentCount,
       isEditable,
       handleStateChange,
+      loadoutState ? loadoutState.mode : 'total',
     );
     toggleSectionVisibility(auraContainer, hasAuras);
     const hasWeapons = renderWeaponEditor(
