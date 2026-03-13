@@ -1465,6 +1465,75 @@ def roster_unit_role_totals(
             if cost_value is None:
                 continue
             total += cost_value * _to_total(stored_count, ability=True)
+
+        ability_id_to_ident: dict[int, str] = {}
+        for link in getattr(unit, "abilities", []) or []:
+            ability = getattr(link, "ability", None)
+            if ability is None or ability.id is None:
+                continue
+            ident = ability_identifier(getattr(ability, "slug", None) or ability.name)
+            if ident:
+                ability_id_to_ident[int(ability.id)] = ident
+
+        base_active_set: set[str] = set()
+        selected_active_set: set[str] = set()
+        for ability_id, ident in ability_id_to_ident.items():
+            if not ident:
+                continue
+            link = next(
+                (
+                    item
+                    for item in getattr(unit, "abilities", []) or []
+                    if getattr(item, "ability", None)
+                    and getattr(getattr(item, "ability", None), "id", None) == ability_id
+                ),
+                None,
+            )
+            if link is not None and _ability_link_is_default(link):
+                base_active_set.add(ident)
+            if active_counts.get(ability_id, 0) > 0 or aura_counts.get(ability_id, 0) > 0:
+                selected_active_set.add(ident)
+
+        def _is_odwody_blocked(active_set: set[str]) -> bool:
+            return bool({"rezerwa", "zwiadowca", "zasadzka"} & active_set)
+
+        def _transport_multiplier(active_set: set[str]) -> float:
+            if "samolot" in active_set:
+                return 3.5
+            if "zasadzka" in active_set or "zwiadowca" in active_set:
+                return 2.5
+            if "latajacy" in active_set:
+                return 1.5
+            if "szybki" in active_set or "zwinny" in active_set:
+                return 1.25
+            return 1.0
+
+        def _effective_passive_cost(entry: dict[str, Any], active_set: set[str], cost_value: float) -> float:
+            slug = str(entry.get("slug") or "")
+            ident = ability_identifier(slug)
+            if not ident:
+                return cost_value
+            if ident == "odwody" and _is_odwody_blocked(active_set):
+                return 0.0
+
+            is_transport = ident == "transport"
+            is_open_transport = ident in {"otwarty_transport", "platforma_strzelecka", "otwarty transport", "platforma strzelecka"}
+            if is_transport or is_open_transport:
+                capacity = extract_number(
+                    str(
+                        entry.get("value")
+                        or entry.get("label")
+                        or entry.get("slug")
+                        or ""
+                    )
+                )
+                if capacity > 0:
+                    multiplier = _transport_multiplier(active_set)
+                    if is_open_transport:
+                        multiplier += 0.25
+                    return capacity * multiplier
+            return cost_value
+
         passive_diff = 0.0
         for entry in passive_entries:
             slug = entry.get("slug")
@@ -1479,7 +1548,17 @@ def roster_unit_role_totals(
             cost_value = float(entry.get("cost") or 0.0)
             if cost_value == 0.0:
                 continue
-            passive_diff += cost_value * diff
+            default_cost = (
+                _effective_passive_cost(entry, base_active_set, cost_value)
+                if default_value
+                else 0.0
+            )
+            selected_cost = (
+                _effective_passive_cost(entry, selected_active_set, cost_value)
+                if selected_flag
+                else 0.0
+            )
+            passive_diff += selected_cost - default_cost
         if passive_diff:
             total += passive_diff * (1 if total_mode else ability_multiplier)
         return round(total, 2)

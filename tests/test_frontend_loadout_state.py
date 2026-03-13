@@ -5,6 +5,8 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+from app.services import costs
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 APP_JS_PATH = ROOT_DIR / "app/static/js/app.js"
@@ -399,3 +401,51 @@ def test_weapon_cost_internal_applies_overcharge_multiplier_1_4() -> None:
     assert result["baseCost"] > 0
     assert result["overchargeCost"] > result["baseCost"]
     assert result["ratio"] == 1.4
+
+
+def test_passive_cost_delta_depends_on_other_traits_frontend_matches_backend() -> None:
+    passive_items = [
+        {
+            "slug": "transport(2)",
+            "value": "2",
+            "label": "Transport(2)",
+            "raw": "Transport(2)",
+            "default_count": 0,
+            "is_army_rule": False,
+            "cost": 999,
+        }
+    ]
+
+    script_body = f"""
+        const passiveItems = {json.dumps(passive_items)};
+        const evaluate = (activeTrait) => {{
+          const state = sandbox.createLoadoutState({{
+            active: activeTrait ? [{{ id: activeTrait, count: 1 }}] : [],
+            passive: [{{ id: 'transport(2)', count: 1 }}],
+          }});
+          return sandbox.computeTotalCost(
+            0,
+            1,
+            [],
+            state,
+            {{ active: new Map(), passive: new Map() }},
+            passiveItems,
+            new Map(),
+          );
+        }};
+        const noTrait = evaluate(null);
+        const withPlane = evaluate('samolot');
+        console.log(JSON.stringify({{ noTrait, withPlane, delta: withPlane - noTrait }}));
+    """
+    frontend = _run_node(_build_sandbox_script(script_body))
+
+    base_multiplier = 1.0
+    plane_multiplier = next(
+        value for slugs, value in costs.TRANSPORT_MULTIPLIERS if "samolot" in slugs
+    )
+    backend_no_trait = 2 * base_multiplier
+    backend_with_plane = 2 * plane_multiplier
+
+    assert frontend["noTrait"] == backend_no_trait
+    assert frontend["withPlane"] == backend_with_plane
+    assert frontend["delta"] == backend_with_plane - backend_no_trait
