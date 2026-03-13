@@ -5,6 +5,9 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+from app import models
+from app.services import costs
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 APP_JS_PATH = ROOT_DIR / "app/static/js/app.js"
@@ -35,7 +38,7 @@ def _run_compute_total_cost_cases(cases: list[dict[str, object]]) -> dict[str, f
             mode: testCase.mode,
             weapons: new Map(Object.entries(testCase.weapons || {{}}).map(([k, v]) => [Number(k), Number(v)])),
             active: new Map(Object.entries(testCase.active || {{}}).map(([k, v]) => [String(k), Number(v)])),
-            aura: new Map(),
+            aura: new Map(Object.entries(testCase.aura || {{}}).map(([k, v]) => [String(k), Number(v)])),
             passive: new Map(Object.entries(testCase.passive || {{}}).map(([k, v]) => [String(k), Number(v)])),
             activeLabels: new Map(),
             auraLabels: new Map(),
@@ -115,3 +118,52 @@ def test_compute_total_cost_massive_and_non_massive_modes_regression() -> None:
     assert totals["massive_total"] == 58
     assert totals["regular_per_model"] == 114
     assert totals["regular_total"] == 58
+
+
+def test_compute_total_cost_matches_backend_for_massive_with_ociezalosc() -> None:
+    ability = models.Ability(id=101, name="Ociężałość", type="aura", description="")
+    link = models.UnitAbility(position=0)
+    link.ability = ability
+
+    unit = models.Unit(
+        name="Massive Unit",
+        quality=4,
+        defense=4,
+        toughness=3,
+        flags="Masywny",
+        army_id=1,
+    )
+    unit.abilities = [link]
+    unit.weapon_links = []
+    unit.default_weapon = None
+    unit.default_weapon_id = None
+
+    roster_unit = models.RosterUnit(unit=unit, count=3)
+    backend_without = costs.roster_unit_role_totals(
+        roster_unit,
+        {"mode": "per_model", "aura": {str(ability.id): 0}},
+    )
+    backend_with = costs.roster_unit_role_totals(
+        roster_unit,
+        {"mode": "per_model", "aura": {str(ability.id): 1}},
+    )
+    backend_diff = backend_with["wojownik"] - backend_without["wojownik"]
+
+    cases = [
+        {
+            "name": "frontend_massive_ociezalosc",
+            "mode": "per_model",
+            "basePerModel": 0,
+            "modelCount": 3,
+            "weaponOptions": [],
+            "aura": {str(ability.id): 1},
+            "activeCosts": {str(ability.id): costs.ability_cost_from_name("Ociężałość")},
+            "passiveItems": [
+                {"slug": "masywny", "default_count": 1, "cost": 0},
+            ],
+        },
+    ]
+    totals = _run_compute_total_cost_cases(cases)
+
+    assert totals["frontend_massive_ociezalosc"] == backend_diff
+
