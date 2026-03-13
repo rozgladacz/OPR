@@ -652,6 +652,7 @@ const PENETRATING_MULTIPLIER = { '-1': 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2
 const WAAGH_AP_MODIFIER = { '-1': 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02 };
 const BLAST_MULTIPLIER = { 2: 1.9, 3: 2.7, 6: 4.3 };
 const DEADLY_MULTIPLIER = { 2: 1.8, 3: 2.5, 6: 3.8 };
+const OVERCHARGE_MULTIPLIER = 1.05;
 const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
 const ABILITY_NAME_MAX_LENGTH = 60;
 
@@ -1092,7 +1093,7 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
   let cost = attacksValue * 2 * adjustedRangeMod * chance * apMod * mult;
 
   if (overcharge && (!assault || normalizedRange !== 0)) {
-    cost *= 1.4;
+    cost *= OVERCHARGE_MULTIPLIER;
   }
 
   if (assault && allowAssaultExtra && normalizedRange !== 0) {
@@ -3682,7 +3683,7 @@ function computeTotalCost(
     total = 0;
   }
   const stateMode = state && state.mode === 'total' ? 'total' : 'per_model';
-  const toTotal = (value) => {
+  const toWeaponTotal = (value) => {
     const numeric = Number(value);
     if (!Number.isFinite(numeric) || numeric <= 0) {
       return 0;
@@ -3717,7 +3718,7 @@ function computeTotalCost(
 
   if (state && state.weapons instanceof Map) {
     state.weapons.forEach((value, weaponId) => {
-      const totalCount = toTotal(value);
+      const totalCount = toWeaponTotal(value);
       if (totalCount <= 0) {
         return;
       }
@@ -3806,6 +3807,43 @@ function computeTotalCost(
       }
     });
   }
+  const hasMassiveTrait = selectedPassiveSet.has('masywny') || basePassiveSet.has('masywny');
+  const abilityMultiplier = count <= 0 ? 0 : (hasMassiveTrait ? 1 : count);
+  const toAbilityTotal = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return 0;
+    }
+    return stateMode === 'total' ? numeric : numeric * abilityMultiplier;
+  };
+  [state && state.active, state && state.aura].forEach((section) => {
+    if (!(section instanceof Map)) {
+      return;
+    }
+    section.forEach((value, abilityId) => {
+      const totalCount = toAbilityTotal(value);
+      if (totalCount <= 0) {
+        return;
+      }
+      const canonicalKey = normalizeLoadoutKey(abilityId) || String(abilityId);
+      let costValue = activeCostMap.get(canonicalKey);
+      if (!Number.isFinite(costValue) && canonicalKey !== abilityId) {
+        costValue = activeCostMap.get(abilityId);
+      }
+      if (!Number.isFinite(costValue)) {
+        const numericKey = Number(canonicalKey);
+        if (Number.isFinite(numericKey)) {
+          costValue = activeCostMap.get(String(numericKey));
+          if (!Number.isFinite(costValue)) {
+            costValue = activeCostMap.get(numericKey);
+          }
+        }
+      }
+      if (Number.isFinite(costValue)) {
+        total += costValue * totalCount;
+      }
+    });
+  });
   if (passiveList.length) {
     const baseAbilitySet = new Set(basePassiveSet);
     const selectedAbilitySet = new Set(selectedPassiveSet);
@@ -3882,7 +3920,7 @@ function computeTotalCost(
       if (diff === 0) {
         return;
       }
-      total += diff * count;
+      total += diff * (stateMode === 'total' ? 1 : abilityMultiplier);
     });
   }
 

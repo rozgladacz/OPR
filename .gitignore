@@ -4,3 +4,7 @@ data/
 *.sqlite
 *.sqlite3
 *.bak
+
+# Keep documentation assets in version control
+!app/static/docs/
+!app/static/docs/**

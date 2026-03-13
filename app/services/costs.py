@@ -61,6 +61,7 @@ WAAGH_AP_MODIFIER = {-1: 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0
 
 BLAST_MULTIPLIER = {2: 1.9, 3: 2.7, 6: 4.3}
 DEADLY_MULTIPLIER = {2: 1.8, 3: 2.5, 6: 3.8}
+OVERCHARGE_MULTIPLIER = 1.05
 
 TRANSPORT_MULTIPLIERS = [
     ({"samolot"}, 3.5),
@@ -1002,7 +1003,11 @@ def _weapon_cost(
         elif norm in {
             "brutalny",
             "brutalna",
-            "brutal"
+            "brutal",
+            "bez regeneracji",
+            "bez regegenracji",
+            "no regen",
+            "no regeneration",
         }:
             ap_mod += lookup_with_nearest(AP_BRUTAL, base_ap)
         elif norm in {"niebezposredni", "indirect"}:
@@ -1034,7 +1039,7 @@ def _weapon_cost(
     cost = attacks * 2.0 * range_mod * chance * ap_mod * mult
 
     if overcharge and (not assault or range_value != 0):
-        cost *= 1.05
+        cost *= OVERCHARGE_MULTIPLIER
 
     if assault and allow_assault_extra and range_value != 0:
         melee_part_cost = _weapon_cost(
