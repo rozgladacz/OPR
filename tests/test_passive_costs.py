@@ -407,3 +407,30 @@ def test_ability_cost_from_name_for_regeneracja_is_defense_independent() -> None
             quality=quality,
             defense=defense,
         ) == pytest.approx(expected, rel=1e-6)
+
+
+def test_nieruchomy_cost_is_negative_and_aura_does_not_override() -> None:
+    assert costs.passive_cost("nieruchomy", 4) == pytest.approx(-10)
+    assert costs.passive_cost("nieruchomy", 4, True) == pytest.approx(-10)
+
+
+def test_nieruchomy_in_base_model_cost_reduces_total() -> None:
+    base = costs.base_model_cost(quality=4, defense=4, toughness=4, abilities=[])
+    with_nieruchomy = costs.base_model_cost(
+        quality=4,
+        defense=4,
+        toughness=4,
+        abilities=["nieruchomy"],
+    )
+    assert with_nieruchomy - base == pytest.approx(-10, rel=1e-6)
+
+
+def test_ability_cost_from_name_for_nieruchomy_is_negative() -> None:
+    assert costs.ability_cost_from_name(
+        "Nieruchomy",
+        None,
+        ["Nieruchomy"],
+        toughness=4,
+        quality=4,
+        defense=4,
+    ) == pytest.approx(-10, rel=1e-6)
