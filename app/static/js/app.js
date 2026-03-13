@@ -652,6 +652,7 @@ const PENETRATING_MULTIPLIER = { '-1': 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2
 const WAAGH_AP_MODIFIER = { '-1': 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02 };
 const BLAST_MULTIPLIER = { 2: 1.9, 3: 2.7, 6: 4.3 };
 const DEADLY_MULTIPLIER = { 2: 1.8, 3: 2.5, 6: 3.8 };
+const OVERCHARGE_MULTIPLIER = 1.05;
 const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
 const ABILITY_NAME_MAX_LENGTH = 60;
 
@@ -1092,7 +1093,7 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
   let cost = attacksValue * 2 * adjustedRangeMod * chance * apMod * mult;
 
   if (overcharge && (!assault || normalizedRange !== 0)) {
-    cost *= 1.4;
+    cost *= OVERCHARGE_MULTIPLIER;
   }
 
   if (assault && allowAssaultExtra && normalizedRange !== 0) {
