@@ -8,10 +8,11 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..db import get_db
+from ..paths import TEMPLATES_DIR
 from ..security import get_current_user, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 @router.get("/login", response_class=HTMLResponse)

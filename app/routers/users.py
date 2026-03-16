@@ -16,11 +16,12 @@ from starlette.background import BackgroundTask
 
 from .. import models
 from ..db import get_db
+from ..paths import TEMPLATES_DIR
 from ..security import get_current_user, hash_password
 from ..services import db_restore
 
 router = APIRouter(prefix="/users", tags=["users"])
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 def _cleanup_temp_file(path: Path) -> None:
     deadline = time.monotonic() + 5
