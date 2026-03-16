@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 from .. import models
 from ..data import abilities as ability_catalog
 from ..db import get_db
+from ..paths import TEMPLATES_DIR
 from ..security import get_current_user
 from ..services import ability_registry, army_rules as army_rule_service, costs, utils
 
@@ -74,7 +75,7 @@ for value in sorted(costs.RANGE_TABLE.keys()):
     SPELL_RANGE_OPTIONS.append({"value": str(value), "label": label})
 
 router = APIRouter(prefix="/armies", tags=["armies"])
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 def _normalized_trait_identifier(slug: str | None) -> str | None:

@@ -11,12 +11,13 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from .. import config, models
+from ..paths import TEMPLATES_DIR
 from ..security import get_current_user
 from ..services import update_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 current_user_dep = get_current_user()
 
 

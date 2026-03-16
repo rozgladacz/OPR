@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .. import models
 from ..db import get_db
+from ..paths import TEMPLATES_DIR
 from ..security import get_current_user
 from ..services import ability_registry, costs, utils
 from ..services.rules import unit_is_hero
@@ -24,7 +25,7 @@ from ..services.rules import unit_is_hero
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/rosters", tags=["rosters"])
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 ABILITY_NAME_MAX_LENGTH = 60
 

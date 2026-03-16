@@ -20,8 +20,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from .. import models
 from ..db import get_db
-from ..security import get_current_user
+from ..paths import TEMPLATES_DIR
 from ..pdf_font_data import PDF_FONT_DATA
+from ..security import get_current_user
 from ..services import costs, utils
 from .rosters import (
     _classification_map,
@@ -31,7 +32,7 @@ from .rosters import (
 )
 
 router = APIRouter(prefix="/rosters", tags=["export"])
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 PDF_BASE_FONT = "DejaVuSans"
 PDF_BOLD_FONT = "DejaVuSans-Bold"

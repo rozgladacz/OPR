@@ -14,6 +14,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import models
 from .config import DEBUG, SECRET_KEY
 from .db import get_db, init_db
+from .paths import STATIC_DIR, TEMPLATES_DIR
 from .routers import admin, armories, armies, auth, export, export_xlsx, rosters, users
 from .security import get_current_user
 from .services import costs
@@ -22,9 +23,9 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(debug=DEBUG)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 @app.on_event("startup")

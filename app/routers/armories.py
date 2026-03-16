@@ -13,11 +13,12 @@ from sqlalchemy.orm import Session, selectinload
 from .. import models
 from ..data import abilities as ability_catalog
 from ..db import get_db
+from ..paths import TEMPLATES_DIR
 from ..security import get_current_user
 from ..services import costs, utils
 
 router = APIRouter(prefix="/armories", tags=["armories"])
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 OVERRIDABLE_FIELDS = ("name", "range", "attacks", "ap", "tags", "notes")
 
