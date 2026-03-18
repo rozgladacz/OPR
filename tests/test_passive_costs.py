@@ -449,3 +449,9 @@ def test_ability_cost_from_name_for_nieruchomy_is_negative() -> None:
         quality=4,
         defense=4,
     ) == pytest.approx(-10, rel=1e-6)
+
+
+def test_zasadzka_passive_cost_is_four_points_per_toughness() -> None:
+    assert costs.passive_cost("Zasadzka", tou=1) == pytest.approx(4.0)
+    assert costs.passive_cost("Zasadzka", tou=3) == pytest.approx(12.0)
+    assert costs.passive_cost("Zasadzka?!", tou=6) == pytest.approx(24.0)

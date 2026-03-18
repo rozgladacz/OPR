@@ -153,3 +153,34 @@ def test_overcharge_weapon_matches_expected_formula():
     cost = costs.weapon_cost(plasma_cannon, unit_quality=4, unit_flags=[])
 
     assert cost == pytest.approx(110.99, abs=0.02)
+
+
+def test_ambush_assault_reduces_only_ranged_component() -> None:
+    ranged_component = costs._weapon_cost(
+        4,
+        12,
+        1,
+        1,
+        ["Assault"],
+        [],
+        allow_assault_extra=False,
+    )
+    melee_component = costs._weapon_cost(
+        4,
+        0,
+        1,
+        1,
+        ["Assault"],
+        [],
+        allow_assault_extra=False,
+    )
+    expected = ranged_component * 0.6 + melee_component
+
+    assault_weapon = _weapon("12\"", ap=1, tags="Assault")
+    ambush_cost = costs.weapon_cost(
+        assault_weapon,
+        unit_quality=4,
+        unit_flags=["Zasadzka"],
+    )
+
+    assert ambush_cost == pytest.approx(expected, rel=1e-3, abs=0.02)
