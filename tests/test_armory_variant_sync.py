@@ -267,6 +267,54 @@ def test_army_view_variant_sync_cached_in_session():
         session.close()
 
 
+def test_create_weapon_variant_redirect_points_to_existing_weapon_edit():
+    session = _session()
+    try:
+        user = models.User(username="tester", password_hash="hash", is_admin=False)
+        base_armory = models.Armory(name="Base", owner=user)
+        child_armory = models.Armory(name="Child", owner=user, parent=base_armory)
+        session.add_all([user, base_armory, child_armory])
+        session.flush()
+
+        weapon = models.Weapon(
+            armory=base_armory,
+            owner_id=user.id,
+            name="Sword",
+            range="Melee",
+            attacks=2,
+            ap=1,
+        )
+        session.add(weapon)
+        session.flush()
+
+        request = _build_request(f"/armories/{base_armory.id}/weapons/{weapon.id}/edit")
+        response = armories_router.update_weapon(
+            armory_id=base_armory.id,
+            weapon_id=weapon.id,
+            request=request,
+            name=weapon.effective_name,
+            range=weapon.effective_range or "",
+            attacks=str(weapon.display_attacks),
+            ap=str(weapon.effective_ap),
+            abilities="[]",
+            notes=weapon.effective_notes or "",
+            action="create_variant",
+            db=session,
+            current_user=user,
+        )
+
+        location = response.headers["location"]
+        parts = location.strip("/").split("/")
+        redirect_armory_id = int(parts[1])
+        redirect_weapon_id = int(parts[3])
+
+        created_weapon = session.get(models.Weapon, redirect_weapon_id)
+        assert created_weapon is not None
+        assert created_weapon.armory_id == redirect_armory_id
+    finally:
+        session.close()
+
+
 def test_armory_view_variant_sync_cached_in_session():
     session = _session()
     try:
