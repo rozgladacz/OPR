@@ -1171,8 +1171,9 @@ def update_weapon(
         db.flush()
         _sync_descendant_variants(db, armory)
         db.commit()
+        target_armory_id = new_weapon.armory_id if new_weapon.armory_id is not None else armory.id
         return RedirectResponse(
-            url=f"/armories/{armory.id}/weapons/{new_weapon.id}/edit", status_code=303
+            url=f"/armories/{target_armory_id}/weapons/{new_weapon.id}/edit", status_code=303
         )
 
     if action == "create_variant":
@@ -1210,8 +1211,9 @@ def update_weapon(
         db.flush()
         _sync_descendant_variants(db, armory)
         db.commit()
+        target_armory_id = new_weapon.armory_id if new_weapon.armory_id is not None else armory.id
         return RedirectResponse(
-            url=f"/armories/{armory.id}/weapons/{new_weapon.id}/edit", status_code=303
+            url=f"/armories/{target_armory_id}/weapons/{new_weapon.id}/edit", status_code=303
         )
 
     if weapon.parent:
