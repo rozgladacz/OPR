@@ -1080,6 +1080,8 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
       mult *= 1.5;
     } else if (['unik'].includes(norm)) {
       mult *= 1.2;
+    } else if (melee && ['porazenie'].includes(norm)) {
+      mult *= 1.1;
     }
   });
 

@@ -1033,6 +1033,8 @@ def _weapon_cost(
             mult *= 1.5
         elif norm in {"unik"}:
             mult *= 1.2
+        elif melee and norm in {"porazenie"}:
+            mult *= 1.1
 
     if waagh_penalty:
         ap_mod = max(ap_mod - waagh_penalty, 0.0)

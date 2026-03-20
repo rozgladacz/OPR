@@ -615,6 +615,15 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         type="weapon",
         description="Jeżeli cel jest Przyszpilony lub Wyczerpany, wykonuje podwójną liczbę ataków.",
     ),
+    AbilityDefinition(
+        slug="porazenie",
+        name="Porażenie",
+        type="weapon",
+        description=(
+            "Podczas sprawdzania kto wygrał walkę wręcz, "
+            "rany zadane tą bronią liczą się podwójnie."
+        ),
+    ),
     
 ]
 
