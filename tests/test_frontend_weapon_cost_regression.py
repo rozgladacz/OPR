@@ -92,6 +92,15 @@ CASES = [
         "weapon_traits": ["Nieporęczny"],
         "unit_traits": [],
     },
+    {
+        "name": "porazenie_melee",
+        "quality": 4,
+        "range": 0,
+        "attacks": 2,
+        "ap": 1,
+        "weapon_traits": ["Porażenie"],
+        "unit_traits": [],
+    },
 ]
 
 
