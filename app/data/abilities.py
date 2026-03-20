@@ -429,6 +429,14 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Odział w zasięgu 12” przestaje być wyczerpany.",
     ),
     AbilityDefinition(
+        slug="usprawnienie",
+        name="Usprawnienie",
+        type="active",
+        description=(
+            "Przerwij, aby oddział w zasięgu 12” do końca aktywacji zwiększył AP wszystkich swoich broni o 1."
+        ),
+    ),
+    AbilityDefinition(
         slug="rozkaz",
         name="Rozkaz",
         type="active",

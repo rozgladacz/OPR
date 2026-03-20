@@ -26,6 +26,10 @@ def test_mobilizacja_cost_is_30():
     assert costs.ability_cost_from_name("Mobilizacja") == 30.0
 
 
+def test_usprawnienie_cost_is_45():
+    assert costs.ability_cost_from_name("Usprawnienie") == 45.0
+
+
 def test_ability_identifier_ignores_diacritics():
     assert costs.ability_identifier("Łatanie") == "latanie"
     assert costs.normalize_name("Żółć") == "zolc"
@@ -73,4 +77,3 @@ def test_order_like_cost_detection_normalizes_slug_from_config() -> None:
     )
 
     assert costs.ability_uses_order_like_cost(ability) is True
-
