@@ -661,7 +661,7 @@ def passive_cost(
     if slug == "tarcza":
         return 1.25 * tou
     if slug == "regeneracja":
-        return 1.25 * tou
+        return 4.0 * tou
     if slug == "dywersant":
         return 1.25 * (tou if aura else 1.0)
     if slug == "zdobywca":
