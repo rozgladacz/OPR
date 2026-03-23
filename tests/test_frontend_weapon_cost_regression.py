@@ -164,3 +164,57 @@ def test_frontend_weapon_cost_matches_backend_weapon_cost_with_tolerance() -> No
             use_cached=False,
         )
         assert frontend[case["name"]] == pytest.approx(backend, abs=NUMERIC_TOLERANCE)
+
+
+def test_frontend_alias_ability_identifier_and_cost_match_backend() -> None:
+    alias = "Nieustępliwy"
+    canonical = "Przygotowanie"
+    script = textwrap.dedent(
+        f"""
+        const fs = require('fs');
+        const vm = require('vm');
+        const code = fs.readFileSync({json.dumps(str(APP_JS_PATH))}, 'utf8');
+        const sandbox = {{
+          console,
+          Map,
+          Set,
+          JSON,
+          window: {{ setTimeout, clearTimeout }},
+          document: {{ addEventListener: () => {{}} }},
+        }};
+        sandbox.window.window = sandbox.window;
+        vm.createContext(sandbox);
+        vm.runInContext(code, sandbox);
+
+        const payload = {{
+          aliasIdentifier: sandbox.abilityIdentifier({json.dumps(alias)}),
+          canonicalIdentifier: sandbox.abilityIdentifier({json.dumps(canonical)}),
+          aliasCost: sandbox.weaponCostInternal(4, 24, 2, 1, [], [{json.dumps(alias)}], true),
+          canonicalCost: sandbox.weaponCostInternal(4, 24, 2, 1, [], [{json.dumps(canonical)}], true),
+        }};
+        console.log(JSON.stringify(payload));
+        """
+    )
+    frontend = json.loads(subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True).stdout)
+
+    backend_alias_identifier = costs.ability_identifier(alias)
+    backend_canonical_identifier = costs.ability_identifier(canonical)
+    backend_alias_cost = costs.weapon_cost(
+        _build_weapon({"range": 24, "attacks": 2, "ap": 1, "weapon_traits": []}),
+        unit_quality=4,
+        unit_flags=[alias],
+        use_cached=False,
+    )
+    backend_canonical_cost = costs.weapon_cost(
+        _build_weapon({"range": 24, "attacks": 2, "ap": 1, "weapon_traits": []}),
+        unit_quality=4,
+        unit_flags=[canonical],
+        use_cached=False,
+    )
+
+    assert frontend["aliasIdentifier"] == backend_alias_identifier
+    assert frontend["canonicalIdentifier"] == backend_canonical_identifier
+    assert frontend["aliasIdentifier"] == frontend["canonicalIdentifier"]
+    assert frontend["aliasCost"] == pytest.approx(backend_alias_cost, abs=NUMERIC_TOLERANCE)
+    assert frontend["canonicalCost"] == pytest.approx(backend_canonical_cost, abs=NUMERIC_TOLERANCE)
+    assert frontend["aliasCost"] == pytest.approx(frontend["canonicalCost"], abs=NUMERIC_TOLERANCE)
