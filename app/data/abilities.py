@@ -188,7 +188,10 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="regeneracja",
         name="Regeneracja",
         type="passive",
-        description="Podczas obrony, za każdą naturalną 6 możesz zignorować następną ranę przydzieloną podczas tego ataku.",
+        description=(
+            "Przed przegrupowaniem odzyskujesz K3 rany, "
+            "ale nie więcej, niż liczba straconych w tej aktywacji."
+        ),
     ),
     AbilityDefinition(
         slug="dywersant",
