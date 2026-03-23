@@ -778,8 +778,15 @@ function flagsToAbilityList(flags) {
     if (!name) {
       return;
     }
+    let isOptional = false;
     while (name.endsWith('?') || name.endsWith('!')) {
+      if (name.endsWith('?')) {
+        isOptional = true;
+      }
       name = name.slice(0, -1).trim();
+    }
+    if (isOptional) {
+      return;
     }
     const slug = abilityIdentifier(name) || normalizeName(name);
     if (typeof value === 'boolean') {
@@ -3009,9 +3016,13 @@ function createLoadoutState(rawLoadout) {
     weapons: new Map(),
     active: new Map(),
     aura: new Map(),
+    baseActive: new Map(),
+    baseAura: new Map(),
     passive: new Map(),
     activeLabels: new Map(),
     auraLabels: new Map(),
+    baseActiveLabels: new Map(),
+    baseAuraLabels: new Map(),
     mode: 'per_model',
   };
   if (!rawLoadout || typeof rawLoadout !== 'object') {
@@ -3086,6 +3097,8 @@ function createLoadoutState(rawLoadout) {
   const labelSections = [
     ['activeLabels', rawLoadout.active_labels],
     ['auraLabels', rawLoadout.aura_labels],
+    ['baseActiveLabels', rawLoadout.base_active_labels],
+    ['baseAuraLabels', rawLoadout.base_aura_labels],
   ];
   labelSections.forEach(([targetKey, source]) => {
     const target = state[targetKey];
@@ -3137,9 +3150,13 @@ function cloneLoadoutState(state) {
       weapons: new Map(),
       active: new Map(),
       aura: new Map(),
+      baseActive: new Map(),
+      baseAura: new Map(),
       passive: new Map(),
       activeLabels: new Map(),
       auraLabels: new Map(),
+      baseActiveLabels: new Map(),
+      baseAuraLabels: new Map(),
       mode: 'per_model',
     };
   }
@@ -3147,9 +3164,13 @@ function cloneLoadoutState(state) {
     weapons: cloneSection(state.weapons),
     active: cloneSection(state.active),
     aura: cloneSection(state.aura),
+    baseActive: cloneSection(state.baseActive),
+    baseAura: cloneSection(state.baseAura),
     passive: cloneSection(state.passive),
     activeLabels: cloneSection(state.activeLabels),
     auraLabels: cloneSection(state.auraLabels),
+    baseActiveLabels: cloneSection(state.baseActiveLabels),
+    baseAuraLabels: cloneSection(state.baseAuraLabels),
     mode: state.mode === 'total' ? 'total' : 'per_model',
   };
 }
@@ -3219,6 +3240,56 @@ function ensureStateEntries(map, entries, idKey, defaultKey, options = {}) {
     if (!map.has(key)) {
       map.set(key, defaultCount);
     }
+  });
+}
+
+function ensureBaseStateEntries(map, entries, idKey, defaultKey, options = {}) {
+  if (!(map instanceof Map)) {
+    return;
+  }
+  const safeEntries = Array.isArray(entries) ? entries : [];
+  const fallbackIdKeys = Array.isArray(options.fallbackIdKeys) ? options.fallbackIdKeys : [];
+  safeEntries.forEach((entry) => {
+    if (!entry) {
+      return;
+    }
+    const key = resolveLoadoutEntryKey(entry, idKey, fallbackIdKeys);
+    if (!key || map.has(key)) {
+      return;
+    }
+    const rawDefault = entry[defaultKey] ?? (entry.is_default ? 1 : 0);
+    let defaultCount = Number(rawDefault);
+    if (!Number.isFinite(defaultCount) || defaultCount < 0) {
+      defaultCount = 0;
+    }
+    map.set(key, defaultCount);
+  });
+}
+
+function ensureBaseLabelEntries(map, entries, idKey, options = {}) {
+  if (!(map instanceof Map)) {
+    return;
+  }
+  const safeEntries = Array.isArray(entries) ? entries : [];
+  const fallbackIdKeys = Array.isArray(options.fallbackIdKeys) ? options.fallbackIdKeys : [];
+  safeEntries.forEach((entry) => {
+    if (!entry) {
+      return;
+    }
+    const key = resolveLoadoutEntryKey(entry, idKey, fallbackIdKeys);
+    if (!key || map.has(key)) {
+      return;
+    }
+    const rawDefault = entry.default_count ?? (entry.is_default ? 1 : 0);
+    const defaultCount = Number(rawDefault);
+    if (!Number.isFinite(defaultCount) || defaultCount <= 0) {
+      return;
+    }
+    const label = String(entry.label ?? entry.name ?? entry.raw ?? '').trim();
+    if (!label) {
+      return;
+    }
+    map.set(key, label.slice(0, ABILITY_NAME_MAX_LENGTH));
   });
 }
 
@@ -3855,9 +3926,21 @@ function computeTotalCost(
   if (passiveList.length) {
     const baseAbilitySet = new Set(basePassiveSet);
     const selectedAbilitySet = new Set(selectedPassiveSet);
-    collectSectionIdentifiers(state && state.active, state && state.activeLabels, baseAbilitySet);
+    const baseActiveSection = state && state.baseActive instanceof Map
+      ? state.baseActive
+      : state && state.active;
+    const baseAuraSection = state && state.baseAura instanceof Map
+      ? state.baseAura
+      : state && state.aura;
+    const baseActiveLabels = state && state.baseActiveLabels instanceof Map
+      ? state.baseActiveLabels
+      : state && state.activeLabels;
+    const baseAuraLabels = state && state.baseAuraLabels instanceof Map
+      ? state.baseAuraLabels
+      : state && state.auraLabels;
+    collectSectionIdentifiers(baseActiveSection, baseActiveLabels, baseAbilitySet);
+    collectSectionIdentifiers(baseAuraSection, baseAuraLabels, baseAbilitySet);
     collectSectionIdentifiers(state && state.active, state && state.activeLabels, selectedAbilitySet);
-    collectSectionIdentifiers(state && state.aura, state && state.auraLabels, baseAbilitySet);
     collectSectionIdentifiers(state && state.aura, state && state.auraLabels, selectedAbilitySet);
     const isOdwodyBlocked = (activeSet) =>
       activeSet.has('rezerwa') || activeSet.has('zwiadowca') || activeSet.has('zasadzka');
@@ -5173,6 +5256,10 @@ function initRosterEditor() {
     ensureStateEntries(loadout.weapons, weapons, 'id', 'default_count', { fallbackIdKeys: ['weapon_id'] });
     ensureStateEntries(loadout.active, activeItems, 'ability_id', 'default_count', { fallbackIdKeys: ['id'] });
     ensureStateEntries(loadout.aura, auraItems, 'ability_id', 'default_count', { fallbackIdKeys: ['id'] });
+    ensureBaseStateEntries(loadout.baseActive, activeItems, 'ability_id', 'default_count', { fallbackIdKeys: ['id'] });
+    ensureBaseStateEntries(loadout.baseAura, auraItems, 'ability_id', 'default_count', { fallbackIdKeys: ['id'] });
+    ensureBaseLabelEntries(loadout.baseActiveLabels, activeItems, 'ability_id', { fallbackIdKeys: ['id'] });
+    ensureBaseLabelEntries(loadout.baseAuraLabels, auraItems, 'ability_id', { fallbackIdKeys: ['id'] });
     ensurePassiveStateEntries(loadout.passive, passiveItems);
     normalizeLoadoutStateTotals(loadout, count);
     const abilityCosts = buildAbilityCostMap(activeItems, auraItems, passiveItems);
@@ -5596,6 +5683,18 @@ function initRosterEditor() {
     ensureStateEntries(loadoutState.aura, currentAuras, 'ability_id', 'default_count', {
       fallbackIdKeys: ['id'],
     });
+    ensureBaseStateEntries(loadoutState.baseActive, currentActives, 'ability_id', 'default_count', {
+      fallbackIdKeys: ['id'],
+    });
+    ensureBaseStateEntries(loadoutState.baseAura, currentAuras, 'ability_id', 'default_count', {
+      fallbackIdKeys: ['id'],
+    });
+    ensureBaseLabelEntries(loadoutState.baseActiveLabels, currentActives, 'ability_id', {
+      fallbackIdKeys: ['id'],
+    });
+    ensureBaseLabelEntries(loadoutState.baseAuraLabels, currentAuras, 'ability_id', {
+      fallbackIdKeys: ['id'],
+    });
     ensurePassiveStateEntries(loadoutState.passive, currentPassives);
     if (loadoutState.mode !== 'total') {
       const convertToTotal = (map) => {
@@ -5651,6 +5750,7 @@ function initRosterEditor() {
     if (!payload || typeof payload !== 'object') {
       return;
     }
+    let receivedServerCachedCost = false;
     const applyUnitData = (unitData) => {
       if (!unitData || typeof unitData !== 'object') {
         return;
@@ -5694,8 +5794,11 @@ function initRosterEditor() {
       if (typeof unitData.count === 'number' && Number.isFinite(unitData.count)) {
         targetItem.setAttribute('data-unit-count', String(unitData.count));
       }
-      if (typeof unitData.cached_cost === 'number' && Number.isFinite(unitData.cached_cost)) {
+      const hasServerCachedCost =
+        typeof unitData.cached_cost === 'number' && Number.isFinite(unitData.cached_cost);
+      if (hasServerCachedCost) {
         targetItem.setAttribute('data-unit-cost', String(unitData.cached_cost));
+        receivedServerCachedCost = true;
       }
       if (
         typeof unitData.base_cost_per_model === 'number'
@@ -5737,7 +5840,7 @@ function initRosterEditor() {
         }
       }
       const costBadge = targetItem.querySelector('[data-roster-unit-cost]');
-      if (costBadge && typeof unitData.cached_cost === 'number') {
+      if (costBadge && hasServerCachedCost) {
         costBadge.textContent = `${formatPoints(unitData.cached_cost)} pkt`;
       }
       const loadoutEl = targetItem.querySelector('[data-roster-unit-loadout]');
@@ -5810,7 +5913,7 @@ function initRosterEditor() {
 
     refreshRosterCostBadges({
       totalOverride: Number.isFinite(totalCostValue) ? totalCostValue : null,
-      recomputeItems: true,
+      recomputeItems: !receivedServerCachedCost,
     });
   }
 

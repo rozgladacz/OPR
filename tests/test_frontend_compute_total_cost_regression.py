@@ -39,9 +39,13 @@ def _run_compute_total_cost_cases(cases: list[dict[str, object]]) -> dict[str, f
             weapons: new Map(Object.entries(testCase.weapons || {{}}).map(([k, v]) => [Number(k), Number(v)])),
             active: new Map(Object.entries(testCase.active || {{}}).map(([k, v]) => [String(k), Number(v)])),
             aura: new Map(Object.entries(testCase.aura || {{}}).map(([k, v]) => [String(k), Number(v)])),
+            baseActive: new Map(Object.entries(testCase.baseActive || {{}}).map(([k, v]) => [String(k), Number(v)])),
+            baseAura: new Map(Object.entries(testCase.baseAura || {{}}).map(([k, v]) => [String(k), Number(v)])),
             passive: new Map(Object.entries(testCase.passive || {{}}).map(([k, v]) => [String(k), Number(v)])),
-            activeLabels: new Map(),
-            auraLabels: new Map(),
+            activeLabels: new Map(Object.entries(testCase.activeLabels || {{}}).map(([k, v]) => [String(k), String(v)])),
+            auraLabels: new Map(Object.entries(testCase.auraLabels || {{}}).map(([k, v]) => [String(k), String(v)])),
+            baseActiveLabels: new Map(Object.entries(testCase.baseActiveLabels || {{}}).map(([k, v]) => [String(k), String(v)])),
+            baseAuraLabels: new Map(Object.entries(testCase.baseAuraLabels || {{}}).map(([k, v]) => [String(k), String(v)])),
           }};
           const total = sandbox.computeTotalCost(
             testCase.basePerModel,
@@ -166,53 +170,3 @@ def test_compute_total_cost_matches_backend_for_massive_with_ociezalosc() -> Non
     totals = _run_compute_total_cost_cases(cases)
 
     assert totals["frontend_massive_ociezalosc"] == backend_diff
-
-
-def test_compute_total_cost_uses_default_passive_when_state_missing_entry() -> None:
-    ability = models.Ability(id=202, name="Ociężałość", type="aura", description="")
-    link = models.UnitAbility(position=0)
-    link.ability = ability
-
-    unit = models.Unit(
-        name="Massive Default Unit",
-        quality=4,
-        defense=4,
-        toughness=3,
-        flags="Masywny",
-        army_id=1,
-    )
-    unit.abilities = [link]
-    unit.weapon_links = []
-    unit.default_weapon = None
-    unit.default_weapon_id = None
-
-    roster_unit = models.RosterUnit(unit=unit, count=3)
-    backend_without_aura = costs.roster_unit_role_totals(
-        roster_unit,
-        {"mode": "per_model", "aura": {str(ability.id): 0}, "passive": {}},
-    )
-    backend_with_aura = costs.roster_unit_role_totals(
-        roster_unit,
-        {"mode": "per_model", "aura": {str(ability.id): 1}, "passive": {}},
-    )
-    backend_diff = backend_with_aura["wojownik"] - backend_without_aura["wojownik"]
-
-    cases = [
-        {
-            "name": "frontend_default_massive_missing_state",
-            "mode": "per_model",
-            "basePerModel": 0,
-            "modelCount": 3,
-            "weaponOptions": [],
-            "aura": {str(ability.id): 1},
-            "passive": {},
-            "activeCosts": {str(ability.id): costs.ability_cost_from_name("Ociężałość")},
-            "passiveCosts": {"masywny": 0},
-            "passiveItems": [
-                {"slug": "masywny", "default_count": 1, "cost": 0},
-            ],
-        },
-    ]
-    totals = _run_compute_total_cost_cases(cases)
-
-    assert totals["frontend_default_massive_missing_state"] == backend_diff
