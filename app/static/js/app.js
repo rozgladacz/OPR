@@ -774,10 +774,14 @@ function flagsToAbilityList(flags) {
     if (key === undefined || key === null) {
       return;
     }
-    let name = String(key).trim();
-    if (!name) {
+    const rawName = String(key).trim();
+    if (!rawName) {
       return;
     }
+    if (rawName.startsWith(ARMY_RULE_OFF_PREFIX)) {
+      return;
+    }
+    let name = rawName;
     let isOptional = false;
     while (name.endsWith('?') || name.endsWith('!')) {
       if (name.endsWith('?')) {
