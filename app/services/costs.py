@@ -55,7 +55,7 @@ CAUTIOUS_HIT_BONUS = {0: 0.0, 12: 0.0, 18: 0.6, 24: 0.7, 30: 0.8, 36: 0.9}
 
 AP_BASE = {-1: 0.8, 0: 1.0, 1: 1.4, 2: 1.8, 3: 2.1, 4: 2.3, 5: 2.4}
 AP_LANCE = {-1: 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05}
-AP_BRUTAL = {-1: 0.14, 0: 0.15, 1: 0.23, 2: 0.33, 3: 0.45, 4: 0.55, 5: 0.65}
+BRUTAL_MULTIPLIER = 1.05
 PENETRATING_MULTIPLIER = {-1: 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2.9, 5: 3.0}
 WAAGH_AP_MODIFIER = {-1: 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02}
 
@@ -661,7 +661,7 @@ def passive_cost(
     if slug == "tarcza":
         return 1.25 * tou
     if slug == "regeneracja":
-        return 1.25 * tou
+        return 4.0 * tou
     if slug == "dywersant":
         return 1.25 * (tou if aura else 1.0)
     if slug == "zdobywca":
@@ -842,6 +842,8 @@ def ability_cost_from_name(
         base_result = 45.0
     elif slug == "presja":
         base_result = 45.0
+    elif slug == "usprawnienie":
+        base_result = 45.0
     elif desc.startswith("rozkaz") or desc.startswith("klatwa") or desc.startswith("oznaczenie"):
         ability_ref = value or (desc.split(":", 1)[1].strip() if ":" in desc else "")
         ability_slug = ability_catalog.slug_for_name(ability_ref) or ability_identifier(ability_ref)
@@ -1010,7 +1012,7 @@ def _weapon_cost(
             "no regen",
             "no regeneration",
         }:
-            ap_mod += lookup_with_nearest(AP_BRUTAL, base_ap)
+            mult *= BRUTAL_MULTIPLIER
         elif norm in {"niebezposredni", "indirect"}:
             mult *= 1.2
         elif norm in {"zuzywalny", "limited"}:
@@ -1031,6 +1033,8 @@ def _weapon_cost(
             mult *= 1.5
         elif norm in {"unik"}:
             mult *= 1.2
+        elif melee and norm in {"porazenie"}:
+            mult *= 1.1
 
     if waagh_penalty:
         ap_mod = max(ap_mod - waagh_penalty, 0.0)

@@ -188,7 +188,10 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="regeneracja",
         name="Regeneracja",
         type="passive",
-        description="Podczas obrony, za każdą naturalną 6 możesz zignorować następną ranę przydzieloną podczas tego ataku.",
+        description=(
+            "Przed przegrupowaniem odzyskujesz K3 rany, "
+            "ale nie więcej, niż liczba straconych w tej aktywacji."
+        ),
     ),
     AbilityDefinition(
         slug="dywersant",
@@ -429,6 +432,14 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Odział w zasięgu 12” przestaje być wyczerpany.",
     ),
     AbilityDefinition(
+        slug="usprawnienie",
+        name="Usprawnienie",
+        type="active",
+        description=(
+            "Przerwij, aby oddział w zasięgu 12” do końca aktywacji zwiększył AP wszystkich swoich broni o 1."
+        ),
+    ),
+    AbilityDefinition(
         slug="rozkaz",
         name="Rozkaz",
         type="active",
@@ -587,7 +598,11 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="brutalny",
         name="Brutalny",
         type="weapon",
-        description="Ignoruje regenerację i automatyczne sukcesy w testach obrony.",
+        description=(
+            "Zmniejsz liczbę odzyskanych ran w tej aktywacji "
+            "o liczbę ran otrzymanych tą bronią. "
+            "Modele pokonane tą bronią nie mogą wrócić do gry."
+        ),
     ),
     AbilityDefinition(
         slug="podkrecenie",
@@ -606,6 +621,15 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Unik",
         type="weapon",
         description="Jeżeli cel jest Przyszpilony lub Wyczerpany, wykonuje podwójną liczbę ataków.",
+    ),
+    AbilityDefinition(
+        slug="porazenie",
+        name="Porażenie",
+        type="weapon",
+        description=(
+            "Podczas sprawdzania kto wygrał walkę wręcz, "
+            "rany zadane tą bronią liczą się podwójnie."
+        ),
     ),
     
 ]
