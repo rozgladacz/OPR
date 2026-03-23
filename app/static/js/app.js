@@ -3763,6 +3763,17 @@ function computeTotalCost(
   const passiveState = state && state.passive instanceof Map ? state.passive : new Map();
   const basePassiveSet = new Set();
   const selectedPassiveSet = new Set();
+  const resolvePassiveFlags = (item) => {
+    const defaultValue = Number(item.default_count ?? (item.is_default ? 1 : 0));
+    const defaultFlag = Number.isFinite(defaultValue) && defaultValue > 0 ? 1 : 0;
+    const key = String(item.slug);
+    const hasStoredValue = passiveState.has(key);
+    const storedValue = Number(passiveState.get(key));
+    const selectedFlag = hasStoredValue
+      ? (Number.isFinite(storedValue) && storedValue > 0 ? 1 : 0)
+      : defaultFlag;
+    return { key, defaultFlag, selectedFlag };
+  };
   const collectSectionIdentifiers = (section, labelsMap, targetSet) => {
     if (!(section instanceof Map) || !(targetSet instanceof Set)) {
       return;
@@ -3793,11 +3804,8 @@ function computeTotalCost(
       if (!ident) {
         return;
       }
-      const defaultValue = Number(item.default_count ?? (item.is_default ? 1 : 0));
-      const baseFlag = Number.isFinite(defaultValue) && defaultValue > 0 ? 1 : 0;
-      const storedValue = Number(passiveState.get(String(item.slug)));
-      const selectedFlag = Number.isFinite(storedValue) && storedValue > 0 ? 1 : 0;
-      if (baseFlag) {
+      const { defaultFlag, selectedFlag } = resolvePassiveFlags(item);
+      if (defaultFlag) {
         basePassiveSet.add(ident);
       }
       if (selectedFlag) {
@@ -3898,11 +3906,7 @@ function computeTotalCost(
       if (!item || !item.slug || item.is_army_rule) {
         return;
       }
-      const key = String(item.slug);
-      const defaultValue = Number(item.default_count ?? (item.is_default ? 1 : 0));
-      const baseFlag = Number.isFinite(defaultValue) && defaultValue > 0 ? 1 : 0;
-      const storedValue = Number(passiveState.get(key));
-      const selectedFlag = Number.isFinite(storedValue) && storedValue > 0 ? 1 : 0;
+      const { key, defaultFlag, selectedFlag } = resolvePassiveFlags(item);
       const mappedItem = passiveEntryMap.get(key);
       const sourceItem = mappedItem && typeof mappedItem === 'object' ? mappedItem : item;
       let costValue = passiveCostMap.get(key);
@@ -3912,7 +3916,7 @@ function computeTotalCost(
       if (!Number.isFinite(costValue) || costValue === 0) {
         return;
       }
-      const baseCost = baseFlag ? effectivePassiveCost(sourceItem, baseAbilitySet, costValue) : 0;
+      const baseCost = defaultFlag ? effectivePassiveCost(sourceItem, baseAbilitySet, costValue) : 0;
       const selectedCost = selectedFlag
         ? effectivePassiveCost(sourceItem, selectedAbilitySet, costValue)
         : 0;
