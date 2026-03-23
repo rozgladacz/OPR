@@ -778,8 +778,15 @@ function flagsToAbilityList(flags) {
     if (!name) {
       return;
     }
+    let isOptional = false;
     while (name.endsWith('?') || name.endsWith('!')) {
+      if (name.endsWith('?')) {
+        isOptional = true;
+      }
       name = name.slice(0, -1).trim();
+    }
+    if (isOptional) {
+      return;
     }
     const slug = abilityIdentifier(name) || normalizeName(name);
     if (typeof value === 'boolean') {
