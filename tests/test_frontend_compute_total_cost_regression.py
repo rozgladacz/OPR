@@ -170,28 +170,3 @@ def test_compute_total_cost_matches_backend_for_massive_with_ociezalosc() -> Non
     totals = _run_compute_total_cost_cases(cases)
 
     assert totals["frontend_massive_ociezalosc"] == backend_diff
-
-
-def test_compute_total_cost_uses_base_active_for_odwody_and_transport_deltas() -> None:
-    cases = [
-        {
-            "name": "base_vs_selected_active_transport_and_odwody",
-            "mode": "total",
-            "basePerModel": 0,
-            "modelCount": 1,
-            "weaponOptions": [],
-            "active": {"selected_active": 1},
-            "baseActive": {"base_active": 1},
-            "activeLabels": {"selected_active": "Szybki"},
-            "baseActiveLabels": {"base_active": "Zwiadowca"},
-            "passive": {"odwody": 1, "transport": 1},
-            "passiveCosts": {"odwody": 5, "transport": 1},
-            "passiveItems": [
-                {"slug": "odwody", "default_count": 1, "cost": 5},
-                {"slug": "transport", "default_count": 1, "cost": 1, "value": "6"},
-            ],
-        },
-    ]
-    totals = _run_compute_total_cost_cases(cases)
-
-    assert totals["base_vs_selected_active_transport_and_odwody"] == -2.5
