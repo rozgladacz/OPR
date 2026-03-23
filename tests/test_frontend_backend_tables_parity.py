@@ -94,7 +94,9 @@ def test_frontend_backend_trait_map_match_for_optional_flags() -> None:
         "optional_true_ignored": {"Ambush?": True, "Furia!": True},
         "optional_numeric_ignored": {"Transport(2)?": "2", "Waagh": True},
         "optional_suffix_mixed": {"Scout?!": True, "Furia!": True, "Waagh": False},
+        "army_rule_off_ignored": {"__army_off__samolot": True, "Waagh": True},
     }
     frontend = _run_node_payload(ap_values=[], trait_cases=cases)["traitMap"]
     backend = {name: costs.flags_to_ability_list(flags) for name, flags in cases.items()}
     assert frontend == backend
+    assert "samolot" not in frontend["army_rule_off_ignored"]

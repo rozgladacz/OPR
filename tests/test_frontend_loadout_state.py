@@ -514,6 +514,41 @@ def test_build_weapon_cost_map_applies_ambush_multiplier_for_ranged_weapon() -> 
     assert result["ratio"] == 0.6
 
 
+def test_build_weapon_cost_map_ignores_army_rule_off_flags_when_collecting_unit_traits() -> None:
+    script_body = """
+        const weapon = {
+          id: 101,
+          range: 24,
+          attacks: 2,
+          ap: 1,
+          traits: '',
+        };
+
+        const captured = { unitTraits: [] };
+        const originalWeaponCostInternal = sandbox.weaponCostInternal;
+        sandbox.weaponCostInternal = function (quality, range, attacks, ap, traits, unitTraits, allowAssaultExtra) {
+          captured.unitTraits = Array.isArray(unitTraits) ? [...unitTraits] : [];
+          return originalWeaponCostInternal(quality, range, attacks, ap, traits, unitTraits, allowAssaultExtra);
+        };
+
+        sandbox.buildWeaponCostMap(
+          [weapon],
+          4,
+          { '__army_off__samolot': true },
+          [],
+          new Map(),
+          null,
+        );
+
+        console.log(JSON.stringify(captured));
+    """
+
+    script = _build_sandbox_script(script_body)
+    result = _run_node(script)
+
+    assert "samolot" not in result["unitTraits"]
+
+
 def test_weapon_cost_internal_applies_ambush_only_to_ranged_part_of_assault_weapon() -> None:
     script_body = """
         const rangedNoAmbush = sandbox.weaponCostInternal(
