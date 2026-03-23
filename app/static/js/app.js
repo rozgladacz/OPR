@@ -5746,6 +5746,7 @@ function initRosterEditor() {
     if (!payload || typeof payload !== 'object') {
       return;
     }
+    let receivedServerCachedCost = false;
     const applyUnitData = (unitData) => {
       if (!unitData || typeof unitData !== 'object') {
         return;
@@ -5789,8 +5790,11 @@ function initRosterEditor() {
       if (typeof unitData.count === 'number' && Number.isFinite(unitData.count)) {
         targetItem.setAttribute('data-unit-count', String(unitData.count));
       }
-      if (typeof unitData.cached_cost === 'number' && Number.isFinite(unitData.cached_cost)) {
+      const hasServerCachedCost =
+        typeof unitData.cached_cost === 'number' && Number.isFinite(unitData.cached_cost);
+      if (hasServerCachedCost) {
         targetItem.setAttribute('data-unit-cost', String(unitData.cached_cost));
+        receivedServerCachedCost = true;
       }
       if (
         typeof unitData.base_cost_per_model === 'number'
@@ -5832,7 +5836,7 @@ function initRosterEditor() {
         }
       }
       const costBadge = targetItem.querySelector('[data-roster-unit-cost]');
-      if (costBadge && typeof unitData.cached_cost === 'number') {
+      if (costBadge && hasServerCachedCost) {
         costBadge.textContent = `${formatPoints(unitData.cached_cost)} pkt`;
       }
       const loadoutEl = targetItem.querySelector('[data-roster-unit-loadout]');
@@ -5905,7 +5909,7 @@ function initRosterEditor() {
 
     refreshRosterCostBadges({
       totalOverride: Number.isFinite(totalCostValue) ? totalCostValue : null,
-      recomputeItems: true,
+      recomputeItems: !receivedServerCachedCost,
     });
   }
 
