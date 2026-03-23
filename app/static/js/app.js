@@ -655,6 +655,9 @@ const DEADLY_MULTIPLIER = { 2: 1.8, 3: 2.5, 6: 3.8 };
 const OVERCHARGE_MULTIPLIER = 1.05;
 const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
 const ABILITY_NAME_MAX_LENGTH = 60;
+const ABILITY_ALIASES = new Map([
+  ['nieustepliwy', 'przygotowanie'],
+]);
 
 function splitTraits(text) {
   if (!text) {
@@ -725,7 +728,8 @@ function abilityIdentifier(text) {
   while (base.endsWith('?') || base.endsWith('!')) {
     base = base.slice(0, -1).trim();
   }
-  return normalizeName(base);
+  const normalized = normalizeName(base);
+  return ABILITY_ALIASES.get(normalized) || normalized;
 }
 
 function passiveIdentifier(text) {
@@ -3841,6 +3845,8 @@ function computeTotalCost(
   const activeCostMap = costMaps && costMaps.active instanceof Map ? costMaps.active : new Map();
   const passiveCostMap = costMaps && costMaps.passive instanceof Map ? costMaps.passive : new Map();
   const passiveEntryMap = costMaps && costMaps.passiveEntries instanceof Map ? costMaps.passiveEntries : new Map();
+  const activeIdentifierMap =
+    costMaps && costMaps.activeIdentifiers instanceof Map ? costMaps.activeIdentifiers : new Map();
   const passiveList = Array.isArray(passiveItems) ? passiveItems : [];
   const passiveState = state && state.passive instanceof Map ? state.passive : new Map();
   const basePassiveSet = new Set();
@@ -3856,7 +3862,7 @@ function computeTotalCost(
       : defaultFlag;
     return { key, defaultFlag, selectedFlag };
   };
-  const collectSectionIdentifiers = (section, labelsMap, targetSet) => {
+  const collectSectionIdentifiers = (section, labelsMap, identifierMap, targetSet) => {
     if (!(section instanceof Map) || !(targetSet instanceof Set)) {
       return;
     }
@@ -3868,6 +3874,14 @@ function computeTotalCost(
       const keyIdent = passiveIdentifier(rawKey);
       if (keyIdent) {
         targetSet.add(keyIdent);
+      }
+      if (identifierMap instanceof Map) {
+        const normalizedKey = normalizeLoadoutKey(rawKey);
+        const mappedIdent = identifierMap.get(normalizedKey || rawKey);
+        const mappedKeyIdent = passiveIdentifier(mappedIdent);
+        if (mappedKeyIdent) {
+          targetSet.add(mappedKeyIdent);
+        }
       }
       if (labelsMap instanceof Map) {
         const labelIdent = passiveIdentifier(labelsMap.get(rawKey));
@@ -3949,10 +3963,15 @@ function computeTotalCost(
     const baseAuraLabels = state && state.baseAuraLabels instanceof Map
       ? state.baseAuraLabels
       : state && state.auraLabels;
-    collectSectionIdentifiers(baseActiveSection, baseActiveLabels, baseAbilitySet);
-    collectSectionIdentifiers(baseAuraSection, baseAuraLabels, baseAbilitySet);
-    collectSectionIdentifiers(state && state.active, state && state.activeLabels, selectedAbilitySet);
-    collectSectionIdentifiers(state && state.aura, state && state.auraLabels, selectedAbilitySet);
+    collectSectionIdentifiers(baseActiveSection, baseActiveLabels, activeIdentifierMap, baseAbilitySet);
+    collectSectionIdentifiers(baseAuraSection, baseAuraLabels, activeIdentifierMap, baseAbilitySet);
+    collectSectionIdentifiers(
+      state && state.active,
+      state && state.activeLabels,
+      activeIdentifierMap,
+      selectedAbilitySet,
+    );
+    collectSectionIdentifiers(state && state.aura, state && state.auraLabels, activeIdentifierMap, selectedAbilitySet);
     const isOdwodyBlocked = (activeSet) =>
       activeSet.has('rezerwa') || activeSet.has('zwiadowca') || activeSet.has('zasadzka');
     const transportMultiplier = (activeSet) => {
@@ -5428,14 +5447,24 @@ function initRosterEditor() {
     const activeMap = new Map();
     const passiveMap = new Map();
     const passiveEntries = new Map();
+    const activeIdentifiers = new Map();
     [...(Array.isArray(activeItems) ? activeItems : []), ...(Array.isArray(auraItems) ? auraItems : [])].forEach((item) => {
       if (!item) {
         return;
       }
       const abilityKey = resolveLoadoutEntryKey(item, 'ability_id');
+      const slugIdentifier = passiveIdentifier(item.slug);
       const costValue = Number(item.cost);
       if (abilityKey && Number.isFinite(costValue)) {
         activeMap.set(abilityKey, costValue);
+      }
+      if (slugIdentifier) {
+        if (abilityKey) {
+          activeIdentifiers.set(abilityKey, slugIdentifier);
+        }
+        if (Number.isFinite(costValue)) {
+          activeMap.set(slugIdentifier, costValue);
+        }
       }
     });
     (Array.isArray(passiveItems) ? passiveItems : []).forEach((item) => {
@@ -5449,7 +5478,7 @@ function initRosterEditor() {
         passiveMap.set(key, costValue);
       }
     });
-    return { active: activeMap, passive: passiveMap, passiveEntries };
+    return { active: activeMap, passive: passiveMap, passiveEntries, activeIdentifiers };
   }
 
   function updateTotalSummary(total) {

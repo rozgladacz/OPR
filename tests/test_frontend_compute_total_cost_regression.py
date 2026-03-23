@@ -55,6 +55,7 @@ def _run_compute_total_cost_cases(cases: list[dict[str, object]]) -> dict[str, f
             {{
               active: new Map(Object.entries(testCase.activeCosts || {{}})),
               passive: new Map(Object.entries(testCase.passiveCosts || {{}})),
+              activeIdentifiers: new Map(Object.entries(testCase.activeIdentifiers || {{}})),
             }},
             testCase.passiveItems,
             null,
@@ -170,3 +171,35 @@ def test_compute_total_cost_matches_backend_for_massive_with_ociezalosc() -> Non
     totals = _run_compute_total_cost_cases(cases)
 
     assert totals["frontend_massive_ociezalosc"] == backend_diff
+
+
+def test_compute_total_cost_prefers_active_slug_identifiers_for_passive_interactions() -> None:
+    cases = [
+        {
+            "name": "odwody_without_blocking_active",
+            "mode": "total",
+            "basePerModel": 0,
+            "modelCount": 1,
+            "weaponOptions": [],
+            "active": {"101": 0},
+            "passive": {"odwody": 1},
+            "passiveItems": [{"slug": "odwody", "default_count": 0, "cost": -2.5}],
+            "passiveCosts": {"odwody": -2.5},
+        },
+        {
+            "name": "odwody_with_blocking_active_slug",
+            "mode": "total",
+            "basePerModel": 0,
+            "modelCount": 1,
+            "weaponOptions": [],
+            "active": {"101": 1},
+            "activeIdentifiers": {"101": "zasadzka"},
+            "passive": {"odwody": 1},
+            "passiveItems": [{"slug": "odwody", "default_count": 0, "cost": -2.5}],
+            "passiveCosts": {"odwody": -2.5},
+        },
+    ]
+    totals = _run_compute_total_cost_cases(cases)
+
+    assert totals["odwody_without_blocking_active"] == -2.5
+    assert totals["odwody_with_blocking_active_slug"] == 0
