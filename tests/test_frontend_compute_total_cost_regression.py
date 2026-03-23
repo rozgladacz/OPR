@@ -39,9 +39,13 @@ def _run_compute_total_cost_cases(cases: list[dict[str, object]]) -> dict[str, f
             weapons: new Map(Object.entries(testCase.weapons || {{}}).map(([k, v]) => [Number(k), Number(v)])),
             active: new Map(Object.entries(testCase.active || {{}}).map(([k, v]) => [String(k), Number(v)])),
             aura: new Map(Object.entries(testCase.aura || {{}}).map(([k, v]) => [String(k), Number(v)])),
+            baseActive: new Map(Object.entries(testCase.baseActive || {{}}).map(([k, v]) => [String(k), Number(v)])),
+            baseAura: new Map(Object.entries(testCase.baseAura || {{}}).map(([k, v]) => [String(k), Number(v)])),
             passive: new Map(Object.entries(testCase.passive || {{}}).map(([k, v]) => [String(k), Number(v)])),
-            activeLabels: new Map(),
-            auraLabels: new Map(),
+            activeLabels: new Map(Object.entries(testCase.activeLabels || {{}}).map(([k, v]) => [String(k), String(v)])),
+            auraLabels: new Map(Object.entries(testCase.auraLabels || {{}}).map(([k, v]) => [String(k), String(v)])),
+            baseActiveLabels: new Map(Object.entries(testCase.baseActiveLabels || {{}}).map(([k, v]) => [String(k), String(v)])),
+            baseAuraLabels: new Map(Object.entries(testCase.baseAuraLabels || {{}}).map(([k, v]) => [String(k), String(v)])),
           }};
           const total = sandbox.computeTotalCost(
             testCase.basePerModel,
@@ -167,3 +171,27 @@ def test_compute_total_cost_matches_backend_for_massive_with_ociezalosc() -> Non
 
     assert totals["frontend_massive_ociezalosc"] == backend_diff
 
+
+def test_compute_total_cost_uses_base_active_for_odwody_and_transport_deltas() -> None:
+    cases = [
+        {
+            "name": "base_vs_selected_active_transport_and_odwody",
+            "mode": "total",
+            "basePerModel": 0,
+            "modelCount": 1,
+            "weaponOptions": [],
+            "active": {"selected_active": 1},
+            "baseActive": {"base_active": 1},
+            "activeLabels": {"selected_active": "Szybki"},
+            "baseActiveLabels": {"base_active": "Zwiadowca"},
+            "passive": {"odwody": 1, "transport": 1},
+            "passiveCosts": {"odwody": 5, "transport": 1},
+            "passiveItems": [
+                {"slug": "odwody", "default_count": 1, "cost": 5},
+                {"slug": "transport", "default_count": 1, "cost": 1, "value": "6"},
+            ],
+        },
+    ]
+    totals = _run_compute_total_cost_cases(cases)
+
+    assert totals["base_vs_selected_active_transport_and_odwody"] == -2.5
