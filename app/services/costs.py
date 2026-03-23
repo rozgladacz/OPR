@@ -917,7 +917,7 @@ def _weapon_cost(
     unit_traits: Sequence[str],
     allow_assault_extra: bool = True,
 ) -> float:
-    chance = 6.5
+    chance = 6.65
     attacks = float(attacks if attacks is not None else 1.0)
     attacks = max(attacks, 0.0)
     base_ap = int(ap or 0)
@@ -1036,7 +1036,7 @@ def _weapon_cost(
         ap_mod = max(ap_mod - waagh_penalty, 0.0)
 
     range_mod = max(range_mod + range_bonus - range_penalty, 0.0)
-    chance = max(chance - q, 1.0)
+    chance = max(chance - q, 0.9)
     cost = attacks * 2.0 * range_mod * chance * ap_mod * mult
 
     if overcharge and (not assault or range_value != 0):

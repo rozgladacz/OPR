@@ -87,7 +87,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="harcownik",
         name="Harcownik",
         type="passive",
-        description="Po ataku możesz się ruszyć o 2”.",
+        description="Przed przegrupowaniem możesz się ruszyć o 2”.",
     ),
     AbilityDefinition(
         slug="instynkt",

@@ -959,7 +959,7 @@ function buildWeaponFlags(baseFlags, passiveItems, passiveState) {
 }
 
 function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unitTraits, allowAssaultExtra = true) {
-  let chance = 6.5;
+  let chance = 6.65;
   const attacksValue = Math.max(Number(attacks) || 0, 0);
   const apValue = Number.isFinite(Number(ap)) ? Number(ap) : 0;
   const normalizedRange = normalizeRangeValue(rangeValue);
@@ -1089,7 +1089,7 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
 
   const adjustedRangeMod = Math.max(rangeMod + rangeBonus - rangePenalty, 0);
 
-  chance = Math.max(chance - q, 1);
+  chance = Math.max(chance - q, 0.9);
   let cost = attacksValue * 2 * adjustedRangeMod * chance * apMod * mult;
 
   if (overcharge && (!assault || normalizedRange !== 0)) {
