@@ -3343,12 +3343,13 @@ function formatLoadoutCostLabel(costValue, mode) {
 
 function createModeIndicator(mode) {
   const normalizedMode = normalizeLoadoutMode(mode);
+  if (normalizedMode !== 'per_model') {
+    return null;
+  }
   const indicator = document.createElement('span');
   indicator.className = 'badge rounded-pill text-bg-light border roster-mode-indicator';
-  indicator.textContent = normalizedMode === 'per_model' ? 'Tryb: pkt/model' : 'Tryb: suma';
-  indicator.title = normalizedMode === 'per_model'
-    ? 'Wartość dotyczy pojedynczego modelu.'
-    : 'Wartość dotyczy całej jednostki (suma).';
+  indicator.textContent = 'Tryb: pkt/model';
+  indicator.title = 'Wartość dotyczy pojedynczego modelu.';
   return indicator;
 }
 
@@ -3441,7 +3442,10 @@ function renderAbilityEditor(
     controls.className = 'roster-ability-controls text-end';
     if (editable) {
       if (normalizedMode === 'per_model') {
-        controls.appendChild(createModeIndicator(normalizedMode));
+        const modeIndicator = createModeIndicator(normalizedMode);
+        if (modeIndicator) {
+          controls.appendChild(modeIndicator);
+        }
       }
       const input = document.createElement('input');
       input.type = 'number';
@@ -3649,7 +3653,10 @@ function renderWeaponEditor(
     controls.className = 'roster-ability-controls text-end';
     if (editable) {
       if (normalizedMode === 'per_model') {
-        controls.appendChild(createModeIndicator(normalizedMode));
+        const modeIndicator = createModeIndicator(normalizedMode);
+        if (modeIndicator) {
+          controls.appendChild(modeIndicator);
+        }
       }
       const input = document.createElement('input');
       input.type = 'number';
