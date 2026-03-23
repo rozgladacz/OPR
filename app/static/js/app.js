@@ -3369,7 +3369,9 @@ function renderAbilityEditor(
     const controls = document.createElement('div');
     controls.className = 'roster-ability-controls text-end';
     if (editable) {
-      controls.appendChild(createModeIndicator(normalizedMode));
+      if (normalizedMode === 'per_model') {
+        controls.appendChild(createModeIndicator(normalizedMode));
+      }
       const input = document.createElement('input');
       input.type = 'number';
       input.className = 'form-control form-control-sm roster-count-input';
@@ -3575,7 +3577,9 @@ function renderWeaponEditor(
     const controls = document.createElement('div');
     controls.className = 'roster-ability-controls text-end';
     if (editable) {
-      controls.appendChild(createModeIndicator(normalizedMode));
+      if (normalizedMode === 'per_model') {
+        controls.appendChild(createModeIndicator(normalizedMode));
+      }
       const input = document.createElement('input');
       input.type = 'number';
       input.className = 'form-control form-control-sm roster-count-input';

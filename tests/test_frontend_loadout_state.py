@@ -623,7 +623,7 @@ def test_render_editors_show_mode_indicator_and_cost_labels_after_mode_switch() 
 
     assert result["totalWeaponCosts"] == ["+5 pkt"]
     assert result["totalAbilityCosts"] == ["+3 pkt"]
-    assert result["totalIndicators"] == ["Tryb: suma", "Tryb: suma"]
+    assert result["totalIndicators"] == []
     assert result["perModelWeaponCosts"] == ["+5 pkt/model"]
     assert result["perModelAbilityCosts"] == ["+3 pkt/model"]
     assert result["perModelIndicators"] == ["Tryb: pkt/model", "Tryb: pkt/model"]
