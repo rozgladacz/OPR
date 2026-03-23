@@ -41,15 +41,15 @@ def _run_node_payload(ap_values: list[int]) -> dict[str, object]:
             tables: {{
               AP_BASE,
               AP_LANCE,
-              AP_BRUTAL,
               BLAST_MULTIPLIER,
               DEADLY_MULTIPLIER,
+              BRUTAL_MULTIPLIER,
             }},
             apLookups: apValues.map((ap) => ({{
               ap,
               base: lookupWithNearest(AP_BASE, ap),
               lance: lookupWithNearest(AP_LANCE, ap),
-              brutal: lookupWithNearest(AP_BRUTAL, ap),
+              brutal: BRUTAL_MULTIPLIER,
             }})),
           }};
         }})()`, sandbox);
@@ -68,7 +68,7 @@ def test_frontend_tables_match_backend_1_to_1() -> None:
     frontend = _run_node_payload(ap_values=[])["tables"]
     assert _normalize_table(frontend["AP_BASE"]) == pytest.approx(costs.AP_BASE)
     assert _normalize_table(frontend["AP_LANCE"]) == pytest.approx(costs.AP_LANCE)
-    assert _normalize_table(frontend["AP_BRUTAL"]) == pytest.approx(costs.AP_BRUTAL)
+    assert float(frontend["BRUTAL_MULTIPLIER"]) == pytest.approx(costs.BRUTAL_MULTIPLIER)
     assert _normalize_table(frontend["BLAST_MULTIPLIER"]) == pytest.approx(costs.BLAST_MULTIPLIER)
     assert _normalize_table(frontend["DEADLY_MULTIPLIER"]) == pytest.approx(costs.DEADLY_MULTIPLIER)
 
@@ -78,4 +78,4 @@ def test_frontend_backend_ap_lookup_matches_for_selected_combinations(ap_value: 
     frontend = _run_node_payload(ap_values=[ap_value])["apLookups"][0]
     assert frontend["base"] == pytest.approx(costs.lookup_with_nearest(costs.AP_BASE, ap_value))
     assert frontend["lance"] == pytest.approx(costs.lookup_with_nearest(costs.AP_LANCE, ap_value))
-    assert frontend["brutal"] == pytest.approx(costs.lookup_with_nearest(costs.AP_BRUTAL, ap_value))
+    assert frontend["brutal"] == pytest.approx(costs.BRUTAL_MULTIPLIER)
