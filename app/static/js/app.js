@@ -4181,6 +4181,8 @@ function initRosterEditor() {
   const itemRegistry = new WeakSet();
   const moveFormRegistry = new WeakSet();
   let refreshRosterCostBadgesInProgress = false;
+  let pendingRefreshOptions = null;
+  let pendingRefreshCycleToken = null;
   let lastRefreshRosterCostCycleToken = null;
   function ensureRosterList() {
     if (rosterListEl && rosterListEl.isConnected) {
@@ -6045,6 +6047,8 @@ function initRosterEditor() {
       return;
     }
     if (refreshRosterCostBadgesInProgress) {
+      pendingRefreshOptions = normalizedOptions;
+      pendingRefreshCycleToken = cycleToken;
       return;
     }
 
@@ -6126,6 +6130,13 @@ function initRosterEditor() {
       refreshRosterCostBadgesInProgress = false;
       if (cycleToken) {
         lastRefreshRosterCostCycleToken = cycleToken;
+      }
+      if (pendingRefreshOptions !== null || pendingRefreshCycleToken !== null) {
+        const nextOptions = pendingRefreshOptions;
+        const nextCycleToken = pendingRefreshCycleToken;
+        pendingRefreshOptions = null;
+        pendingRefreshCycleToken = null;
+        refreshRosterCostBadges(nextOptions, nextCycleToken);
       }
     }
   }
