@@ -470,7 +470,51 @@ def _find_local_parent_candidate_for_variant(
     return None
 
 
-def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
+def _weapon_has_active_references(db: Session, weapon_id: int) -> bool:
+    unit_reference = db.execute(
+        select(models.Unit.id).where(models.Unit.default_weapon_id == weapon_id).limit(1)
+    ).scalar_one_or_none()
+    if unit_reference is not None:
+        return True
+    unit_weapon_reference = db.execute(
+        select(models.UnitWeapon.id).where(models.UnitWeapon.weapon_id == weapon_id).limit(1)
+    ).scalar_one_or_none()
+    if unit_weapon_reference is not None:
+        return True
+    spell_reference = db.execute(
+        select(models.ArmySpell.id).where(models.ArmySpell.weapon_id == weapon_id).limit(1)
+    ).scalar_one_or_none()
+    return spell_reference is not None
+
+
+def _weapon_is_parent_for_other_weapons(db: Session, weapon_id: int) -> bool:
+    child_reference = db.execute(
+        select(models.Weapon.id).where(models.Weapon.parent_id == weapon_id).limit(1)
+    ).scalar_one_or_none()
+    return child_reference is not None
+
+
+def _can_delete_variant_weapon(
+    db: Session,
+    weapon: models.Weapon,
+    protected_weapon_ids: set[int] | None,
+) -> bool:
+    if weapon.id is None:
+        return False
+    if protected_weapon_ids and weapon.id in protected_weapon_ids:
+        return False
+    if _weapon_has_active_references(db, weapon.id):
+        return False
+    if _weapon_is_parent_for_other_weapons(db, weapon.id):
+        return False
+    return True
+
+
+def ensure_armory_variant_sync(
+    db: Session,
+    armory: models.Armory,
+    protected_weapon_ids: set[int] | None = None,
+) -> None:
     if armory.parent_id is None:
         return
 
@@ -479,7 +523,11 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
         return
 
     if armory.parent is not None:
-        ensure_armory_variant_sync(db, armory.parent)
+        ensure_armory_variant_sync(
+            db,
+            armory.parent,
+            protected_weapon_ids=protected_weapon_ids,
+        )
 
     synced_variants.add(armory.id)
 
@@ -581,13 +629,15 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
         parent = weapon.parent
 
         if weapon.parent_id in disabled_parent_ids:
-            db.delete(weapon)
-            cleaned = True
+            if _can_delete_variant_weapon(db, weapon, protected_weapon_ids):
+                db.delete(weapon)
+                cleaned = True
             continue
 
         if weapon.parent_id is not None and parent is None:
-            db.delete(weapon)
-            cleaned = True
+            if _can_delete_variant_weapon(db, weapon, protected_weapon_ids):
+                db.delete(weapon)
+                cleaned = True
             continue
 
         if not parent:

@@ -603,11 +603,19 @@ def _parent_chain(armory: models.Armory) -> list[models.Armory]:
     return chain
 
 
-def _sync_descendant_variants(db: Session, armory: models.Armory) -> None:
+def _sync_descendant_variants(
+    db: Session,
+    armory: models.Armory,
+    protected_weapon_ids: set[int] | None = None,
+) -> None:
     stack: list[models.Armory] = list(armory.variants)
     while stack:
         variant = stack.pop()
-        utils.ensure_armory_variant_sync(db, variant)
+        utils.ensure_armory_variant_sync(
+            db,
+            variant,
+            protected_weapon_ids=protected_weapon_ids,
+        )
         stack.extend(variant.variants)
 
 
@@ -1224,6 +1232,7 @@ def update_weapon(
 
     if action == "create_variant":
         parent = _resolve_local_parent_for_variant(db, armory, weapon)
+        protected_parent_id = parent.id
         variant_name = None if cleaned_name == parent.effective_name else cleaned_name
         variant_range = None if cleaned_range == parent.effective_range else cleaned_range
         variant_attacks_input = (
@@ -1314,7 +1323,26 @@ def update_weapon(
                 status_code=400,
                 detail="Nie można utworzyć wariantu z rodzicem spoza bieżącej zbrojowni.",
             )
-        _sync_descendant_variants(db, armory)
+        _sync_descendant_variants(
+            db,
+            armory,
+            protected_weapon_ids={protected_parent_id, new_weapon.id},
+        )
+        parent_after_sync = db.get(models.Weapon, protected_parent_id)
+        new_weapon_after_sync = db.get(models.Weapon, new_weapon.id)
+        if (
+            parent_after_sync is None
+            or new_weapon_after_sync is None
+            or new_weapon_after_sync.parent_id != protected_parent_id
+        ):
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Naruszenie integralności wariantu: rodzic wariantu został usunięty "
+                    "lub relacja parent-child jest niepoprawna."
+                ),
+            )
         db.commit()
         return RedirectResponse(
             url=f"/armories/{armory.id}/weapons/{new_weapon.id}/edit", status_code=303
