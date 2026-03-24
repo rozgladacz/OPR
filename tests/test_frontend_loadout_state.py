@@ -164,6 +164,46 @@ def test_compute_total_cost_uses_open_transport_multiplier_with_active_traits() 
     assert result["total"] == 14.5
 
 
+
+def test_compute_total_cost_keeps_open_transport_dynamic_when_payload_cost_is_zero() -> None:
+    script_body = """
+        const passiveItems = [
+          {
+            slug: 'otwarty_transport(2)',
+            value: '2',
+            label: 'Otwarty Transport(2)',
+            raw: 'Otwarty Transport(2)',
+            default_count: 0,
+            is_army_rule: false,
+            cost: 0,
+          },
+        ];
+        const state = sandbox.createLoadoutState({
+          active: [
+            { id: 'samolot', count: 1 },
+          ],
+          passive: [
+            { id: 'otwarty_transport(2)', count: 1 },
+          ],
+        });
+        const total = sandbox.computeTotalCost(
+          0,
+          1,
+          [],
+          state,
+          { active: new Map(), passive: new Map([['otwarty_transport(2)', 0]]) },
+          passiveItems,
+          new Map(),
+        );
+        console.log(JSON.stringify({ total }));
+    """
+
+    script = _build_sandbox_script(script_body)
+    result = _run_node(script)
+
+    # otwarty_transport(2) with 'samolot' => 2 * (3.5 + 0.25) = 7.5
+    assert result["total"] == 7.5
+
 def test_handle_state_change_refreshes_roster_total_immediately_without_server_update() -> None:
     script_body = """
         const source = code;

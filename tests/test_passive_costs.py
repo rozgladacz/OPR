@@ -455,3 +455,58 @@ def test_zasadzka_passive_cost_is_four_points_per_toughness() -> None:
     assert costs.passive_cost("Zasadzka", tou=1) == pytest.approx(4.0)
     assert costs.passive_cost("Zasadzka", tou=3) == pytest.approx(12.0)
     assert costs.passive_cost("Zasadzka?!", tou=6) == pytest.approx(24.0)
+
+
+def test_roster_totals_apply_open_transport_dynamic_cost_when_payload_cost_is_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    active = models.Ability(id=501, name="Samolot", type="active", description="")
+    active_link = models.UnitAbility(position=0)
+    active_link.ability = active
+
+    unit = models.Unit(
+        name="Dropship",
+        quality=4,
+        defense=4,
+        toughness=6,
+        flags=None,
+        army_id=1,
+    )
+    unit.abilities = [active_link]
+    unit.weapon_links = []
+    unit.default_weapon = None
+    unit.default_weapon_id = None
+
+    roster_unit = models.RosterUnit(unit=unit, count=1)
+
+    def _mock_passive_state(*args, **kwargs) -> costs.PassiveState:
+        loadout_payload = kwargs.get("loadout_payload")
+        if loadout_payload is None and len(args) > 1:
+            loadout_payload = args[1]
+        passive_counts = ((loadout_payload or {}).get("passive") or {}) if isinstance(loadout_payload, dict) else {}
+        selected = int(passive_counts.get("otwarty_transport(2)", 0) or 0)
+        return costs.PassiveState(
+            payload=[
+                {
+                    "slug": "otwarty_transport(2)",
+                    "label": "Otwarty Transport(2)",
+                    "value": "2",
+                    "default_count": 0,
+                    "is_army_rule": False,
+                }
+            ],
+            counts={"otwarty_transport(2)": selected},
+            traits=[],
+        )
+
+    monkeypatch.setattr(costs, "compute_passive_state", _mock_passive_state)
+    monkeypatch.setattr(costs, "ability_cost_from_name", lambda *args, **kwargs: 0.0)
+
+    totals_with_transport = costs.roster_unit_role_totals(
+        roster_unit,
+        {"active": {str(active.id): 1}, "passive": {"otwarty_transport(2)": 1}},
+    )
+    totals_without_transport = costs.roster_unit_role_totals(
+        roster_unit,
+        {"active": {str(active.id): 1}, "passive": {"otwarty_transport(2)": 0}},
+    )
+
+    assert totals_with_transport["wojownik"] - totals_without_transport["wojownik"] == pytest.approx(7.5)

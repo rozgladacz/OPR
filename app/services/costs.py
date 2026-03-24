@@ -1556,7 +1556,15 @@ def roster_unit_role_totals(
             if diff == 0:
                 continue
             cost_value = float(entry.get("cost") or 0.0)
-            if cost_value == 0.0:
+            ident = ability_identifier(str(slug))
+            is_dynamic_transport = ident in {
+                "transport",
+                "otwarty_transport",
+                "platforma_strzelecka",
+                "otwarty transport",
+                "platforma strzelecka",
+            }
+            if cost_value == 0.0 and not is_dynamic_transport:
                 continue
             default_cost = (
                 _effective_passive_cost(entry, base_active_set, cost_value)

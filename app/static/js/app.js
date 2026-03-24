@@ -4026,7 +4026,16 @@ function computeTotalCost(
       if (!Number.isFinite(costValue)) {
         costValue = Number(sourceItem.cost);
       }
-      if (!Number.isFinite(costValue) || costValue === 0) {
+      if (!Number.isFinite(costValue)) {
+        return;
+      }
+      const ident = passiveIdentifier(sourceItem.slug);
+      const isDynamicTransport = ident === 'transport'
+        || ident === 'otwarty_transport'
+        || ident === 'platforma_strzelecka'
+        || ident === 'otwarty transport'
+        || ident === 'platforma strzelecka';
+      if (costValue === 0 && !isDynamicTransport) {
         return;
       }
       const baseCost = defaultFlag ? effectivePassiveCost(sourceItem, baseAbilitySet, costValue) : 0;
