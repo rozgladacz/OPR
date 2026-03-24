@@ -1354,52 +1354,7 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
     flags = _unit_army_flags(unit)
     unit_traits = costs.flags_to_ability_list(flags)
     default_weapons = costs.unit_default_weapons(unit)
-    seen_slugs: set[str] = set()
     prefix = utils.ARMY_RULE_OFF_PREFIX
-    army_rule_entries = costs.army_rules(unit)
-    army_rule_map: dict[str, dict[str, Any]] = {}
-    army_rule_costs: dict[str, float] = {}
-    army_disable_defaults: dict[str, int] = {}
-
-    for rule in army_rule_entries:
-        slug = str(rule.get("slug") or "").strip()
-        if not slug or _is_hidden_trait(slug):
-            continue
-        identifier = costs.ability_identifier(slug) or slug.casefold()
-        if slug.startswith(prefix):
-            base_slug = slug[len(prefix) :].strip()
-            base_ident = costs.ability_identifier(base_slug) or base_slug.casefold()
-            if base_ident:
-                default_count = int(rule.get("default_count") or 0)
-                army_disable_defaults[base_ident] = 1 if default_count > 0 else 0
-            continue
-        try:
-            cost_value = float(
-                costs.ability_cost_from_name(
-                    rule.get("label") or slug,
-                    rule.get("value"),
-                    unit_traits,
-                    toughness=unit.toughness,
-                    quality=unit.quality,
-                    defense=unit.defense,
-                    weapons=default_weapons,
-                )
-            )
-        except Exception:  # pragma: no cover - fallback for unexpected input
-            cost_value = float(
-                costs.ability_cost_from_name(
-                    slug,
-                    rule.get("value"),
-                    unit_traits,
-                    toughness=unit.toughness,
-                    quality=unit.quality,
-                    defense=unit.defense,
-                    weapons=default_weapons,
-                )
-            )
-        key = identifier or slug.casefold()
-        army_rule_costs[key] = cost_value
-        army_rule_map[key] = rule
 
     for item in payload:
         if not item:
@@ -1477,32 +1432,6 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
                 "is_mandatory": is_mandatory,
             }
         )
-        seen_slugs.add(slug)
-
-    for key, rule in army_rule_map.items():
-        slug = str(rule.get("slug") or "").strip()
-        if not slug:
-            continue
-        disable_slug = f"{prefix}{slug}"
-        if disable_slug in seen_slugs:
-            continue
-        base_label, display_label, default_description = utils.army_rule_disabled_texts(
-            slug, rule.get("label")
-        )
-        default_count = army_disable_defaults.get(key, 0)
-        entries.append(
-            {
-                "slug": disable_slug,
-                "value": base_label,
-                "label": display_label,
-                "description": default_description,
-                "cost": -army_rule_costs.get(key, 0.0),
-                "is_default": bool(default_count),
-                "default_count": default_count,
-                "is_mandatory": False,
-            }
-        )
-        seen_slugs.add(disable_slug)
 
     return entries
 
