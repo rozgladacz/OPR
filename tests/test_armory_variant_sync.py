@@ -315,6 +315,56 @@ def test_create_weapon_variant_redirect_points_to_existing_weapon_edit():
         session.close()
 
 
+def test_create_weapon_variant_from_edit_persists_as_armory_weapon():
+    session = _session()
+    try:
+        user = models.User(username="tester", password_hash="hash", is_admin=False)
+        armory = models.Armory(name="Armory", owner=user)
+        session.add_all([user, armory])
+        session.flush()
+
+        weapon = models.Weapon(
+            armory=armory,
+            owner_id=user.id,
+            name="Sword",
+            range="Melee",
+            attacks=2,
+            ap=1,
+        )
+        session.add(weapon)
+        session.flush()
+
+        request = _build_request(f"/armories/{armory.id}/weapons/{weapon.id}/edit")
+        response = armories_router.update_weapon(
+            armory_id=armory.id,
+            weapon_id=weapon.id,
+            request=request,
+            name=weapon.effective_name,
+            range=weapon.effective_range or "",
+            attacks=str(weapon.display_attacks),
+            ap=str(weapon.effective_ap),
+            abilities="[]",
+            notes=weapon.effective_notes or "",
+            action="create_variant",
+            db=session,
+            current_user=user,
+        )
+
+        location = response.headers["location"]
+        parts = location.strip("/").split("/")
+        created_weapon_id = int(parts[3])
+        created_weapon = session.get(models.Weapon, created_weapon_id)
+        assert created_weapon is not None
+        assert created_weapon.armory_id == armory.id
+        assert created_weapon.parent_id == weapon.id
+        assert created_weapon.has_overrides()
+
+        collection = armories_router._armory_weapons(session, armory)
+        assert any(item.id == created_weapon.id for item in collection.items)
+    finally:
+        session.close()
+
+
 def test_armory_view_variant_sync_cached_in_session():
     session = _session()
     try:
