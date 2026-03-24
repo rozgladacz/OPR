@@ -30,9 +30,8 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Bohater",
         type="passive",
         description=(
-            "Może być dołączony do dowolnego oddziału. Może wykonywać testy przegrupowania za cały odział, "
-            "ale musi korzystać z jej obrony dopóki wszystkie inne modele nie zostaną zabite. Podczas sprawdzania "
-            "zdolności i rozmiaru traktowany jest jakby miał wytrzymałość mniejszą o 3, do minimum 1."
+            "Może być dołączony do dowolnego oddziału z którym dzieli pozostałe zdolności pasywne." "Może wykonywać testy przegrupowania za cały oddział, ale musi korzystać z jego obrony, dopóki są w nim inne modele."
+            "Jego rozmiar jest traktowany  jakby miał 2 razy mniejszą wytrzymałość."
         ),
     ),
     AbilityDefinition(
@@ -385,10 +384,8 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Mag",
         type="active",
         description=(
-            "Otrzymuje X żetonów mocy na początku każdej rundy, do maksymalnie 6. Magowie w oddziale współdzielą żetony. "
+            "Otrzymuje X żetonów mocy na początku każdej rundy, do maksymalnie 2X. Magowie w oddziale współdzielą żetony. "
             "Wydaj tyle żetonów, ile wynosi koszt czaru i rzuć kością. Przy wyniku 4+ rozstrzygnij jego efekt. Jedna próba na czar na aktywację. "
-            "Magowie znajdujący się w odległości do 18” i widzący maga mogą jednocześnie przed rzutem wydać dowolną liczbę żetonów mocy, "
-            "aby dać +/-1 do rzutu za każdy żeton."
         ),
         value_label="X",
         value_type="number",
