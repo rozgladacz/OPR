@@ -5792,7 +5792,6 @@ function initRosterEditor() {
     if (!payload || typeof payload !== 'object') {
       return;
     }
-    let receivedServerCachedCost = false;
     const applyUnitData = (unitData) => {
       if (!unitData || typeof unitData !== 'object') {
         return;
@@ -5836,11 +5835,10 @@ function initRosterEditor() {
       if (typeof unitData.count === 'number' && Number.isFinite(unitData.count)) {
         targetItem.setAttribute('data-unit-count', String(unitData.count));
       }
-      const hasServerCachedCost =
-        typeof unitData.cached_cost === 'number' && Number.isFinite(unitData.cached_cost);
+      const serverCachedCost = Number(unitData.cached_cost);
+      const hasServerCachedCost = Number.isFinite(serverCachedCost);
       if (hasServerCachedCost) {
-        targetItem.setAttribute('data-unit-cost', String(unitData.cached_cost));
-        receivedServerCachedCost = true;
+        targetItem.setAttribute('data-unit-cost', String(serverCachedCost));
       }
       if (
         typeof unitData.base_cost_per_model === 'number'
@@ -5883,7 +5881,7 @@ function initRosterEditor() {
       }
       const costBadge = targetItem.querySelector('[data-roster-unit-cost]');
       if (costBadge && hasServerCachedCost) {
-        costBadge.textContent = `${formatPoints(unitData.cached_cost)} pkt`;
+        costBadge.textContent = `${formatPoints(serverCachedCost)} pkt`;
       }
       const loadoutEl = targetItem.querySelector('[data-roster-unit-loadout]');
       if (loadoutEl) {
@@ -5944,10 +5942,12 @@ function initRosterEditor() {
     }
     applyLockPairsFromServer(payload);
     let totalCostValue = null;
-    if (typeof payload.total_cost === 'number') {
-      totalCostValue = payload.total_cost;
-    } else if (payload.roster && typeof payload.roster.total_cost === 'number') {
-      totalCostValue = payload.roster.total_cost;
+    const payloadTotalCost = Number(payload.total_cost);
+    const payloadRosterTotalCost = Number(payload?.roster?.total_cost);
+    if (Number.isFinite(payloadTotalCost)) {
+      totalCostValue = payloadTotalCost;
+    } else if (Number.isFinite(payloadRosterTotalCost)) {
+      totalCostValue = payloadRosterTotalCost;
     }
     if (Number.isFinite(totalCostValue)) {
       updateTotalSummary(totalCostValue);
@@ -5955,7 +5955,7 @@ function initRosterEditor() {
 
     refreshRosterCostBadges({
       totalOverride: Number.isFinite(totalCostValue) ? totalCostValue : null,
-      recomputeItems: !receivedServerCachedCost,
+      recomputeItems: false,
     });
   }
 

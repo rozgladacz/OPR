@@ -475,6 +475,144 @@ def test_apply_server_update_prefers_backend_cached_cost_without_immediate_front
     assert result["latestTotal"] == 450
 
 
+def test_apply_server_update_keeps_server_total_and_badges_stable_without_local_edit() -> None:
+    script_body = """
+        const source = code;
+        function extractFunction(name, endMarker) {
+          const start = source.indexOf(`function ${name}(`);
+          if (start === -1) {
+            throw new Error(`Cannot find function ${name}`);
+          }
+          const end = source.indexOf(endMarker, start);
+          if (end === -1) {
+            throw new Error(`Cannot find end marker for ${name}`);
+          }
+          return source.slice(start, end);
+        }
+
+        const applyServerUpdateSource = extractFunction('applyServerUpdate', '\\n\\n  function updateCostDisplays');
+        const refreshSource = extractFunction('refreshRosterCostBadges', '\\n\\n  function applyClassificationToState');
+
+        const state = {
+          recomputeCalls: 0,
+          totals: [],
+        };
+
+        const makeItem = (id, initialCost) => {
+          const attrs = new Map([
+            ['data-roster-unit-id', id],
+            ['data-unit-name', 'Unit'],
+            ['data-unit-cost', String(initialCost)],
+            ['data-selected-passives', '[]'],
+            ['data-selected-actives', '[]'],
+            ['data-selected-auras', '[]'],
+          ]);
+          const badge = { textContent: `${initialCost} pkt` };
+          const loadout = { textContent: '' };
+          return {
+            _attrs: attrs,
+            getAttribute(name) { return attrs.get(name) || ''; },
+            setAttribute(name, value) { attrs.set(name, String(value)); },
+            querySelector(selector) {
+              if (selector === '[data-roster-unit-cost]') {
+                return badge;
+              }
+              if (selector === '[data-roster-unit-loadout]') {
+                return loadout;
+              }
+              if (selector === '[data-roster-unit-title]') {
+                return null;
+              }
+              return null;
+            },
+            badge,
+          };
+        };
+
+        const firstItem = makeItem('u1', 111);
+        const secondItem = makeItem('u2', 222);
+        const rosterItems = [firstItem, secondItem];
+        const listElement = {
+          querySelectorAll(selector) {
+            if (selector === '[data-roster-item]') {
+              return rosterItems;
+            }
+            return [];
+          },
+          querySelector(selector) {
+            const match = /data-roster-unit-id="([^"]+)"/.exec(selector);
+            if (!match) {
+              return null;
+            }
+            return rosterItems.find((entry) => entry.getAttribute('data-roster-unit-id') === match[1]) || null;
+          },
+        };
+
+        let activeItem = null;
+        const root = listElement;
+        let rosterListEl = listElement;
+        const ensureRosterList = () => listElement;
+        let refreshRosterCostBadgesInProgress = false;
+        let pendingRefreshOptions = null;
+        let pendingRefreshCycleToken = null;
+        let lastRefreshRosterCostCycleToken = null;
+        const resolveUnitCacheId = (targetItem) => targetItem.getAttribute('data-roster-unit-id');
+        const rosterUnitDatasetRepo = new Map();
+        const rosterUnitDatasetCache = new Map();
+        const UNIT_DATASET_ATTRIBUTE_MAP = new Map([['data-unit-default-summary', 'default_summary']]);
+        const UNIT_DATASET_KEYS = ['default_summary'];
+        const getParsedList = () => [];
+        const updateUnitDataset = () => {};
+        const updateListCustomName = () => {};
+        const invalidateCachedAttribute = () => {};
+        const setItemListAttribute = () => {};
+        const formatPoints = (value) => String(value);
+        const getUnitDatasetValue = () => '-';
+        const updateItemClassification = () => {};
+        const updateItemAbilityBadges = () => {};
+        const syncEditorFromItem = () => {};
+        const writeLockPairDataset = () => {};
+        const applyLockPairsFromServer = () => {};
+        const updateTotalSummary = (value) => state.totals.push(value);
+        const buildClassificationContextFromItem = () => ({});
+        const getPartnerId = () => '';
+        const computeRosterItemCost = () => {
+          state.recomputeCalls += 1;
+          return { total: 9999 };
+        };
+
+        eval(refreshSource);
+        eval(applyServerUpdateSource);
+
+        applyServerUpdate({
+          units: [
+            { id: 'u1', cached_cost: 777.7 },
+            { id: 'u2', cached_cost: 765.85 },
+          ],
+          total_cost: 1543.55,
+        });
+
+        console.log(JSON.stringify({
+          recomputeCalls: state.recomputeCalls,
+          totals: state.totals,
+          firstBadge: firstItem.badge.textContent,
+          secondBadge: secondItem.badge.textContent,
+          firstCost: firstItem.getAttribute('data-unit-cost'),
+          secondCost: secondItem.getAttribute('data-unit-cost'),
+        }));
+    """
+
+    script = _build_sandbox_script(script_body)
+    result = _run_node(script)
+
+    assert result["recomputeCalls"] == 0
+    assert result["totals"] == [1543.55, 1543.55]
+    assert result["firstBadge"] == "777.7 pkt"
+    assert result["secondBadge"] == "765.85 pkt"
+    assert result["firstCost"] == "777.7"
+    assert result["secondCost"] == "765.85"
+
+
 def test_refresh_roster_cost_badges_applies_latest_pending_call_when_refresh_is_reentered() -> None:
     script_body = """
         const source = code;
