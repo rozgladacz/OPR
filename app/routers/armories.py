@@ -221,6 +221,26 @@ def _update_weapon_cost(weapon: models.Weapon) -> bool:
     return False
 
 
+def _resolve_variant_parent_weapon(
+    weapon: models.Weapon,
+    armory: models.Armory,
+) -> models.Weapon:
+    if armory.parent_id is None or weapon.parent is None:
+        return weapon
+
+    source = weapon.parent
+    visited: set[int] = set()
+    while source.parent is not None:
+        source_id = getattr(source, "id", None)
+        if source_id is None or source_id in visited:
+            break
+        visited.add(source_id)
+        if source.armory_id != armory.id:
+            break
+        source = source.parent
+    return source
+
+
 def _refresh_costs(db: Session, weapons: Iterable[models.Weapon]) -> None:
     updated = False
     for weapon in weapons:
@@ -1177,18 +1197,78 @@ def update_weapon(
         )
 
     if action == "create_variant":
-        parent = weapon
+        parent = _resolve_variant_parent_weapon(weapon, armory)
+        variant_name = None if cleaned_name == parent.effective_name else cleaned_name
+        variant_range = None if cleaned_range == parent.effective_range else cleaned_range
+        variant_attacks_input = (
+            attacks_value if attacks_value is not None else parent.effective_attacks
+        )
+        if math.isclose(
+            variant_attacks_input,
+            parent.effective_attacks,
+            rel_tol=1e-9,
+            abs_tol=1e-9,
+        ):
+            variant_attacks = None
+        else:
+            variant_attacks = variant_attacks_input
+
+        variant_ap_input = ap_value if ap_value is not None else parent.effective_ap
+        variant_ap = None if variant_ap_input == parent.effective_ap else variant_ap_input
+
+        cleaned_tags = tags_text or ""
+        inherited_tags = parent.effective_tags or ""
+        variant_tags = None if cleaned_tags == inherited_tags else cleaned_tags
+
+        cleaned_notes = cleaned_notes_text or None
+        variant_notes = None if cleaned_notes == parent.effective_notes else cleaned_notes
+
+        if (
+            variant_name is None
+            and variant_range is None
+            and variant_attacks is None
+            and variant_ap is None
+            and variant_tags is None
+            and variant_notes is None
+        ):
+            existing_weapon = (
+                db.execute(
+                    select(models.Weapon).where(
+                        models.Weapon.armory_id == armory.id,
+                        models.Weapon.parent_id == parent.id,
+                        models.Weapon.name.is_(None),
+                        models.Weapon.range.is_(None),
+                        models.Weapon.attacks.is_(None),
+                        models.Weapon.ap.is_(None),
+                        models.Weapon.tags.is_(None),
+                        models.Weapon.notes.is_(None),
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if existing_weapon:
+                target_armory_id = (
+                    existing_weapon.armory_id
+                    if existing_weapon.armory_id is not None
+                    else armory.id
+                )
+                return RedirectResponse(
+                    url=f"/armories/{target_armory_id}/weapons/{existing_weapon.id}/edit",
+                    status_code=303,
+                )
+
         new_weapon = models.Weapon(
             armory_id=armory.id,
             owner_id=armory.owner_id,
             parent_id=parent.id,
             army_id=None,
-            name=cleaned_name,
-            range=cleaned_range,
-            attacks=attacks_value if attacks_value is not None else parent.effective_attacks,
-            ap=ap_value if ap_value is not None else parent.effective_ap,
-            tags=tags_text or None,
-            notes=cleaned_notes_text or None,
+            name=variant_name,
+            range=variant_range,
+            attacks=variant_attacks,
+            ap=variant_ap,
+            tags=variant_tags,
+            notes=variant_notes,
         )
 
         _update_weapon_cost(new_weapon)
