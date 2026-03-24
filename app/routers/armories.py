@@ -236,6 +236,7 @@ def _render_armory_detail(
     armory: models.Armory,
     current_user: models.User,
     error: str | None = None,
+    warning: str | None = None,
     selected_weapon_id: int | None = None,
 ) -> HTMLResponse:
     weapon_collection = _armory_weapons(db, armory)
@@ -244,6 +245,11 @@ def _render_armory_detail(
     _refresh_costs(db, weapons)
 
     if selected_weapon_id is not None and not any(w.id == selected_weapon_id for w in weapons):
+        warning = (
+            f"Broń o ID {selected_weapon_id} nie jest dostępna w aktualnym widoku. "
+            "Odśwież stronę lub ponownie wejdź w edycję tej broni, "
+            "aby zweryfikować, czy to problem danych czy tylko widoku."
+        )
         selected_weapon_id = None
 
     parent_chain = _parent_chain(armory)
@@ -282,6 +288,7 @@ def _render_armory_detail(
             "parent_chain": list(reversed(parent_chain)),
             "form_values": _weapon_form_values(None),
             "error": error,
+            "warning": warning,
             "selected_weapon_id": selected_weapon_id,
         },
     )
@@ -738,6 +745,7 @@ def rename_armory(
                 "parent_chain": list(reversed(_parent_chain(armory))),
                 "form_values": _weapon_form_values(None),
                 "error": "Nazwa zbrojowni jest wymagana.",
+                "warning": None,
             },
         )
 
