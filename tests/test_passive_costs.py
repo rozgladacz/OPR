@@ -97,7 +97,7 @@ def test_army_rule_can_be_disabled_via_brak_option() -> None:
     assert "nieustraszony" not in passive_state.traits
 
 
-def test_passive_entries_include_army_disable_entry() -> None:
+def test_passive_entries_do_not_include_army_disable_entry_by_default() -> None:
     army = _make_army("Nieustraszony")
     army.id = 3
     unit = models.Unit(
@@ -115,6 +115,26 @@ def test_passive_entries_include_army_disable_entry() -> None:
     unit.default_weapon_id = None
     entries = rosters._passive_entries(unit)
     assert not any(entry.get("slug") == "Nieustraszony" for entry in entries)
+    assert not any(entry.get("slug") == "__army_off__Nieustraszony" for entry in entries)
+
+
+def test_passive_entries_include_army_disable_entry_when_added_to_unit() -> None:
+    army = _make_army("Nieustraszony")
+    army.id = 31
+    unit = models.Unit(
+        name="Veterans",
+        quality=4,
+        defense=4,
+        toughness=6,
+        flags="__army_off__Nieustraszony=Nieustraszony?",
+        army_id=army.id,
+    )
+    unit.army = army
+    unit.abilities = []
+    unit.weapon_links = []
+    unit.default_weapon = None
+    unit.default_weapon_id = None
+    entries = rosters._passive_entries(unit)
     assert any(
         entry.get("slug") == "__army_off__Nieustraszony" and entry.get("cost") <= 0
         for entry in entries
