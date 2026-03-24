@@ -99,6 +99,13 @@
   </div>
 </div>
 
+
+{% if warning %}
+<div class="alert alert-warning" role="alert">
+  {{ warning }}
+</div>
+{% endif %}
+
 <h4>Uzbrojenie</h4>
 <div class="row align-items-end g-2 mb-3">
   <div class="col-md-6">
