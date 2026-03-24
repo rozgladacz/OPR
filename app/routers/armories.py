@@ -1179,9 +1179,10 @@ def update_weapon(
     if action == "create_variant":
         parent = weapon
         new_weapon = models.Weapon(
-            armory=armory,
+            armory_id=armory.id,
             owner_id=armory.owner_id,
-            parent=parent,
+            parent_id=parent.id,
+            army_id=None,
             name=cleaned_name,
             range=cleaned_range,
             attacks=attacks_value if attacks_value is not None else parent.effective_attacks,

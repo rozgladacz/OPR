@@ -365,6 +365,56 @@ def test_create_weapon_variant_from_edit_persists_as_armory_weapon():
         session.close()
 
 
+def test_create_weapon_variant_from_edit_creates_distinct_weapon_each_time():
+    session = _session()
+    try:
+        user = models.User(username="tester", password_hash="hash", is_admin=False)
+        armory = models.Armory(name="Armory", owner=user)
+        session.add_all([user, armory])
+        session.flush()
+
+        weapon = models.Weapon(
+            armory=armory,
+            owner_id=user.id,
+            name="Sword",
+            range="Melee",
+            attacks=2,
+            ap=1,
+        )
+        session.add(weapon)
+        session.flush()
+
+        created_ids: list[int] = []
+        for _ in range(2):
+            request = _build_request(f"/armories/{armory.id}/weapons/{weapon.id}/edit")
+            response = armories_router.update_weapon(
+                armory_id=armory.id,
+                weapon_id=weapon.id,
+                request=request,
+                name=weapon.effective_name,
+                range=weapon.effective_range or "",
+                attacks=str(weapon.display_attacks),
+                ap=str(weapon.effective_ap),
+                abilities="[]",
+                notes=weapon.effective_notes or "",
+                action="create_variant",
+                db=session,
+                current_user=user,
+            )
+            location = response.headers["location"]
+            parts = location.strip("/").split("/")
+            created_ids.append(int(parts[3]))
+
+        assert len(set(created_ids)) == 2
+
+        collection = armories_router._armory_weapons(session, armory)
+        collection_ids = {item.id for item in collection.items if item.id is not None}
+        assert created_ids[0] in collection_ids
+        assert created_ids[1] in collection_ids
+    finally:
+        session.close()
+
+
 def test_armory_view_variant_sync_cached_in_session():
     session = _session()
     try:
