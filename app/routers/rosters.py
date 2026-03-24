@@ -30,6 +30,12 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 ABILITY_NAME_MAX_LENGTH = 60
 
 
+def _parse_bool(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "on", "yes"}
+
+
 def _unit_cache_value(
     unit: models.Unit, unit_data_cache: dict[int, dict[str, Any]], key: str, factory: Callable[[], Any]
 ) -> Any:
@@ -325,6 +331,7 @@ def create_roster(
     name: str = Form(...),
     army_id: int = Form(...),
     points_limit: str | None = Form(None),
+    is_global: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -338,11 +345,17 @@ def create_roster(
     else:
         stripped_limit = points_limit.strip()
         limit_value = int(stripped_limit) if stripped_limit else 1000
+    is_global_flag = _parse_bool(is_global)
+    if is_global_flag and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Tylko administrator może tworzyć globalne rozpiski",
+        )
     roster = models.Roster(
         name=name,
         army=army,
         points_limit=limit_value,
-        owner_id=current_user.id,
+        owner_id=None if is_global_flag else current_user.id,
     )
     db.add(roster)
     db.commit()
