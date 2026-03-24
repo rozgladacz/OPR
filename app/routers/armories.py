@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 from typing import Iterable
 
@@ -19,6 +20,8 @@ from ..services import costs, utils
 
 router = APIRouter(prefix="/armories", tags=["armories"])
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+logger = logging.getLogger(__name__)
 
 OVERRIDABLE_FIELDS = ("name", "range", "attacks", "ap", "tags", "notes")
 
@@ -221,24 +224,40 @@ def _update_weapon_cost(weapon: models.Weapon) -> bool:
     return False
 
 
-def _resolve_variant_parent_weapon(
-    weapon: models.Weapon,
+def _resolve_local_parent_for_variant(
+    db: Session,
     armory: models.Armory,
+    weapon: models.Weapon,
 ) -> models.Weapon:
-    if armory.parent_id is None or weapon.parent is None:
+    if weapon.armory_id == armory.id:
         return weapon
 
-    source = weapon.parent
     visited: set[int] = set()
-    while source.parent is not None:
-        source_id = getattr(source, "id", None)
-        if source_id is None or source_id in visited:
+    current: models.Weapon | None = weapon
+    while current is not None:
+        current_id = getattr(current, "id", None)
+        if current_id is None or current_id in visited:
             break
-        visited.add(source_id)
-        if source.armory_id != armory.id:
-            break
-        source = source.parent
-    return source
+        visited.add(current_id)
+
+        local_candidate = (
+            db.execute(
+                select(models.Weapon)
+                .where(
+                    models.Weapon.armory_id == armory.id,
+                    models.Weapon.parent_id == current_id,
+                )
+                .order_by(models.Weapon.id.asc())
+            )
+            .scalars()
+            .first()
+        )
+        if local_candidate is not None:
+            return local_candidate
+
+        current = current.parent
+
+    return weapon
 
 
 def _refresh_costs(db: Session, weapons: Iterable[models.Weapon]) -> None:
@@ -1199,13 +1218,12 @@ def update_weapon(
         db.flush()
         _sync_descendant_variants(db, armory)
         db.commit()
-        target_armory_id = new_weapon.armory_id if new_weapon.armory_id is not None else armory.id
         return RedirectResponse(
-            url=f"/armories/{target_armory_id}/weapons/{new_weapon.id}/edit", status_code=303
+            url=f"/armories/{armory.id}/weapons/{new_weapon.id}/edit", status_code=303
         )
 
     if action == "create_variant":
-        parent = _resolve_variant_parent_weapon(weapon, armory)
+        parent = _resolve_local_parent_for_variant(db, armory, weapon)
         variant_name = None if cleaned_name == parent.effective_name else cleaned_name
         variant_range = None if cleaned_range == parent.effective_range else cleaned_range
         variant_attacks_input = (
@@ -1282,11 +1300,24 @@ def update_weapon(
         _update_weapon_cost(new_weapon)
         db.add(new_weapon)
         db.flush()
+        parent_armory_id = new_weapon.parent.armory_id if new_weapon.parent else None
+        if parent_armory_id != armory.id:
+            logger.warning(
+                "Rejecting cross-armory weapon variant: armory_id=%s weapon_id=%s parent_id=%s parent_armory_id=%s",
+                armory.id,
+                new_weapon.id,
+                new_weapon.parent_id,
+                parent_armory_id,
+            )
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail="Nie można utworzyć wariantu z rodzicem spoza bieżącej zbrojowni.",
+            )
         _sync_descendant_variants(db, armory)
         db.commit()
-        target_armory_id = new_weapon.armory_id if new_weapon.armory_id is not None else armory.id
         return RedirectResponse(
-            url=f"/armories/{target_armory_id}/weapons/{new_weapon.id}/edit", status_code=303
+            url=f"/armories/{armory.id}/weapons/{new_weapon.id}/edit", status_code=303
         )
 
     if weapon.parent:
