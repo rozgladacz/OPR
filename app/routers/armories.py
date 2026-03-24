@@ -1182,29 +1182,13 @@ def update_weapon(
             armory=armory,
             owner_id=armory.owner_id,
             parent=parent,
+            name=cleaned_name,
+            range=cleaned_range,
+            attacks=attacks_value if attacks_value is not None else parent.effective_attacks,
+            ap=ap_value if ap_value is not None else parent.effective_ap,
+            tags=tags_text or None,
+            notes=cleaned_notes_text or None,
         )
-
-        if cleaned_name != parent.effective_name:
-            new_weapon.name = cleaned_name
-
-        if cleaned_range != parent.effective_range:
-            new_weapon.range = cleaned_range
-
-        if attacks_value is not None and not math.isclose(
-            attacks_value, parent.effective_attacks, rel_tol=1e-9, abs_tol=1e-9
-        ):
-            new_weapon.attacks = attacks_value
-
-        if ap_value is not None and ap_value != parent.effective_ap:
-            new_weapon.ap = ap_value
-
-        cleaned_tags_value = tags_text or None
-        if cleaned_tags_value != parent.effective_tags:
-            new_weapon.tags = cleaned_tags_value
-
-        cleaned_notes_value = cleaned_notes_text or None
-        if cleaned_notes_value != parent.effective_notes:
-            new_weapon.notes = cleaned_notes_value
 
         _update_weapon_cost(new_weapon)
         db.add(new_weapon)
