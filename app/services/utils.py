@@ -437,6 +437,39 @@ def passive_payload_to_flags(items: list[dict]) -> str:
 
 
 
+def _find_local_parent_candidate_for_variant(
+    db: Session,
+    armory: models.Armory,
+    weapon: models.Weapon,
+) -> models.Weapon | None:
+    visited: set[int] = set()
+    current: models.Weapon | None = weapon
+    while current is not None:
+        current_id = getattr(current, "id", None)
+        if current_id is None or current_id in visited:
+            break
+        visited.add(current_id)
+
+        local_candidate = (
+            db.execute(
+                select(models.Weapon)
+                .where(
+                    models.Weapon.armory_id == armory.id,
+                    models.Weapon.parent_id == current_id,
+                )
+                .order_by(models.Weapon.id.asc())
+            )
+            .scalars()
+            .first()
+        )
+        if local_candidate is not None:
+            return local_candidate
+
+        current = current.parent
+
+    return None
+
+
 def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
     if armory.parent_id is None:
         return
@@ -559,6 +592,13 @@ def ensure_armory_variant_sync(db: Session, armory: models.Armory) -> None:
 
         if not parent:
             continue
+
+        if parent.armory_id != armory.id and parent.armory_id != armory.parent_id:
+            local_parent = _find_local_parent_candidate_for_variant(db, armory, parent)
+            if local_parent is not None and local_parent.id != weapon.id:
+                weapon.parent_id = local_parent.id
+                parent = local_parent
+                cleaned = True
 
         if weapon.name is not None and weapon.name == parent.effective_name:
             weapon.name = None
