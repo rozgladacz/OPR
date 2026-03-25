@@ -357,6 +357,76 @@ def _weapon_form_values(weapon: models.Weapon | None) -> dict:
     }
 
 
+def _weapon_inheritance_panel_context(
+    db: Session,
+    armory: models.Armory,
+    weapon: models.Weapon | None = None,
+) -> dict:
+    lineage: list[models.Armory] = []
+    current: models.Armory | None = armory
+    visited: set[int] = set()
+    while current and current.id not in visited:
+        lineage.append(current)
+        visited.add(current.id)
+        current = current.parent
+
+    source_armories = [
+        {
+            "id": item.id,
+            "name": item.name,
+            "depth": index,
+            "is_current": index == 0,
+        }
+        for index, item in enumerate(lineage)
+    ]
+
+    parent_weapon_options: list[dict] = []
+    if source_armories:
+        source_ids = [entry["id"] for entry in source_armories]
+        weapons = (
+            db.execute(
+                select(models.Weapon)
+                .where(models.Weapon.armory_id.in_(source_ids))
+                .order_by(models.Weapon.armory_id, models.Weapon.name, models.Weapon.id)
+            )
+            .scalars()
+            .all()
+        )
+        for item in weapons:
+            label = item.effective_name if item and item.effective_name else f"Broń #{item.id}"
+            parent_weapon_options.append(
+                {
+                    "id": item.id,
+                    "name": label,
+                    "armory_id": item.armory_id,
+                    "armory_name": item.armory.name if item.armory else "",
+                }
+            )
+
+    hierarchy_options = [
+        item
+        for item in parent_weapon_options
+        if item.get("armory_id") == armory.id
+    ]
+
+    selected_source_id = armory.id
+    selected_parent_weapon_id = None
+    if weapon and weapon.parent:
+        selected_source_id = weapon.parent.armory_id
+        selected_parent_weapon_id = weapon.parent_id
+    elif armory.parent:
+        selected_source_id = armory.parent.id
+
+    return {
+        "source_armories": source_armories,
+        "parent_weapon_options": parent_weapon_options,
+        "hierarchy_options": hierarchy_options,
+        "selected_source_armory_id": selected_source_id,
+        "selected_parent_weapon_id": selected_parent_weapon_id,
+        "disable_inheritance": bool(armory.parent and weapon and weapon.parent is None),
+    }
+
+
 def _weapon_tree_payload(weapon_rows: Iterable[dict]) -> list[dict]:
     node_map: dict[int, dict] = {}
     roots: list[dict] = []
@@ -981,6 +1051,7 @@ def new_weapon_form(
             "range_options": RANGE_OPTIONS,
             "parent_defaults": None,
             "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+            "inheritance_panel": _weapon_inheritance_panel_context(db, armory),
 
             "error": None,
         },
@@ -1030,6 +1101,7 @@ def create_weapon(
                 "range_options": RANGE_OPTIONS,
                 "parent_defaults": None,
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+                "inheritance_panel": _weapon_inheritance_panel_context(db, armory),
                 "error": "Nazwa broni jest wymagana.",
             },
         )
@@ -1054,7 +1126,10 @@ def create_weapon(
                     "notes": notes or "",
                     "abilities": ability_items,
                 },
+                "range_options": RANGE_OPTIONS,
+                "parent_defaults": None,
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+                "inheritance_panel": _weapon_inheritance_panel_context(db, armory),
                 "error": str(exc),
             },
         )
@@ -1118,6 +1193,7 @@ def edit_weapon_form(
             "parent_defaults": _weapon_form_values(weapon.parent) if weapon and weapon.parent else None,
 
             "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+            "inheritance_panel": _weapon_inheritance_panel_context(db, armory, weapon),
 
             "error": None,
             "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
@@ -1171,6 +1247,7 @@ def update_weapon(
                 "range_options": RANGE_OPTIONS,
                 "parent_defaults": _weapon_form_values(weapon.parent) if weapon and weapon.parent else None,
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+                "inheritance_panel": _weapon_inheritance_panel_context(db, armory, weapon),
 
                 "error": "Nazwa broni jest wymagana.",
                 "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
@@ -1200,6 +1277,7 @@ def update_weapon(
                 "range_options": RANGE_OPTIONS,
                 "parent_defaults": _weapon_form_values(weapon.parent) if weapon and weapon.parent else None,
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+                "inheritance_panel": _weapon_inheritance_panel_context(db, armory, weapon),
 
                 "error": str(exc),
                 "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",

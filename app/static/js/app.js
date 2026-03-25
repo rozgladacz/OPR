@@ -1491,6 +1491,78 @@ function initWeaponDefaults() {
   });
 }
 
+function initInheritanceEditor() {
+  document.querySelectorAll('[data-inheritance-panel]').forEach((panel) => {
+    const panelId = panel.id;
+    if (!panelId) {
+      return;
+    }
+    const toggles = document.querySelectorAll(
+      `[data-inheritance-edit-toggle][data-inheritance-panel-id="${panelId}"]`,
+    );
+    if (!toggles.length) {
+      return;
+    }
+    const disableInheritanceInput = panel.querySelector('[data-disable-inheritance]');
+    const linkedFields = Array.from(panel.querySelectorAll('[data-inheritance-linked-field]'));
+    const sourceArmorySelect = panel.querySelector('[data-inheritance-source-armory]');
+    const parentWeaponSelect = panel.querySelector('[data-inheritance-parent-weapon]');
+
+    const syncPanelVisibility = (expanded) => {
+      panel.classList.toggle('d-none', !expanded);
+      toggles.forEach((toggle) => {
+        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      });
+    };
+
+    const updateLinkedFieldsVisibility = () => {
+      const disabled = Boolean(disableInheritanceInput && disableInheritanceInput.checked);
+      linkedFields.forEach((field) => {
+        field.classList.toggle('d-none', disabled);
+      });
+    };
+
+    const filterParentWeapons = () => {
+      if (!sourceArmorySelect || !parentWeaponSelect) {
+        return;
+      }
+      const selectedArmoryId = sourceArmorySelect.value;
+      const options = Array.from(parentWeaponSelect.options);
+      options.forEach((option) => {
+        if (!option.value) {
+          option.hidden = false;
+          return;
+        }
+        const optionArmoryId = option.dataset.armoryId || '';
+        option.hidden = Boolean(selectedArmoryId) && optionArmoryId !== selectedArmoryId;
+      });
+      if (parentWeaponSelect.selectedOptions.length) {
+        const selectedOption = parentWeaponSelect.selectedOptions[0];
+        if (selectedOption.hidden) {
+          parentWeaponSelect.value = '';
+        }
+      }
+    };
+
+    toggles.forEach((toggle) => {
+      toggle.addEventListener('click', () => {
+        const expanded = toggle.getAttribute('aria-expanded') === 'true';
+        syncPanelVisibility(!expanded);
+      });
+    });
+    if (disableInheritanceInput) {
+      disableInheritanceInput.addEventListener('change', updateLinkedFieldsVisibility);
+    }
+    if (sourceArmorySelect) {
+      sourceArmorySelect.addEventListener('change', filterParentWeapons);
+    }
+
+    syncPanelVisibility(false);
+    updateLinkedFieldsVisibility();
+    filterParentWeapons();
+  });
+}
+
 
 function initSpellWeaponCostPreview() {
   document.querySelectorAll('form[data-spell-weapon-form]').forEach((form) => {
@@ -7338,6 +7410,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initWeaponPickers();
   initRosterEditor();
   initWeaponDefaults();
+  initInheritanceEditor();
   initSpellAbilityForms();
   initArmoryWeaponTree();
   initSpellWeaponCostPreview();
