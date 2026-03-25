@@ -478,12 +478,27 @@ def _weapon_local_descendant_ids(db: Session, root_weapon_id: int) -> set[int]:
 
 
 def _weapon_tree_payload(weapon_rows: Iterable[dict]) -> list[dict]:
+    weapon_rows = list(weapon_rows)
     node_map: dict[int, dict] = {}
     roots: list[dict] = []
+    current_armory_id: int | None = None
 
     for index, entry in enumerate(weapon_rows):
         weapon = entry.get("instance")
         if not weapon or weapon.id is None:
+            continue
+        if current_armory_id is None:
+            current_armory_id = weapon.armory_id
+        if weapon.armory_id != current_armory_id:
+            logger.error(
+                "Skipping weapon outside payload scope: weapon_id=%s weapon_armory_id=%s current_armory_id=%s",
+                weapon.id,
+                weapon.armory_id,
+                current_armory_id,
+            )
+            assert (
+                weapon.armory_id == current_armory_id
+            ), "Rendered weapon node is outside current armory scope"
             continue
         ability_payload = list(entry.get("abilities") or [])
         overrides = dict(entry.get("overrides") or {})
@@ -547,61 +562,28 @@ def _weapon_tree_payload(weapon_rows: Iterable[dict]) -> list[dict]:
             "delete_url": f"/armories/{weapon.armory_id}/weapons/{weapon.id}/delete",
         }
 
-    source_node_map: dict[int, dict] = {}
-
     for entry in weapon_rows:
         weapon = entry.get("instance")
         if not weapon or weapon.id is None:
             continue
-        node = node_map.get(weapon.id)
-        if not node:
-            continue
-        parent = weapon.parent
-        if (
-            parent
-            and parent.id is not None
-            and getattr(parent, "armory_id", None) != weapon.armory_id
-        ):
-            visited_sources: set[int] = set()
-            current = parent
-            while current is not None:
-                source_id = getattr(current, "id", None)
-                if source_id is None or source_id in visited_sources:
-                    break
-                visited_sources.add(source_id)
-                source_node_map.setdefault(source_id, node)
-                current = getattr(current, "parent", None)
-
-    for entry in weapon_rows:
-        weapon = entry.get("instance")
-        if not weapon or weapon.id is None:
+        if current_armory_id is not None and weapon.armory_id != current_armory_id:
             continue
         node = node_map.get(weapon.id)
         if not node:
             continue
         parent_id = node.get("parent_id")
-        if parent_id and parent_id in node_map:
-            node_map[parent_id]["children"].append(node)
-        else:
-            local_parent: dict | None = None
-            parent = weapon.parent
-            if weapon.parent_id and parent is not None:
-                visited_sources: set[int] = set()
-                current = parent
-                while current is not None:
-                    source_id = getattr(current, "id", None)
-                    if source_id is None or source_id in visited_sources:
-                        break
-                    visited_sources.add(source_id)
-                    candidate = source_node_map.get(source_id)
-                    if candidate and candidate is not node:
-                        local_parent = candidate
-                        break
-                    current = getattr(current, "parent", None)
-            if local_parent is not None:
-                local_parent.setdefault("children", []).append(node)
+        if (
+            parent_id
+            and parent_id in node_map
+            and node_map[parent_id].get("id") == parent_id
+        ):
+            parent_weapon = weapon.parent
+            if parent_weapon is None or parent_weapon.armory_id == current_armory_id:
+                node_map[parent_id]["children"].append(node)
             else:
                 roots.append(node)
+        else:
+            roots.append(node)
 
     def _finalize(nodes: list[dict], level: int = 0) -> None:
         nodes.sort(key=lambda item: item.get("name_sort", ""))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import logging
 import math
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -11,6 +12,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from .. import models
 from ..data import abilities as ability_catalog
+
+logger = logging.getLogger(__name__)
 
 HIDDEN_TRAIT_SLUGS: set[str] = set()
 
@@ -74,65 +77,32 @@ def _weapon_sort_key(weapon: models.Weapon) -> tuple[str, int]:
 def _build_weapon_tree(
     armory: models.Armory, weapons: list[models.Weapon]
 ) -> tuple[list[WeaponTreeNode], list[models.Weapon]]:
+    scoped_weapons: list[models.Weapon] = []
+    for weapon in weapons:
+        if weapon.armory_id != armory.id:
+            logger.error(
+                "Skipping weapon outside armory scope while building tree: weapon_id=%s weapon_armory_id=%s current_armory_id=%s",
+                weapon.id,
+                weapon.armory_id,
+                armory.id,
+            )
+            assert (
+                weapon.armory_id == armory.id
+            ), "Weapon outside current armory scope was passed to tree renderer"
+            continue
+        scoped_weapons.append(weapon)
+
     weapon_map: dict[int, models.Weapon] = {
-        weapon.id: weapon for weapon in weapons if weapon.id is not None
+        weapon.id: weapon for weapon in scoped_weapons if weapon.id is not None
     }
-    source_weapon_map: dict[int, tuple[int, models.Weapon]] = {}
     children_map: dict[int, list[models.Weapon]] = {}
     roots: list[models.Weapon] = []
 
-    for weapon in weapons:
-        parent = weapon.parent
-        if (
-            parent
-            and parent.id is not None
-            and getattr(parent, "armory_id", None) != weapon.armory_id
-        ):
-            visited_sources: set[int] = set()
-            current = parent
-            depth = 1
-            while current is not None:
-                source_id = getattr(current, "id", None)
-                if source_id is None or source_id in visited_sources:
-                    break
-                visited_sources.add(source_id)
-                existing = source_weapon_map.get(source_id)
-                is_direct_clone = weapon.parent_id == source_id
-                if existing is None:
-                    source_weapon_map[source_id] = (depth, weapon)
-                else:
-                    existing_depth, existing_weapon = existing
-                    existing_is_direct = existing_weapon.parent_id == source_id
-                    if depth < existing_depth or (
-                        is_direct_clone and not existing_is_direct
-                    ):
-                        source_weapon_map[source_id] = (depth, weapon)
-                current = getattr(current, "parent", None)
-                depth += 1
-
-    for weapon in weapons:
+    for weapon in scoped_weapons:
         parent_id = _local_tree_parent_id(weapon)
-        assigned_parent_id: int | None = None
-        if parent_id is not None and parent_id in weapon_map:
-            assigned_parent_id = parent_id
-        else:
-            parent = weapon.parent
-            if parent is not None and parent_id is not None:
-                visited_sources: set[int] = set()
-                current = parent
-                while current is not None:
-                    source_id = getattr(current, "id", None)
-                    if source_id is None or source_id in visited_sources:
-                        break
-                    visited_sources.add(source_id)
-                    candidate_entry = source_weapon_map.get(source_id)
-                    candidate = candidate_entry[1] if candidate_entry else None
-                    if candidate is not None and candidate is not weapon:
-                        assigned_parent_id = candidate.id
-                        break
-                    current = getattr(current, "parent", None)
-        if assigned_parent_id is not None and assigned_parent_id in weapon_map:
-            children_map.setdefault(assigned_parent_id, []).append(weapon)
+        parent = weapon_map.get(parent_id) if parent_id is not None else None
+        if parent is not None and parent.armory_id == armory.id:
+            children_map.setdefault(parent.id, []).append(weapon)
         else:
             roots.append(weapon)
 
@@ -177,8 +147,8 @@ def _build_weapon_tree(
 
     tree = build_nodes(roots)
 
-    if len(ordered_weapons) != len(weapons):
-        remaining = [weapon for weapon in weapons if weapon not in ordered_weapons]
+    if len(ordered_weapons) != len(scoped_weapons):
+        remaining = [weapon for weapon in scoped_weapons if weapon not in ordered_weapons]
         for item in sorted(remaining, key=_weapon_sort_key):
             ordered_weapons.append(item)
             tree_parent_id = _local_tree_parent_id(item)
@@ -233,7 +203,7 @@ def load_armory_weapons(db: Session, armory: models.Armory) -> ArmoryWeaponColle
         .selectinload(models.Weapon.armory)
     )
 
-    weapons = (
+    queried_weapons = (
         db.execute(
             select(models.Weapon)
             .where(
@@ -250,6 +220,15 @@ def load_armory_weapons(db: Session, armory: models.Armory) -> ArmoryWeaponColle
         .scalars()
         .all()
     )
+
+    weapons = [weapon for weapon in queried_weapons if weapon.armory_id == armory.id]
+    if len(weapons) != len(queried_weapons):
+        logger.error(
+            "Dropped out-of-scope weapons from armory list query: current_armory_id=%s queried=%s scoped=%s",
+            armory.id,
+            len(queried_weapons),
+            len(weapons),
+        )
 
     tree, ordered_weapons = _build_weapon_tree(armory, weapons)
     return ArmoryWeaponCollection(items=ordered_weapons, tree=tree)
