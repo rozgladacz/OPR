@@ -111,11 +111,11 @@
                 <select
                   class="form-select"
                   id="inheritance-hierarchy-position"
-                  name="inheritance_hierarchy_parent_id"
+                  name="placement_parent_id"
                 >
                   <option value="">Poziom główny (bez rodzica)</option>
                   {% for option in hierarchy_options %}
-                  <option value="{{ option.id }}">{{ option.name }}</option>
+                  <option value="{{ option.id }}" {% if option.id == inheritance_data.selected_placement_parent_id %}selected{% endif %}>{{ option.name }}</option>
                   {% endfor %}
                 </select>
               </div>

@@ -408,9 +408,12 @@ def _weapon_inheritance_panel_context(
 
     selected_source_id = armory.id
     selected_parent_weapon_id = None
+    selected_placement_parent_id = None
     if weapon and weapon.parent:
         selected_source_id = weapon.parent.armory_id
         selected_parent_weapon_id = weapon.parent_id
+    if weapon:
+        selected_placement_parent_id = weapon.placement_parent_id
     elif armory.parent:
         selected_source_id = armory.parent.id
 
@@ -430,6 +433,7 @@ def _weapon_inheritance_panel_context(
         "hierarchy_options": hierarchy_options,
         "selected_source_armory_id": selected_source_id,
         "selected_parent_weapon_id": selected_parent_weapon_id,
+        "selected_placement_parent_id": selected_placement_parent_id,
         "disable_inheritance": bool(armory.parent and weapon and weapon.parent is None),
         "current_parent_hint": current_parent_hint,
     }
@@ -442,6 +446,26 @@ def _weapon_descendant_ids(db: Session, root_weapon_id: int) -> set[int]:
         current_id = queue.pop(0)
         children = (
             db.execute(select(models.Weapon.id).where(models.Weapon.parent_id == current_id))
+            .scalars()
+            .all()
+        )
+        for child_id in children:
+            if child_id in descendants:
+                continue
+            descendants.add(child_id)
+            queue.append(child_id)
+    return descendants
+
+
+def _weapon_local_descendant_ids(db: Session, root_weapon_id: int) -> set[int]:
+    descendants: set[int] = set()
+    queue = [root_weapon_id]
+    while queue:
+        current_id = queue.pop(0)
+        children = (
+            db.execute(
+                select(models.Weapon.id).where(models.Weapon.placement_parent_id == current_id)
+            )
             .scalars()
             .all()
         )
@@ -478,9 +502,17 @@ def _weapon_tree_payload(weapon_rows: Iterable[dict]) -> list[dict]:
             for ability in ability_payload
         ]
         parent_name = weapon.parent.effective_name if weapon.parent else None
+        tree_parent_id = (
+            weapon.placement_parent_id
+            if weapon.placement_parent_id is not None
+            else weapon.parent_id
+        )
+        local_parent = node_map.get(tree_parent_id) if tree_parent_id is not None else None
+        if local_parent is not None:
+            parent_name = local_parent.get("name")
         node_map[weapon.id] = {
             "id": weapon.id,
-            "parent_id": weapon.parent_id,
+            "parent_id": tree_parent_id,
             "name": weapon.effective_name,
             "name_sort": (weapon.effective_name or "").casefold(),
             "range": range_text,
@@ -493,7 +525,7 @@ def _weapon_tree_payload(weapon_rows: Iterable[dict]) -> list[dict]:
             "cost": cost_float,
             "cost_display": f"{cost_float:.2f}",
             "overrides": overrides,
-            "has_parent": weapon.parent_id is not None,
+            "has_parent": tree_parent_id is not None,
             "parent_name": parent_name,
             "children": [],
             "level": 0,
@@ -547,13 +579,13 @@ def _weapon_tree_payload(weapon_rows: Iterable[dict]) -> list[dict]:
         node = node_map.get(weapon.id)
         if not node:
             continue
-        parent_id = weapon.parent_id
+        parent_id = node.get("parent_id")
         if parent_id and parent_id in node_map:
             node_map[parent_id]["children"].append(node)
         else:
             local_parent: dict | None = None
             parent = weapon.parent
-            if parent_id and parent is not None:
+            if weapon.parent_id and parent is not None:
                 visited_sources: set[int] = set()
                 current = parent
                 while current is not None:
@@ -1322,6 +1354,7 @@ def update_weapon(
     cleaned_notes_text = (notes or "").strip()
 
     original_parent_id = weapon.parent_id
+    original_placement_parent_id = weapon.placement_parent_id
     selected_parent_weapon: models.Weapon | None = None
 
     if action == "save":
@@ -1358,9 +1391,6 @@ def update_weapon(
             selected_parent_weapon_id = None
             selected_placement_parent_id = None
 
-        if selected_parent_weapon_id is None:
-            selected_parent_weapon_id = selected_placement_parent_id
-
         parent_chain_ids = {
             item.id for item in [armory, *_parent_chain(armory)] if item.id is not None
         }
@@ -1390,34 +1420,83 @@ def update_weapon(
                 },
             )
 
-        if (
-            selected_placement_parent_id is not None
-            and selected_placement_parent_id != selected_parent_weapon_id
-        ):
-            return templates.TemplateResponse(
-                "armory_weapon_form.html",
-                {
-                    "request": request,
-                    "user": current_user,
-                    "armory": armory,
-                    "weapon": weapon,
-                    "form_values": {
-                        "name": name,
-                        "range": range,
-                        "attacks": attacks,
-                        "ap": ap,
-                        "tags": _serialize_weapon_tags(ability_items),
-                        "notes": notes or "",
-                        "abilities": ability_items,
+        if selected_placement_parent_id is not None:
+            placement_parent = db.get(models.Weapon, selected_placement_parent_id)
+            if placement_parent is None or placement_parent.armory_id != armory.id:
+                return templates.TemplateResponse(
+                    "armory_weapon_form.html",
+                    {
+                        "request": request,
+                        "user": current_user,
+                        "armory": armory,
+                        "weapon": weapon,
+                        "form_values": {
+                            "name": name,
+                            "range": range,
+                            "attacks": attacks,
+                            "ap": ap,
+                            "tags": _serialize_weapon_tags(ability_items),
+                            "notes": notes or "",
+                            "abilities": ability_items,
+                        },
+                        "range_options": RANGE_OPTIONS,
+                        "parent_defaults": _weapon_form_values(weapon.parent) if weapon and weapon.parent else None,
+                        "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+                        "inheritance_panel": _weapon_inheritance_panel_context(db, armory, weapon),
+                        "error": "Lokalny parent musi należeć do bieżącej zbrojowni.",
+                        "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
                     },
-                    "range_options": RANGE_OPTIONS,
-                    "parent_defaults": _weapon_form_values(weapon.parent) if weapon and weapon.parent else None,
-                    "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
-                    "inheritance_panel": _weapon_inheritance_panel_context(db, armory, weapon),
-                    "error": "Niespójne dane parenta broni.",
-                    "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
-                },
-            )
+                )
+            if selected_placement_parent_id == weapon.id:
+                return templates.TemplateResponse(
+                    "armory_weapon_form.html",
+                    {
+                        "request": request,
+                        "user": current_user,
+                        "armory": armory,
+                        "weapon": weapon,
+                        "form_values": {
+                            "name": name,
+                            "range": range,
+                            "attacks": attacks,
+                            "ap": ap,
+                            "tags": _serialize_weapon_tags(ability_items),
+                            "notes": notes or "",
+                            "abilities": ability_items,
+                        },
+                        "range_options": RANGE_OPTIONS,
+                        "parent_defaults": _weapon_form_values(weapon.parent) if weapon and weapon.parent else None,
+                        "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+                        "inheritance_panel": _weapon_inheritance_panel_context(db, armory, weapon),
+                        "error": "Broń nie może wskazywać siebie jako lokalnego parenta.",
+                        "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
+                    },
+                )
+            if selected_placement_parent_id in _weapon_local_descendant_ids(db, weapon.id):
+                return templates.TemplateResponse(
+                    "armory_weapon_form.html",
+                    {
+                        "request": request,
+                        "user": current_user,
+                        "armory": armory,
+                        "weapon": weapon,
+                        "form_values": {
+                            "name": name,
+                            "range": range,
+                            "attacks": attacks,
+                            "ap": ap,
+                            "tags": _serialize_weapon_tags(ability_items),
+                            "notes": notes or "",
+                            "abilities": ability_items,
+                        },
+                        "range_options": RANGE_OPTIONS,
+                        "parent_defaults": _weapon_form_values(weapon.parent) if weapon and weapon.parent else None,
+                        "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+                        "inheritance_panel": _weapon_inheritance_panel_context(db, armory, weapon),
+                        "error": "Nie można ustawić potomka jako lokalnego parenta (blokada cykli).",
+                        "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
+                    },
+                )
 
         if not disable_inheritance_enabled and selected_parent_weapon_id is not None:
             selected_parent_weapon = db.get(models.Weapon, selected_parent_weapon_id)
@@ -1549,6 +1628,7 @@ def update_weapon(
             weapon.parent_id = selected_parent_weapon_id
         elif disable_inheritance_enabled:
             weapon.parent_id = None
+        weapon.placement_parent_id = selected_placement_parent_id
 
     if action == "create_weapon":
         new_weapon = models.Weapon(
@@ -1646,6 +1726,7 @@ def update_weapon(
             armory_id=armory.id,
             owner_id=armory.owner_id,
             parent_id=parent.id,
+            placement_parent_id=parent.id,
             army_id=None,
             name=variant_name,
             range=variant_range,
@@ -1777,6 +1858,8 @@ def update_weapon(
         except Exception:
             db.rollback()
             raise
+    elif action == "save" and weapon.placement_parent_id != original_placement_parent_id:
+        db.flush()
 
     if weapon.id is not None:
         from .armies import _weapon_spell_details

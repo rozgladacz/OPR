@@ -73,11 +73,11 @@ def _rebuild_weapons_table(connection, default_armory_id: int) -> None:
                 """
                 INSERT INTO weapons (
                     id, name, range, attacks, ap, tags, notes, cached_cost,
-                    owner_id, parent_id, armory_id, army_id, created_at, updated_at
+                    owner_id, parent_id, placement_parent_id, armory_id, army_id, created_at, updated_at
                 )
                 SELECT
                     id, name, range, attacks, ap, tags, notes, cached_cost,
-                    owner_id, parent_id, :armory_id, army_id, created_at, updated_at
+                    owner_id, parent_id, parent_id, :armory_id, army_id, created_at, updated_at
                 FROM weapons_old
                 """
             ),
@@ -307,12 +307,17 @@ def _migrate_schema() -> None:
             columns = inspector.get_columns("weapons")
             column_names = {column["name"] for column in columns}
             requires_armory_column = "armory_id" not in column_names
+            requires_placement_parent_column = "placement_parent_id" not in column_names
             inheritance_columns = {"name", "range", "attacks", "ap"}
             requires_nullable_update = any(
                 column["name"] in inheritance_columns and not column["nullable"]
                 for column in columns
             )
-            if requires_armory_column or requires_nullable_update:
+            if (
+                requires_armory_column
+                or requires_nullable_update
+                or requires_placement_parent_column
+            ):
                 _rebuild_weapons_table(connection, default_armory_id)
 
         if "armies" in table_names:

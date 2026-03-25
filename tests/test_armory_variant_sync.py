@@ -415,6 +415,246 @@ def test_create_weapon_variant_from_edit_creates_distinct_weapon_each_time():
         session.close()
 
 
+def test_update_weapon_supports_separate_inheritance_and_local_placement_parent():
+    session = _session()
+    try:
+        user = models.User(username="tester-local", password_hash="hash", is_admin=False)
+        base_armory = models.Armory(name="Base Local", owner=user)
+        variant_armory = models.Armory(name="Variant Local", owner=user, parent=base_armory)
+        session.add_all([user, base_armory, variant_armory])
+        session.flush()
+
+        base_root = models.Weapon(armory=base_armory, owner_id=user.id, name="Base Root")
+        base_child = models.Weapon(
+            armory=base_armory, owner_id=user.id, name="Base Child", parent=base_root
+        )
+        local_anchor = models.Weapon(
+            armory=variant_armory, owner_id=user.id, name="Local Anchor", attacks=1, ap=0
+        )
+        session.add_all([base_root, base_child, local_anchor])
+        session.flush()
+
+        utils.ensure_armory_variant_sync(session, variant_armory)
+        session.flush()
+
+        variant_child = (
+            session.execute(
+                select(models.Weapon).where(
+                    models.Weapon.armory_id == variant_armory.id,
+                    models.Weapon.parent_id == base_child.id,
+                )
+            )
+            .scalars()
+            .one()
+        )
+
+        request = _build_request(f"/armories/{variant_armory.id}/weapons/{variant_child.id}/edit")
+        response = armories_router.update_weapon(
+            armory_id=variant_armory.id,
+            weapon_id=variant_child.id,
+            request=request,
+            name=variant_child.effective_name,
+            range=variant_child.effective_range or "",
+            attacks=str(variant_child.display_attacks),
+            ap=str(variant_child.effective_ap),
+            abilities="[]",
+            notes=variant_child.effective_notes or "",
+            inheritance_mode=None,
+            inherit_armory_id=None,
+            inherit_parent_weapon_id=str(base_root.id),
+            placement_parent_id=str(local_anchor.id),
+            inheritance_source_armory_id=None,
+            inheritance_parent_weapon_id=None,
+            disable_inheritance=None,
+            action="save",
+            db=session,
+            current_user=user,
+        )
+
+        assert response.status_code == 303
+        session.refresh(variant_child)
+        assert variant_child.parent_id == base_root.id
+        assert variant_child.placement_parent_id == local_anchor.id
+
+        collection = utils.load_armory_weapons(session, variant_armory)
+        tree_lookup = _tree_parent_lookup(collection.tree)
+        assert tree_lookup[variant_child.id] == local_anchor.id
+    finally:
+        session.close()
+
+
+def test_update_weapon_disable_inheritance_keeps_local_placement_parent():
+    session = _session()
+    try:
+        user = models.User(username="tester-disable", password_hash="hash", is_admin=False)
+        base_armory = models.Armory(name="Base Disable", owner=user)
+        variant_armory = models.Armory(name="Variant Disable", owner=user, parent=base_armory)
+        session.add_all([user, base_armory, variant_armory])
+        session.flush()
+
+        base_weapon = models.Weapon(armory=base_armory, owner_id=user.id, name="Base Gun")
+        local_anchor = models.Weapon(
+            armory=variant_armory, owner_id=user.id, name="Local Node", attacks=1, ap=0
+        )
+        session.add_all([base_weapon, local_anchor])
+        session.flush()
+
+        utils.ensure_armory_variant_sync(session, variant_armory)
+        session.flush()
+
+        clone = (
+            session.execute(
+                select(models.Weapon).where(
+                    models.Weapon.armory_id == variant_armory.id,
+                    models.Weapon.parent_id == base_weapon.id,
+                )
+            )
+            .scalars()
+            .one()
+        )
+
+        request = _build_request(f"/armories/{variant_armory.id}/weapons/{clone.id}/edit")
+        response = armories_router.update_weapon(
+            armory_id=variant_armory.id,
+            weapon_id=clone.id,
+            request=request,
+            name=clone.effective_name,
+            range=clone.effective_range or "",
+            attacks=str(clone.display_attacks),
+            ap=str(clone.effective_ap),
+            abilities="[]",
+            notes=clone.effective_notes or "",
+            inheritance_mode=None,
+            inherit_armory_id=None,
+            inherit_parent_weapon_id=None,
+            placement_parent_id=str(local_anchor.id),
+            inheritance_source_armory_id=None,
+            inheritance_parent_weapon_id=None,
+            disable_inheritance="1",
+            action="save",
+            db=session,
+            current_user=user,
+        )
+
+        assert response.status_code == 303
+        session.refresh(clone)
+        assert clone.parent_id is None
+        assert clone.placement_parent_id == local_anchor.id
+    finally:
+        session.close()
+
+
+def test_update_weapon_sets_local_hierarchy_for_independent_weapon_in_payload():
+    session = _session()
+    try:
+        user = models.User(username="tester-placement", password_hash="hash", is_admin=False)
+        armory = models.Armory(name="Armory Placement", owner=user)
+        session.add_all([user, armory])
+        session.flush()
+
+        root = models.Weapon(armory=armory, owner_id=user.id, name="Root")
+        child = models.Weapon(armory=armory, owner_id=user.id, name="Child")
+        session.add_all([root, child])
+        session.flush()
+
+        request = _build_request(f"/armories/{armory.id}/weapons/{child.id}/edit")
+        response = armories_router.update_weapon(
+            armory_id=armory.id,
+            weapon_id=child.id,
+            request=request,
+            name=child.effective_name,
+            range=child.effective_range or "",
+            attacks=str(child.display_attacks),
+            ap=str(child.effective_ap),
+            abilities="[]",
+            notes=child.effective_notes or "",
+            inheritance_mode=None,
+            inherit_armory_id=None,
+            inherit_parent_weapon_id=None,
+            placement_parent_id=str(root.id),
+            inheritance_source_armory_id=None,
+            inheritance_parent_weapon_id=None,
+            disable_inheritance=None,
+            action="save",
+            db=session,
+            current_user=user,
+        )
+        assert response.status_code == 303
+
+        rows = [
+            {"instance": weapon, "overrides": {}, "cost": 0, "abilities": []}
+            for weapon in utils.load_armory_weapons(session, armory).items
+        ]
+        payload = armories_router._weapon_tree_payload(rows)
+        lookup = _tree_parent_lookup(payload)
+        assert lookup[child.id] == root.id
+    finally:
+        session.close()
+
+
+def test_local_placement_parent_changes_do_not_orphan_unit_or_spell_links():
+    session = _session()
+    try:
+        user = models.User(username="tester-links", password_hash="hash", is_admin=False)
+        ruleset = models.RuleSet(name="Default")
+        armory = models.Armory(name="Armory Links", owner=user)
+        army = models.Army(name="Army Links", owner=user, ruleset=ruleset, armory=armory)
+        parent = models.Weapon(armory=armory, owner_id=user.id, name="Parent")
+        child = models.Weapon(armory=armory, owner_id=user.id, name="Child")
+        spell = models.ArmySpell(
+            army=army,
+            kind="weapon",
+            weapon=child,
+            base_label="Spell Link",
+            description="desc",
+            cost=5,
+            position=0,
+        )
+        unit = models.Unit(
+            name="Unit Link",
+            owner=user,
+            army=army,
+            default_weapon=child,
+            quality=4,
+            defense=4,
+            toughness=1,
+        )
+        session.add_all([user, ruleset, armory, army, parent, child, spell, unit])
+        session.flush()
+
+        request = _build_request(f"/armories/{armory.id}/weapons/{child.id}/edit")
+        response = armories_router.update_weapon(
+            armory_id=armory.id,
+            weapon_id=child.id,
+            request=request,
+            name=child.effective_name,
+            range=child.effective_range or "",
+            attacks=str(child.display_attacks),
+            ap=str(child.effective_ap),
+            abilities="[]",
+            notes=child.effective_notes or "",
+            inheritance_mode=None,
+            inherit_armory_id=None,
+            inherit_parent_weapon_id=None,
+            placement_parent_id=str(parent.id),
+            inheritance_source_armory_id=None,
+            inheritance_parent_weapon_id=None,
+            disable_inheritance=None,
+            action="save",
+            db=session,
+            current_user=user,
+        )
+
+        assert response.status_code == 303
+        session.expire_all()
+        persisted_unit = session.get(models.Unit, unit.id)
+        persisted_spell = session.get(models.ArmySpell, spell.id)
+        assert persisted_unit is not None and persisted_unit.default_weapon_id == child.id
+        assert persisted_spell is not None and persisted_spell.weapon_id == child.id
+    finally:
+        session.close()
+
+
 def test_armory_view_variant_sync_cached_in_session():
     session = _session()
     try:
