@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}{% if weapon %}Edycja broni{% else %}Nowa broń{% endif %} - OPR{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-10 col-lg-10 col-xl-9 col-xxl-8">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">{% if weapon %}Edycja broni{% else %}Nowa broń{% endif %}</h5>
+        {% if armory.parent %}
+        <div class="alert alert-info">
+          Ten wariant dziedziczy wartości z listy bazowej
+          {% if weapon and weapon.parent %}
+          <a
+            class="alert-link"
+            href="/armories/{{ weapon.parent.armory_id }}/weapons/{{ weapon.parent.id }}/edit"
+          >
+            {{ weapon.parent.effective_name }}
+          </a>
+          z Zbrojowni „{{ weapon.parent.armory.name }}”
+          {% endif %}. Wprowadź nowe wartości,
+          aby je nadpisać – pozostawienie wartości zgodnych z bazą spowoduje korzystanie z oryginału.
+        </div>
+        {% endif %}
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        <form
+          method="post"
+          data-spell-weapon-form
+          {% if parent_defaults %}data-defaults='{{ parent_defaults | tojson }}'{% endif %}
+        >
+          <div class="mb-3">
+            <label class="form-label" for="name">Nazwa</label>
+            <input class="form-control" id="name" name="name" value="{{ form_values.name }}" required />
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label" for="range-choice">Zasięg</label>
+              <div class="range-picker" data-range-picker data-selected="{{ form_values.range | default('', true) }}">
+                <select class="form-select range-picker-select" id="range-choice">
+                  <option value="">Wybierz zasięg</option>
+                  {% for option in range_options %}
+                  <option value="{{ option.value }}">{{ option.label }}</option>
+                  {% endfor %}
+                  <option value="__custom__">Inny…</option>
+                </select>
+                <input class="form-control mt-2 range-picker-custom d-none" type="text" placeholder="Własny zasięg" />
+                <input
+                  class="range-picker-value"
+                  name="range"
+                  type="hidden"
+                  value="{{ form_values.range | default('', true) }}"
+                />
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="attacks">Ataki</label>
+              <div
+                class="number-picker"
+                data-number-picker
+                data-target-input="attacks"
+                data-selected="{{ form_values.attacks | default('', true) }}"
+                data-mode="float"
+              >
+                <select class="form-select number-picker-select">
+                  <option value="">Domyślne</option>
+                  {% for value in [1, 2, 3, 4, 5, 6] %}
+                  <option value="{{ value }}">{{ value }}</option>
+                  {% endfor %}
+                  <option value="__custom__">Inna…</option>
+                </select>
+                <input
+                  class="form-control mt-2 number-picker-custom d-none"
+                  type="number"
+                  step="0.1"
+                  placeholder="Własna wartość"
+                />
+                <input
+                  class="number-picker-value"
+                  id="attacks"
+                  name="attacks"
+                  type="hidden"
+                  value="{{ form_values.attacks | default('', true) }}"
+                />
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="ap">AP</label>
+              <div
+                class="number-picker"
+                data-number-picker
+                data-target-input="ap"
+                data-selected="{{ form_values.ap | default('', true) }}"
+              >
+                <select class="form-select number-picker-select">
+                  <option value="">Domyślne</option>
+                  {% for value in [-1, 0, 1, 2, 3, 4, 5] %}
+                  <option value="{{ value }}">{{ value }}</option>
+                  {% endfor %}
+                  <option value="__custom__">Inne…</option>
+                </select>
+                <input
+                  class="form-control mt-2 number-picker-custom d-none"
+                  type="number"
+                  step="1"
+                  placeholder="Własna wartość"
+                />
+                <input
+                  class="number-picker-value"
+                  id="ap"
+                  name="ap"
+                  type="hidden"
+                  value="{{ form_values.ap | default('', true) }}"
+                />
+              </div>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="weapon-abilities">Zdolności</label>
+            <div
+              class="ability-picker"
+              data-ability-picker
+              data-definitions='{{ weapon_abilities | tojson }}'
+              data-target-input="weapon-abilities"
+            >
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-6">
+                <select class="form-select ability-picker-select">
+                  <option value="">Wybierz zdolność</option>
+                  {% for ability in weapon_abilities %}
+                  <option
+                    value="{{ ability.slug }}"
+                    data-requires-value="{{ 'true' if ability.requires_value else 'false' }}"
+                    data-value-type="{{ ability.value_type or '' }}"
+                    title="{{ ability.description }}"
+                  >
+                    {{ ability.display_name }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-4 ability-picker-value d-none">
+                <select class="form-select ability-picker-value-select d-none"></select>
+                <input class="form-control ability-picker-value-input" type="text" placeholder="Wartość" />
+              </div>
+              <div class="col-sm-auto">
+                <div class="d-grid">
+                  <button class="btn btn-outline-primary ability-picker-add text-nowrap" type="button">Dodaj</button>
+                </div>
+              </div>
+            </div>
+              <div class="ability-picker-list mt-2"></div>
+            </div>
+            <input type="hidden" id="weapon-abilities" name="abilities" value='{{ form_values.abilities | tojson }}' />
+            <div class="form-text">Dodaj zdolności z listy. Wpisz wartość dla pozycji oznaczonych (X).</div>
+          </div>
+          {% if spell_cost is defined and spell_cost is not none %}
+          <div class="alert alert-info" role="alert">
+            Aktualny koszt zaklęcia broni: <strong data-spell-weapon-cost>{{ spell_cost }}</strong> pkt.
+          </div>
+          {% endif %}
+          <div class="mb-3">
+            <label class="form-label" for="notes">Notatki</label>
+            <textarea class="form-control" id="notes" name="notes" rows="3">{{ form_values.notes }}</textarea>
+          </div>
+          <div class="d-flex flex-wrap justify-content-end gap-2">
+            {% if parent_defaults %}
+            <button class="btn btn-outline-secondary" type="button" data-weapon-reset>Przywróć wartości domyślne</button>
+            {% endif %}
+            <a class="btn btn-secondary" href="{{ cancel_url | default('/armories/' ~ armory.id) }}">Anuluj</a>
+            {% if weapon and (allow_variants is not defined or allow_variants) %}
+            <button class="btn btn-outline-primary" type="submit" name="action" value="create_weapon">Nowa broń</button>
+            <button class="btn btn-outline-primary" type="submit" name="action" value="create_variant">Nowy wariant</button>
+            {% endif %}
+            <button class="btn btn-primary" type="submit" name="action" value="save">Zapisz</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

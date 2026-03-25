@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+{% block title %}Rozpiska {{ roster.name }} - OPR{% endblock %}
+{% block container_class %}container-fluid{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div class="d-flex align-items-center gap-2">
+    <h2 class="mb-0">Rozpiska: {{ roster.name }}</h2>
+    <button
+      class="btn btn-outline-primary btn-sm"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#roster-settings"
+      aria-expanded="false"
+      aria-controls="roster-settings"
+    >
+      Edycja
+    </button>
+  </div>
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <a class="btn btn-outline-secondary" href="/rosters">Wróć</a>
+    <a class="btn btn-success" href="/rosters/{{ roster.id }}/print" target="_blank">Widok do druku</a>
+    <a class="btn btn-outline-success" href="/rosters/{{ roster.id }}/pdf">Pobierz PDF</a>
+    <a class="btn btn-outline-success" href="/rosters/{{ roster.id }}/export/lista" target="_blank">Styl: lista</a>
+    <a class="btn btn-outline-success" href="/export/xlsx/{{ roster.id }}">Eksport XLSX</a>
+  </div>
+</div>
+
+<div class="collapse mb-4" id="roster-settings">
+  <div class="card">
+    <div class="card-body">
+      <h5 class="card-title">Informacje o rozpisce</h5>
+      <form method="post" action="/rosters/{{ roster.id }}/update" class="row g-3 align-items-end">
+        <div class="col-md-5">
+          <label class="form-label" for="name">Nazwa</label>
+          <input class="form-control" id="name" name="name" value="{{ roster.name }}" required {% if not can_edit %}disabled{% endif %} />
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Armia</label>
+          <input class="form-control" value="{{ roster.army.name }}" disabled />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" for="points_limit">Limit</label>
+          <input class="form-control" id="points_limit" name="points_limit" type="number" value="{{ roster.points_limit }}" {% if not can_edit %}disabled{% endif %} />
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-primary" type="submit" {% if not can_edit %}disabled{% endif %}>Zapisz</button>
+        </div>
+      </form>
+      <div class="mt-3">
+        <form method="post" action="/rosters/{{ roster.id }}/duplicate">
+          <button class="btn btn-outline-primary" type="submit">Utwórz kopię rozpiski</button>
+        </form>
+      </div>
+      {% if can_delete %}
+      <hr class="my-4" />
+      <form method="post" action="/rosters/{{ roster.id }}/delete" onsubmit="return confirm('Usunąć rozpiskę? Tej operacji nie można cofnąć.');">
+        <button class="btn btn-outline-danger" type="submit">Usuń rozpiskę</button>
+      </form>
+      {% endif %}
+      {% if not can_edit %}
+      <div class="alert alert-info mt-3">
+        Jest to rozpiska globalna. Modyfikacje są dostępne jedynie dla administratora.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div
+  class="row g-4"
+  data-roster-root
+  data-roster-id="{{ roster.id }}"
+  data-selected-id="{{ selected_id or '' }}"
+  data-roster-unit-datasets='{{ unit_payloads | tojson | e }}'
+  data-roster-lock-pairs='{{ lock_pairs | tojson | e }}'
+>
+  {% if can_edit %}
+  <div class="col-12 d-xl-none">
+    <button
+      class="btn btn-outline-primary w-100"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#roster-add-unit"
+      aria-expanded="false"
+      aria-controls="roster-add-unit"
+    >
+      Dodaj jednostkę
+    </button>
+  </div>
+  {% endif %}
+
+  {% if can_edit %}
+  <div class="col-12 col-xl-4 col-xxl-4">
+    <div class="collapse show d-xl-block" id="roster-add-unit">
+      <div class="card h-100">
+        <div class="card-body d-flex flex-column">
+          <h5 class="card-title">Jednostki w armii</h5>
+          <p class="text-muted small">
+            Wybierz jednostkę, aby dodać ją do rozpiski. Domyślnie dodawana jest typowa liczebność oddziału z podstawowym wyposażeniem.
+          </p>
+          <div class="flex-grow-1 overflow-auto roster-army-unit-list">
+            {% if available_units %}
+            <div class="list-group">
+              {% for entry in available_units %}
+              {% set unit = entry.unit %}
+              <form method="post" action="/rosters/{{ roster.id }}/units/add" class="list-group-item p-0 border-0">
+                <input type="hidden" name="unit_id" value="{{ unit.id }}" />
+                <input type="hidden" name="count" value="{{ entry.typical_models }}" />
+                <div
+                  class="position-relative roster-card p-3 border rounded h-100"
+                  data-roster-add-trigger
+                  role="button"
+                  tabindex="0"
+                  aria-label="Dodaj jednostkę {{ unit.name }}"
+                  data-unit-id="{{ unit.id }}"
+                >
+                  <span class="badge text-bg-light text-dark roster-cost-badge">
+                    {{ '{:g}'.format(entry.unit_cost_total) }} pkt ({{ entry.typical_models }}x {{ '{:g}'.format(entry.unit_cost_per_model) }} pkt/model)
+                  </span>
+                  <div class="fw-semibold">{{ unit.name }}</div>
+                  <div class="text-muted small">
+                    Jakość {{ unit.quality }} / Obrona {{ unit.defense }} / Wytrzymałość {{ unit.toughness }}
+                  </div>
+                  {% set passive_defaults = entry.passive_items | selectattr('default_count') | list %}
+                  {% set active_defaults = entry.active_items | selectattr('default_count') | list %}
+                  {% set aura_defaults = entry.aura_items | selectattr('default_count') | list %}
+                  <div class="d-flex flex-wrap gap-1 mt-2">
+                    {% for ability in passive_defaults %}
+                    <span class="badge text-bg-secondary" title="{{ ability.description }}">{{ ability.label }}</span>
+                    {% endfor %}
+                    {% for ability in active_defaults %}
+                    <span class="badge text-bg-info text-dark" title="{{ ability.description }}">{{ ability.label }}</span>
+                    {% endfor %}
+                    {% for ability in aura_defaults %}
+                    <span class="badge text-bg-warning text-dark" title="{{ ability.description }}">{{ ability.label }}</span>
+                    {% endfor %}
+                    {% if not passive_defaults and not active_defaults and not aura_defaults %}
+                    <span class="text-muted small">Brak dodatkowych zdolności</span>
+                    {% endif %}
+                  </div>
+                  <div class="text-muted small mt-2">Domyślne uzbrojenie: {{ entry.default_summary }}</div>
+                </div>
+              </form>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">Brak jednostek w wybranej armii.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="col-12 {% if can_edit %}col-xl-4 col-xxl-4{% else %}col-xl-7 col-xxl-8{% endif %}">
+    <div class="card h-100">
+      <div class="card-body d-flex flex-column" data-roster-items-container>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <h5 class="mb-0">Oddziały w rozpisce ({{ non_hero_unit_count }})</h5>
+          <div
+            class="text-muted small"
+            data-roster-total-container
+            {% if roster.points_limit %}data-limit="{{ roster.points_limit }}"{% endif %}
+          >
+            Suma punktów: <strong data-roster-total>{{ total_cost }}</strong>{% if roster.points_limit %}
+            / <span data-roster-limit>{{ roster.points_limit }}</span>{% endif %}
+          </div>
+        </div>
+        {% if roster_items %}
+          <div class="list-group roster-unit-list" data-roster-list>
+          {% for item in roster_items %}
+          {% set ru = item.instance %}
+          <div class="list-group-item border-0 px-0 py-2" data-roster-entry>
+            <div class="roster-unit-entry">
+              {% if can_edit %}
+              <div class="roster-unit-reorder">
+                <form
+                  method="post"
+                  action="/rosters/{{ roster.id }}/units/{{ ru.id }}/move"
+                  data-roster-move-form
+                >
+                  <input type="hidden" name="direction" value="up" />
+                  <button
+                    class="btn btn-outline-secondary btn-sm"
+                    type="submit"
+                    data-roster-move
+                    aria-label="Przesuń jednostkę w górę"
+                    {% if loop.first %}disabled{% endif %}
+                  >
+                    ↑
+                  </button>
+                </form>
+                <form
+                  method="post"
+                  action="/rosters/{{ roster.id }}/units/{{ ru.id }}/move"
+                  data-roster-move-form
+                >
+                  <input type="hidden" name="direction" value="down" />
+                  <button
+                    class="btn btn-outline-secondary btn-sm"
+                    type="submit"
+                    data-roster-move
+                    aria-label="Przesuń jednostkę w dół"
+                    {% if loop.last %}disabled{% endif %}
+                  >
+                    ↓
+                  </button>
+                </form>
+              </div>
+              {% endif %}
+              <div
+                class="roster-unit-item roster-card text-start position-relative flex-grow-1 border rounded p-3 bg-body"
+                data-roster-item
+                data-roster-unit-id="{{ ru.id }}"
+                data-unit-cache-id="{{ ru.unit.id }}"
+                data-unit-name="{{ ru.unit.name }}"
+                data-unit-count="{{ ru.count }}"
+                data-unit-cost="{{ ru.cached_cost }}"
+                data-base-cost-per-model="{{ item.base_cost_per_model }}"
+                data-unit-quality="{{ ru.unit.quality }}"
+                data-unit-defense="{{ ru.unit.defense }}"
+                data-unit-toughness="{{ ru.unit.toughness }}"
+                data-unit-custom-name="{{ ru.custom_name or '' }}"
+                data-unit-flags='{{ item.unit_flags | default('', true) | e }}'
+                data-selected-passives='{{ item.selected_passive_items | tojson | e }}'
+                data-selected-actives='{{ item.selected_active_items | tojson | e }}'
+                data-selected-auras='{{ item.selected_aura_items | tojson | e }}'
+                data-loadout='{{ item.loadout | tojson | e }}'
+                data-unit-classification='{{ item.classification | tojson | e }}'
+                role="button"
+                tabindex="0"
+              >
+                <span class="badge text-bg-primary roster-cost-badge" data-roster-unit-cost>{{ ru.cached_cost }} pkt</span>
+                <div class="fw-semibold" data-roster-unit-title>{{ ru.count }}x {{ ru.unit.name }}</div>
+                <div class="text-muted small {% if not ru.custom_name %}d-none{% endif %}" data-roster-unit-custom>
+                  {{ ru.custom_name }}
+                </div>
+                <div class="text-muted small">
+                  Jakość {{ ru.unit.quality }} / Obrona {{ ru.unit.defense }} / Wytrzymałość {{ ru.unit.toughness }}
+                </div>
+                {% set selected_passives = item.selected_passive_items or [] %}
+                {% set selected_actives = item.selected_active_items or [] %}
+                {% set selected_auras = item.selected_aura_items or [] %}
+                <div class="d-flex flex-wrap gap-1 mt-2" data-roster-unit-abilities>
+                {% for ability in selected_passives if not ability.get('is_army_rule') %}
+                {% set base_label = ability.label or ability.raw or ability.slug %}
+                  {% if ability.custom_name %}
+                  {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+                  {% else %}
+                  {% set display_label = base_label %}
+                  {% endif %}
+                  <span class="badge text-bg-secondary" title="{{ ability.description }}">{{ display_label }}</span>
+                  {% endfor %}
+                  {% for ability in selected_actives %}
+                  {% set base_label = ability.label or ability.raw or ability.slug %}
+                  {% if ability.custom_name %}
+                  {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+                  {% else %}
+                  {% set display_label = base_label %}
+                  {% endif %}
+                  <span class="badge text-bg-info text-dark" title="{{ ability.description }}">{{ display_label }}{% if ability.count and ability.count|int > 1 %} ×{{ ability.count }}{% endif %}</span>
+                  {% endfor %}
+                  {% for ability in selected_auras %}
+                  {% set base_label = ability.label or ability.raw or ability.slug %}
+                  {% if ability.custom_name %}
+                  {% set display_label = ability.custom_name ~ (base_label and ' [' ~ base_label ~ ']' or '') %}
+                  {% else %}
+                  {% set display_label = base_label %}
+                  {% endif %}
+                  <span class="badge text-bg-warning text-dark" title="{{ ability.description }}">{{ display_label }}{% if ability.count and ability.count|int > 1 %} ×{{ ability.count }}{% endif %}</span>
+                  {% endfor %}
+                  {% if not selected_passives and not selected_actives and not selected_auras %}
+                  <span class="text-muted small">Brak dodatkowych zdolności</span>
+                  {% endif %}
+                </div>
+                <div class="text-muted small mt-2" data-roster-unit-loadout>
+                  Uzbrojenie:
+                  {% if item.loadout_summary %}
+                  {{ item.loadout_summary }}
+                  {% else %}
+                  {{ item.default_summary }}
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-muted" data-roster-empty>Dodaj jednostki aby rozpocząć budowę rozpiski.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 {% if can_edit %}col-xl-4 col-xxl-4{% else %}col-xl-5 col-xxl-4{% endif %}">
+    <div class="card h-100">
+      <div class="card-body d-flex flex-column">
+        <h5 class="card-title">Dostosuj oddział</h5>
+        <div class="text-muted" data-roster-editor-empty>
+          Wybierz oddział z listy, aby zobaczyć szczegóły i opcje dostosowania.
+        </div>
+        <div class="d-none flex-grow-1 d-flex flex-column" data-roster-editor>
+          <div class="mb-3 d-flex justify-content-between align-items-start gap-3 flex-wrap">
+            <div class="d-flex flex-column gap-1">
+              <h6 class="mb-0" data-roster-editor-name></h6>
+              <div
+                class="text-muted small"
+                data-roster-editor-custom-label
+                data-placeholder="Kliknij, aby nazwać oddział"
+                role="button"
+                tabindex="0"
+              ></div>
+              <div class="text-muted small" data-roster-editor-stats></div>
+              <div class="text-muted small d-none" data-roster-editor-role></div>
+            </div>
+            <span class="badge text-bg-primary" data-roster-editor-cost-badge>
+              <span data-roster-editor-cost></span> pkt
+            </span>
+          </div>
+          {% if can_edit %}
+          <form method="post" class="d-flex flex-column flex-grow-1" data-roster-editor-form>
+            <input type="hidden" name="custom_name" data-roster-editor-custom-name />
+            <div class="mb-3">
+              <label class="form-label" for="roster-editor-count">Modele</label>
+              <input
+                class="form-control"
+                id="roster-editor-count"
+                name="count"
+                type="number"
+                min="1"
+                required
+                data-roster-editor-count
+              />
+            </div>
+            <div class="flex-grow-1 d-flex flex-column gap-3">
+              <div class="mb-0" data-roster-section>
+                <div class="fw-semibold small text-uppercase text-muted">Zdolności pasywne</div>
+                <div class="roster-ability-list" data-roster-editor-passives></div>
+              </div>
+              <div class="mb-0" data-roster-section>
+                <div class="fw-semibold small text-uppercase text-muted">Zdolności aktywne</div>
+                <div class="roster-ability-list" data-roster-editor-actives></div>
+              </div>
+              <div class="mb-0" data-roster-section>
+                <div class="fw-semibold small text-uppercase text-muted">Aury</div>
+                <div class="roster-ability-list" data-roster-editor-auras></div>
+              </div>
+              <div class="mb-0" data-roster-section>
+                <div class="fw-semibold small text-uppercase text-muted">Wyposażenie oddziału</div>
+                <div class="roster-ability-list" data-roster-editor-loadout></div>
+              </div>
+            </div>
+            <input type="hidden" name="loadout_json" data-roster-editor-loadout-input />
+            <div class="mt-3 d-flex justify-content-end align-items-center flex-wrap gap-2">
+              <div class="text-muted small" data-roster-editor-save-state></div>
+            </div>
+          </form>
+          <div class="mt-3 d-flex flex-wrap gap-2">
+            <form method="post" data-roster-editor-duplicate>
+              <button class="btn btn-outline-secondary" type="submit">Duplikuj oddział</button>
+            </form>
+            <form method="post" data-roster-editor-delete onsubmit="return confirm('Usunąć pozycję?');">
+              <button class="btn btn-outline-danger" type="submit">Usuń oddział</button>
+            </form>
+          </div>
+          {% else %}
+          <div class="flex-grow-1 d-flex flex-column gap-3">
+            <div data-roster-section>
+              <div class="fw-semibold small text-uppercase text-muted">Zdolności pasywne</div>
+              <div class="roster-ability-list" data-roster-editor-passives></div>
+            </div>
+            <div data-roster-section>
+              <div class="fw-semibold small text-uppercase text-muted">Zdolności aktywne</div>
+              <div class="roster-ability-list" data-roster-editor-actives></div>
+            </div>
+            <div data-roster-section>
+              <div class="fw-semibold small text-uppercase text-muted">Aury</div>
+              <div class="roster-ability-list" data-roster-editor-auras></div>
+            </div>
+            <div data-roster-section>
+              <div class="fw-semibold small text-uppercase text-muted">Wyposażenie oddziału</div>
+              <div class="roster-ability-list" data-roster-editor-loadout></div>
+            </div>
+          </div>
+          <div class="alert alert-info mt-auto mb-0">Tylko podgląd – brak dostępu do edycji.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

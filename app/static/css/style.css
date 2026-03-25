@@ -1,0 +1,245 @@
+body {
+  background-color: #f8f9fa;
+}
+
+.navbar-brand {
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.table-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font-weight: 600;
+  color: inherit;
+}
+
+.table-sort-btn:hover,
+.table-sort-btn:focus {
+  color: var(--bs-primary);
+}
+
+.table-sort-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  border-radius: 0.25rem;
+}
+
+.table-sort-indicator {
+  width: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+.roster-card {
+  position: relative;
+  padding-top: 0.5rem;
+}
+
+.roster-unit-item.roster-card {
+  border: 2px solid #0d6efd;
+  box-shadow: inset 0 0 0 2px rgba(13, 110, 253, 0.2);
+}
+
+.roster-cost-badge {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+}
+
+.roster-unit-list .roster-unit-item.active {
+  border-color: rgba(13, 110, 253, 0.5);
+  background-color: rgba(13, 110, 253, 0.08);
+}
+
+.roster-unit-entry {
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.roster-unit-reorder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.roster-unit-reorder .btn {
+  padding: 0.25rem 0.5rem;
+  line-height: 1;
+}
+
+.roster-unit-item[data-roster-item] {
+  cursor: pointer;
+}
+
+.roster-unit-item[data-roster-item]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.roster-ability-list {
+  min-height: 2rem;
+}
+
+.roster-ability-item {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background-color: var(--bs-body-bg);
+}
+
+.roster-ability-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.roster-ability-cost {
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+}
+
+.roster-ability-details {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.roster-ability-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.weapon-default-group {
+  flex: 0 0 auto;
+  min-width: 9rem;
+}
+
+.weapon-default-count-input {
+  width: 4.5rem;
+}
+
+.weapon-picker-tree-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.weapon-picker-tree-trigger {
+  position: relative;
+  min-height: calc(2.25rem + 2px);
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.weapon-picker-tree-trigger.weapon-tree-trigger-open {
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb, 13, 110, 253), 0.25);
+}
+
+.weapon-picker-tree-trigger-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.weapon-picker-tree-trigger-caret {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color, var(--bs-gray-600));
+  pointer-events: none;
+  transition: transform 0.2s ease-in-out;
+}
+
+.weapon-picker-tree-trigger.weapon-tree-trigger-open
+  .weapon-picker-tree-trigger-caret {
+  transform: rotate(180deg);
+}
+
+.weapon-picker-tree-container {
+  width: 100%;
+}
+
+.weapon-picker-tree-container.weapon-tree-container-open {
+  margin-top: 0;
+}
+
+
+.roster-mode-indicator {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.roster-count-input {
+  max-width: 5rem;
+}
+
+.roster-army-unit-list {
+  max-height: 60vh;
+}
+
+@media (min-width: 1200px) {
+  .roster-army-unit-list {
+    max-height: none;
+  }
+}
+
+[data-roster-add-trigger] {
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+[data-roster-add-trigger]:hover,
+[data-roster-add-trigger]:focus-visible {
+  background-color: rgba(13, 110, 253, 0.08);
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+  outline: none;
+}
+
+.armory-tree-row.armory-tree-highlight {
+  background-color: var(--bs-warning-bg-subtle, #fff3cd);
+  border-color: var(--bs-warning-border-subtle, rgba(217, 164, 6, 0.5)) !important;
+  box-shadow: inset 0 0 0 1px var(--bs-warning-border-subtle, rgba(217, 164, 6, 0.5));
+  scroll-margin-top: 4rem;
+}
+
+.print-header,
+.print-footer {
+  text-align: center;
+}
+
+@media print {
+  body {
+    background: white;
+  }
+  nav,
+  .btn,
+  a[href]::after {
+    display: none !important;
+  }
+  .container {
+    max-width: 100%;
+  }
+  .card {
+    page-break-inside: avoid;
+  }
+}
