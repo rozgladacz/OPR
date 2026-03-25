@@ -120,11 +120,21 @@ class Weapon(TimestampMixin, Base):
     cached_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("weapons.id"), nullable=True)
+    placement_parent_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("weapons.id"), nullable=True
+    )
     armory_id: Mapped[int] = mapped_column(ForeignKey("armories.id"), nullable=False)
     army_id: Mapped[Optional[int]] = mapped_column(ForeignKey("armies.id"), nullable=True)
 
     owner: Mapped[Optional[User]] = relationship(back_populates="weapons", foreign_keys=[owner_id])
-    parent: Mapped[Optional["Weapon"]] = relationship(remote_side="Weapon.id")
+    parent: Mapped[Optional["Weapon"]] = relationship(
+        remote_side="Weapon.id",
+        foreign_keys=[parent_id],
+    )
+    placement_parent: Mapped[Optional["Weapon"]] = relationship(
+        remote_side="Weapon.id",
+        foreign_keys=[placement_parent_id],
+    )
     armory: Mapped[Armory] = relationship(back_populates="weapons")
     army: Mapped[Optional["Army"]] = relationship(back_populates="weapons")
     units: Mapped[List["Unit"]] = relationship(back_populates="default_weapon")

@@ -8,18 +8,119 @@
       <div class="card-body">
         <h5 class="card-title">{% if weapon %}Edycja broni{% else %}Nowa broń{% endif %}</h5>
         {% if armory.parent %}
-        <div class="alert alert-info">
-          Ten wariant dziedziczy wartości z listy bazowej
-          {% if weapon and weapon.parent %}
-          <a
-            class="alert-link"
-            href="/armories/{{ weapon.parent.armory_id }}/weapons/{{ weapon.parent.id }}/edit"
-          >
-            {{ weapon.parent.effective_name }}
-          </a>
-          z Zbrojowni „{{ weapon.parent.armory.name }}”
-          {% endif %}. Wprowadź nowe wartości,
-          aby je nadpisać – pozostawienie wartości zgodnych z bazą spowoduje korzystanie z oryginału.
+        {% set inheritance_data = inheritance_panel | default({}, true) %}
+        {% set source_armories = inheritance_data.source_armories | default([], true) %}
+        {% set parent_weapon_options = inheritance_data.parent_weapon_options | default([], true) %}
+        {% set hierarchy_options = inheritance_data.hierarchy_options | default([], true) %}
+        <div class="alert alert-info mb-2">
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <div>
+              Ten wariant dziedziczy wartości z listy bazowej
+              {% if weapon and weapon.parent %}
+              <a
+                class="alert-link"
+                href="/armories/{{ weapon.parent.armory_id }}/weapons/{{ weapon.parent.id }}/edit"
+              >
+                {{ weapon.parent.effective_name }}
+              </a>
+              z Zbrojowni „{{ weapon.parent.armory.name }}”
+              {% endif %}. Wprowadź nowe wartości,
+              aby je nadpisać – pozostawienie wartości zgodnych z bazą spowoduje korzystanie z oryginału.
+            </div>
+            <button
+              class="btn btn-sm btn-outline-primary ms-auto"
+              type="button"
+              data-inheritance-edit-toggle
+              data-inheritance-panel-id="weapon-inheritance-editor"
+              aria-controls="weapon-inheritance-editor"
+              aria-expanded="false"
+            >
+              Edytuj
+            </button>
+          </div>
+          {% if inheritance_data.current_parent_hint %}
+          <div class="small mt-2">
+            Aktualny parent:
+            ID {{ inheritance_data.current_parent_hint.id }},
+            {{ inheritance_data.current_parent_hint.name }}
+            (zbrojownia: {{ inheritance_data.current_parent_hint.armory_name }}).
+          </div>
+          {% endif %}
+        </div>
+        <div
+          class="card border-info-subtle mb-3 d-none"
+          id="weapon-inheritance-editor"
+          data-inheritance-panel
+          data-source-weapon-trees='{{ inheritance_data.source_weapon_trees | default({}, true) | tojson }}'
+          {% if weapon and weapon.id %}
+          data-current-weapon-id="{{ weapon.id }}"
+          {% endif %}
+        >
+          <div class="card-body">
+            <h6 class="card-title mb-3">Konfiguracja dziedziczenia</h6>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="inheritance-source-armory">Zbrojownia źródłowa</label>
+                <select
+                  class="form-select"
+                  id="inheritance-source-armory"
+                  name="inheritance_source_armory_id"
+                  data-inheritance-source-armory
+                >
+                  {% for source in source_armories %}
+                  <option
+                    value="{{ source.id }}"
+                    {% if source.id == inheritance_data.selected_source_armory_id %}selected{% endif %}
+                  >
+                    {{ "— " * source.depth }}{{ source.name }}{% if source.is_current %} (bieżąca){% endif %}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-6" data-inheritance-linked-field>
+                <label class="form-label" for="inheritance-parent-weapon">Broń nadrzędna</label>
+                {% set weapon_tree_placeholder = "Wybierz broń nadrzędną" %}
+                {% include "components/weapon_tree_picker.html" %}
+                <select class="form-select d-none" id="inheritance-parent-weapon" name="inheritance_parent_weapon_id" data-inheritance-parent-weapon>
+                  <option value="">Wybierz broń nadrzędną</option>
+                  {% for option in parent_weapon_options %}
+                  <option value="{{ option.id }}" data-armory-id="{{ option.armory_id }}" {% if option.id == inheritance_data.selected_parent_weapon_id %}selected{% endif %}>
+                    {{ option.name }} — {{ option.armory_name }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-12">
+                <div class="form-check form-switch">
+                  <input
+                    class="form-check-input"
+                    id="disable-weapon-inheritance"
+                    name="disable_inheritance"
+                    type="checkbox"
+                    value="1"
+                    data-disable-inheritance
+                    {% if inheritance_data.disable_inheritance %}checked{% endif %}
+                  />
+                  <label class="form-check-label" for="disable-weapon-inheritance">
+                    Wyłącz dziedziczenie (utwórz niezależną broń)
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-8" data-inheritance-linked-field>
+                <label class="form-label" for="inheritance-hierarchy-position">Miejsce w hierarchii bieżącej zbrojowni</label>
+                <select
+                  class="form-select"
+                  id="inheritance-hierarchy-position"
+                  name="placement_parent_id"
+                >
+                  <option value="">Poziom główny (bez rodzica)</option>
+                  {% for option in hierarchy_options %}
+                  <option value="{{ option.id }}" {% if option.id == inheritance_data.selected_placement_parent_id %}selected{% endif %}>{{ option.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
         {% endif %}
         {% if error %}
