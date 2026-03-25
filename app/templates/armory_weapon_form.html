@@ -38,8 +38,24 @@
               Edytuj
             </button>
           </div>
+          {% if inheritance_data.current_parent_hint %}
+          <div class="small mt-2">
+            Aktualny parent:
+            ID {{ inheritance_data.current_parent_hint.id }},
+            {{ inheritance_data.current_parent_hint.name }}
+            (zbrojownia: {{ inheritance_data.current_parent_hint.armory_name }}).
+          </div>
+          {% endif %}
         </div>
-        <div class="card border-info-subtle mb-3 d-none" id="weapon-inheritance-editor" data-inheritance-panel>
+        <div
+          class="card border-info-subtle mb-3 d-none"
+          id="weapon-inheritance-editor"
+          data-inheritance-panel
+          data-source-weapon-trees='{{ inheritance_data.source_weapon_trees | default({}, true) | tojson }}'
+          {% if weapon and weapon.id %}
+          data-current-weapon-id="{{ weapon.id }}"
+          {% endif %}
+        >
           <div class="card-body">
             <h6 class="card-title mb-3">Konfiguracja dziedziczenia</h6>
             <div class="row g-3">
@@ -63,19 +79,12 @@
               </div>
               <div class="col-md-6" data-inheritance-linked-field>
                 <label class="form-label" for="inheritance-parent-weapon">Broń nadrzędna</label>
-                <select
-                  class="form-select"
-                  id="inheritance-parent-weapon"
-                  name="inheritance_parent_weapon_id"
-                  data-inheritance-parent-weapon
-                >
+                {% set weapon_tree_placeholder = "Wybierz broń nadrzędną" %}
+                {% include "components/weapon_tree_picker.html" %}
+                <select class="form-select d-none" id="inheritance-parent-weapon" name="inheritance_parent_weapon_id" data-inheritance-parent-weapon>
                   <option value="">Wybierz broń nadrzędną</option>
                   {% for option in parent_weapon_options %}
-                  <option
-                    value="{{ option.id }}"
-                    data-armory-id="{{ option.armory_id }}"
-                    {% if option.id == inheritance_data.selected_parent_weapon_id %}selected{% endif %}
-                  >
+                  <option value="{{ option.id }}" data-armory-id="{{ option.armory_id }}" {% if option.id == inheritance_data.selected_parent_weapon_id %}selected{% endif %}>
                     {{ option.name }} — {{ option.armory_name }}
                   </option>
                   {% endfor %}

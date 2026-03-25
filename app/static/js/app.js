@@ -1507,6 +1507,22 @@ function initInheritanceEditor() {
     const linkedFields = Array.from(panel.querySelectorAll('[data-inheritance-linked-field]'));
     const sourceArmorySelect = panel.querySelector('[data-inheritance-source-armory]');
     const parentWeaponSelect = panel.querySelector('[data-inheritance-parent-weapon]');
+    const treeRoot = panel.querySelector('[data-weapon-tree]');
+    const treeTrigger = panel.querySelector('[data-weapon-tree-trigger]');
+    const treeContainer = panel.querySelector('[data-weapon-tree-container]');
+    const treeLabel = panel.querySelector('[data-weapon-tree-label]');
+    const sourceWeaponTrees = (() => {
+      const raw = panel.dataset.sourceWeaponTrees || '{}';
+      try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch (error) {
+        console.warn('Nie udało się odczytać drzew źródłowych broni.', error);
+        return {};
+      }
+    })();
+    const currentWeaponId = Number.parseInt(panel.dataset.currentWeaponId || '', 10);
+    let selectedWeaponId = parentWeaponSelect ? parentWeaponSelect.value : '';
 
     const syncPanelVisibility = (expanded) => {
       panel.classList.toggle('d-none', !expanded);
@@ -1519,6 +1535,105 @@ function initInheritanceEditor() {
       const disabled = Boolean(disableInheritanceInput && disableInheritanceInput.checked);
       linkedFields.forEach((field) => {
         field.classList.toggle('d-none', disabled);
+      });
+    };
+
+    const collectDescendants = (nodes, rootId) => {
+      const descendants = new Set();
+      const queue = [...(Array.isArray(nodes) ? nodes : [])];
+      while (queue.length) {
+        const node = queue.shift();
+        if (!node || typeof node !== 'object') {
+          continue;
+        }
+        const nodeId = Number.parseInt(node.id, 10);
+        if (Number.isFinite(nodeId) && nodeId === rootId) {
+          const childQueue = [...(Array.isArray(node.children) ? node.children : [])];
+          while (childQueue.length) {
+            const child = childQueue.shift();
+            const childId = Number.parseInt(child?.id, 10);
+            if (!Number.isFinite(childId)) {
+              continue;
+            }
+            descendants.add(String(childId));
+            if (Array.isArray(child.children) && child.children.length) {
+              childQueue.push(...child.children);
+            }
+          }
+        }
+        if (Array.isArray(node.children) && node.children.length) {
+          queue.push(...node.children);
+        }
+      }
+      return descendants;
+    };
+
+    const renderParentTree = () => {
+      if (!treeRoot || !sourceArmorySelect || !parentWeaponSelect) {
+        return;
+      }
+      const selectedSourceId = sourceArmorySelect.value || '';
+      const treeNodes = sourceWeaponTrees[selectedSourceId] || [];
+      const blockedIds = Number.isFinite(currentWeaponId)
+        ? collectDescendants(treeNodes, currentWeaponId)
+        : new Set();
+      if (Number.isFinite(currentWeaponId)) {
+        blockedIds.add(String(currentWeaponId));
+      }
+
+      treeRoot.innerHTML = '';
+      if (!Array.isArray(treeNodes) || !treeNodes.length) {
+        const empty = document.createElement('p');
+        empty.className = 'text-muted mb-0 fst-italic small';
+        empty.textContent = 'Brak dostępnego uzbrojenia.';
+        treeRoot.appendChild(empty);
+        return;
+      }
+
+      const createNode = (node) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'd-flex flex-column gap-1';
+        const id = Number.parseInt(node.id, 10);
+        const disabled = blockedIds.has(String(id));
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-sm btn-outline-secondary text-start';
+        button.textContent = node.name || `Broń #${id}`;
+        button.disabled = disabled;
+        button.title = disabled
+          ? 'Ta broń nie może być parentem (self/potomek).'
+          : node.name || '';
+        button.addEventListener('click', () => {
+          if (!Number.isFinite(id)) {
+            return;
+          }
+          selectedWeaponId = String(id);
+          parentWeaponSelect.value = selectedWeaponId;
+          if (treeLabel) {
+            treeLabel.textContent = node.name || `Broń #${id}`;
+          }
+          if (treeTrigger) {
+            treeTrigger.hidden = false;
+            treeTrigger.classList.remove('d-none');
+          }
+          if (treeContainer) {
+            treeContainer.hidden = true;
+            treeContainer.classList.add('d-none');
+          }
+        });
+        wrapper.appendChild(button);
+
+        if (Array.isArray(node.children) && node.children.length) {
+          const children = document.createElement('div');
+          children.className = 'ps-3 d-flex flex-column gap-1';
+          node.children.forEach((child) => children.appendChild(createNode(child)));
+          wrapper.appendChild(children);
+        }
+        return wrapper;
+      };
+
+      treeNodes.forEach((node) => {
+        treeRoot.appendChild(createNode(node));
       });
     };
 
@@ -1540,8 +1655,14 @@ function initInheritanceEditor() {
         const selectedOption = parentWeaponSelect.selectedOptions[0];
         if (selectedOption.hidden) {
           parentWeaponSelect.value = '';
+          selectedWeaponId = '';
         }
       }
+      const activeOption = parentWeaponSelect.selectedOptions[0];
+      if (treeLabel) {
+        treeLabel.textContent = activeOption?.textContent?.split(' — ')[0] || 'Wybierz broń nadrzędną';
+      }
+      renderParentTree();
     };
 
     toggles.forEach((toggle) => {
@@ -1555,6 +1676,26 @@ function initInheritanceEditor() {
     }
     if (sourceArmorySelect) {
       sourceArmorySelect.addEventListener('change', filterParentWeapons);
+    }
+    if (treeTrigger && treeContainer) {
+      treeTrigger.addEventListener('click', (event) => {
+        event.preventDefault();
+        treeTrigger.hidden = true;
+        treeTrigger.classList.add('d-none');
+        treeContainer.hidden = false;
+        treeContainer.classList.remove('d-none');
+      });
+    }
+    if (treeRoot && treeTrigger && treeContainer) {
+      treeRoot.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') {
+          return;
+        }
+        treeContainer.hidden = true;
+        treeContainer.classList.add('d-none');
+        treeTrigger.hidden = false;
+        treeTrigger.classList.remove('d-none');
+      });
     }
 
     syncPanelVisibility(false);
