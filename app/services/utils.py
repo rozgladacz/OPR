@@ -36,6 +36,12 @@ class WeaponTreeNode(TypedDict):
     children: list["WeaponTreeNode"]
 
 
+def _local_tree_parent_id(weapon: models.Weapon) -> int | None:
+    if weapon.placement_parent_id is not None:
+        return weapon.placement_parent_id
+    return weapon.parent_id
+
+
 @dataclass(slots=True)
 class ArmoryWeaponCollection:
     items: list[models.Weapon]
@@ -105,7 +111,7 @@ def _build_weapon_tree(
                 depth += 1
 
     for weapon in weapons:
-        parent_id = weapon.parent_id
+        parent_id = _local_tree_parent_id(weapon)
         assigned_parent_id: int | None = None
         if parent_id is not None and parent_id in weapon_map:
             assigned_parent_id = parent_id
@@ -136,10 +142,15 @@ def _build_weapon_tree(
         nodes: list[WeaponTreeNode] = []
         for item in sorted(candidates, key=_weapon_sort_key):
             ordered_weapons.append(item)
-            parent = item.parent
-            has_parent = item.parent_id is not None
+            tree_parent_id = _local_tree_parent_id(item)
+            parent = (
+                weapon_map.get(tree_parent_id)
+                if tree_parent_id is not None and tree_parent_id in weapon_map
+                else item.parent
+            )
+            has_parent = tree_parent_id is not None
             has_external_parent = bool(
-                has_parent and (item.parent_id not in weapon_map)
+                has_parent and (tree_parent_id not in weapon_map)
             )
             parent_name = parent.effective_name if parent else None
             parent_armory_id = parent.armory_id if parent else None
@@ -152,7 +163,7 @@ def _build_weapon_tree(
             node: WeaponTreeNode = {
                 "id": item.id,
                 "name": item.effective_name,
-                "parent_id": item.parent_id,
+                "parent_id": tree_parent_id,
                 "parent_name": parent_name,
                 "parent_armory_id": parent_armory_id,
                 "parent_armory_name": parent_armory_name,
@@ -170,10 +181,15 @@ def _build_weapon_tree(
         remaining = [weapon for weapon in weapons if weapon not in ordered_weapons]
         for item in sorted(remaining, key=_weapon_sort_key):
             ordered_weapons.append(item)
-            parent = item.parent
-            has_parent = item.parent_id is not None
+            tree_parent_id = _local_tree_parent_id(item)
+            parent = (
+                weapon_map.get(tree_parent_id)
+                if tree_parent_id is not None and tree_parent_id in weapon_map
+                else item.parent
+            )
+            has_parent = tree_parent_id is not None
             has_external_parent = bool(
-                has_parent and (item.parent_id not in weapon_map)
+                has_parent and (tree_parent_id not in weapon_map)
             )
             parent_name = parent.effective_name if parent else None
             parent_armory_id = parent.armory_id if parent else None
@@ -187,7 +203,7 @@ def _build_weapon_tree(
                 {
                     "id": item.id,
                     "name": item.effective_name,
-                    "parent_id": item.parent_id,
+                    "parent_id": tree_parent_id,
                     "parent_name": parent_name,
                     "parent_armory_id": parent_armory_id,
                     "parent_armory_name": parent_armory_name,
@@ -583,6 +599,7 @@ def ensure_armory_variant_sync(
             armory=armory,
             owner_id=armory.owner_id,
             parent=parent_weapon,
+            placement_parent_id=parent_weapon.id,
             name=None,
             range=None,
             attacks=(
@@ -646,7 +663,10 @@ def ensure_armory_variant_sync(
         if parent.armory_id != armory.id and parent.armory_id != armory.parent_id:
             local_parent = _find_local_parent_candidate_for_variant(db, armory, parent)
             if local_parent is not None and local_parent.id != weapon.id:
+                previous_parent_id = weapon.parent_id
                 weapon.parent_id = local_parent.id
+                if weapon.placement_parent_id == previous_parent_id:
+                    weapon.placement_parent_id = local_parent.id
                 parent = local_parent
                 cleaned = True
 
