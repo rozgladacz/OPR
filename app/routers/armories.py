@@ -1240,6 +1240,10 @@ def update_weapon(
     abilities: str | None = Form(None),
 
     notes: str | None = Form(None),
+    inheritance_mode: str | None = Form(None),
+    inherit_armory_id: str | None = Form(None),
+    inherit_parent_weapon_id: str | None = Form(None),
+    placement_parent_id: str | None = Form(None),
     inheritance_source_armory_id: str | None = Form(None),
     inheritance_parent_weapon_id: str | None = Form(None),
     disable_inheritance: str | None = Form(None),
@@ -1317,20 +1321,49 @@ def update_weapon(
     tags_text = _serialize_weapon_tags(ability_items)
     cleaned_notes_text = (notes or "").strip()
 
-    if armory.parent and action == "save":
-        selected_source_armory_id = None
-        selected_parent_weapon_id = None
+    original_parent_id = weapon.parent_id
+    selected_parent_weapon: models.Weapon | None = None
+
+    if action == "save":
+        selected_source_armory_id: int | None = None
+        selected_parent_weapon_id: int | None = None
+        selected_placement_parent_id: int | None = None
+
         disable_inheritance_enabled = bool(disable_inheritance)
+        if inheritance_mode == "independent":
+            disable_inheritance_enabled = True
+        elif inheritance_mode == "inherit":
+            disable_inheritance_enabled = False
+
+        source_armory_input = (
+            inherit_armory_id
+            if inherit_armory_id not in (None, "")
+            else inheritance_source_armory_id
+        )
+        inherit_parent_input = (
+            inherit_parent_weapon_id
+            if inherit_parent_weapon_id not in (None, "")
+            else inheritance_parent_weapon_id
+        )
+
         try:
-            if inheritance_source_armory_id not in (None, ""):
-                selected_source_armory_id = int(inheritance_source_armory_id)
-            if inheritance_parent_weapon_id not in (None, ""):
-                selected_parent_weapon_id = int(inheritance_parent_weapon_id)
+            if source_armory_input not in (None, ""):
+                selected_source_armory_id = int(source_armory_input)
+            if inherit_parent_input not in (None, ""):
+                selected_parent_weapon_id = int(inherit_parent_input)
+            if placement_parent_id not in (None, ""):
+                selected_placement_parent_id = int(placement_parent_id)
         except ValueError:
             selected_source_armory_id = None
             selected_parent_weapon_id = None
+            selected_placement_parent_id = None
 
-        parent_chain_ids = {item.id for item in [armory, *_parent_chain(armory)] if item.id is not None}
+        if selected_parent_weapon_id is None:
+            selected_parent_weapon_id = selected_placement_parent_id
+
+        parent_chain_ids = {
+            item.id for item in [armory, *_parent_chain(armory)] if item.id is not None
+        }
         if selected_source_armory_id and selected_source_armory_id not in parent_chain_ids:
             return templates.TemplateResponse(
                 "armory_weapon_form.html",
@@ -1353,6 +1386,35 @@ def update_weapon(
                     "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
                     "inheritance_panel": _weapon_inheritance_panel_context(db, armory, weapon),
                     "error": "Nieprawidłowa zbrojownia źródłowa.",
+                    "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
+                },
+            )
+
+        if (
+            selected_placement_parent_id is not None
+            and selected_placement_parent_id != selected_parent_weapon_id
+        ):
+            return templates.TemplateResponse(
+                "armory_weapon_form.html",
+                {
+                    "request": request,
+                    "user": current_user,
+                    "armory": armory,
+                    "weapon": weapon,
+                    "form_values": {
+                        "name": name,
+                        "range": range,
+                        "attacks": attacks,
+                        "ap": ap,
+                        "tags": _serialize_weapon_tags(ability_items),
+                        "notes": notes or "",
+                        "abilities": ability_items,
+                    },
+                    "range_options": RANGE_OPTIONS,
+                    "parent_defaults": _weapon_form_values(weapon.parent) if weapon and weapon.parent else None,
+                    "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+                    "inheritance_panel": _weapon_inheritance_panel_context(db, armory, weapon),
+                    "error": "Niespójne dane parenta broni.",
                     "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
                 },
             )
@@ -1381,6 +1443,31 @@ def update_weapon(
                         "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
                         "inheritance_panel": _weapon_inheritance_panel_context(db, armory, weapon),
                         "error": "Wybrana broń nadrzędna nie istnieje.",
+                        "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
+                    },
+                )
+            if selected_parent_weapon.armory_id not in parent_chain_ids:
+                return templates.TemplateResponse(
+                    "armory_weapon_form.html",
+                    {
+                        "request": request,
+                        "user": current_user,
+                        "armory": armory,
+                        "weapon": weapon,
+                        "form_values": {
+                            "name": name,
+                            "range": range,
+                            "attacks": attacks,
+                            "ap": ap,
+                            "tags": _serialize_weapon_tags(ability_items),
+                            "notes": notes or "",
+                            "abilities": ability_items,
+                        },
+                        "range_options": RANGE_OPTIONS,
+                        "parent_defaults": _weapon_form_values(weapon.parent) if weapon and weapon.parent else None,
+                        "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+                        "inheritance_panel": _weapon_inheritance_panel_context(db, armory, weapon),
+                        "error": "Wybrana broń nadrzędna nie należy do bieżącej lub nadrzędnej zbrojowni.",
                         "cancel_url": f"/armories/{armory.id}?selected_weapon={weapon.id}",
                     },
                 )
@@ -1658,6 +1745,38 @@ def update_weapon(
         weapon.notes = cleaned_notes
 
     _update_weapon_cost(weapon)
+
+    if action == "save" and weapon.parent_id != original_parent_id:
+        protected_weapon_ids = {weapon.id} if weapon.id is not None else set()
+        if original_parent_id is not None:
+            protected_weapon_ids.add(original_parent_id)
+        if weapon.parent_id is not None:
+            protected_weapon_ids.add(weapon.parent_id)
+        try:
+            _sync_descendant_variants(
+                db,
+                armory,
+                protected_weapon_ids=protected_weapon_ids,
+            )
+            if original_parent_id is not None and db.get(models.Weapon, original_parent_id) is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Naruszenie integralności: zmiana dziedziczenia próbowała usunąć "
+                        "poprzedni rekord rodzica."
+                    ),
+                )
+            if weapon.parent_id is not None and db.get(models.Weapon, weapon.parent_id) is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Naruszenie integralności: nowy rekord rodzica został usunięty "
+                        "podczas synchronizacji."
+                    ),
+                )
+        except Exception:
+            db.rollback()
+            raise
 
     if weapon.id is not None:
         from .armies import _weapon_spell_details
