@@ -153,6 +153,27 @@ def test_disabling_default_passive_reduces_cost() -> None:
     assert totals_disabled["strzelec"] <= totals_default["strzelec"]
 
 
+def test_passive_loadout_keys_are_canonicalized_by_identifier() -> None:
+    unit = models.Unit(
+        name="Drop Troops",
+        quality=4,
+        defense=4,
+        toughness=3,
+        flags="Rezerwa?",
+        army_id=1,
+    )
+    unit.abilities = []
+    unit.weapon_links = []
+    unit.default_weapon = None
+    unit.default_weapon_id = None
+
+    baseline = costs.compute_passive_state(unit)
+    assert "rezerwa" not in baseline.traits
+
+    state = costs.compute_passive_state(unit, {"passive": {"rezerwa": 1}})
+    assert "rezerwa" in state.traits
+
+
 def test_base_cost_per_model_matches_base_model_cost() -> None:
     unit = _make_unit_with_default_passive()
     passive_state = costs.compute_passive_state(unit)
