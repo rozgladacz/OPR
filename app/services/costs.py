@@ -238,6 +238,62 @@ def _parse_passive_counts(extra: dict[str, Any] | None) -> dict[str, int]:
     return result
 
 
+def _canonicalize_passive_counts(
+    payload: Sequence[dict[str, Any]], counts: Mapping[str, int]
+) -> dict[str, int]:
+    if not counts:
+        return {}
+
+    alias_to_slug: dict[str, str] = {}
+    for entry in payload:
+        slug = str(entry.get("slug") or "").strip()
+        if not slug:
+            continue
+        tokens = {
+            slug,
+            slug.casefold(),
+            normalize_name(slug),
+            ability_identifier(slug),
+        }
+        label = str(entry.get("label") or "").strip()
+        if label:
+            tokens.update(
+                {
+                    label,
+                    label.casefold(),
+                    normalize_name(label),
+                    ability_identifier(label),
+                }
+            )
+        for token in {value for value in tokens if value}:
+            alias_to_slug.setdefault(str(token), slug)
+
+    normalized: dict[str, int] = {}
+    for raw_key, raw_value in counts.items():
+        key = str(raw_key).strip()
+        if not key:
+            continue
+        candidates = (
+            key,
+            key.casefold(),
+            normalize_name(key),
+            ability_identifier(key),
+        )
+        canonical = None
+        for candidate in candidates:
+            if not candidate:
+                continue
+            if candidate in alias_to_slug:
+                canonical = alias_to_slug[candidate]
+                break
+        target_key = canonical or key
+        if raw_value > 0:
+            normalized[target_key] = 1
+        else:
+            normalized.setdefault(target_key, 0)
+    return normalized
+
+
 def _apply_army_rule_overrides(
     payload: Sequence[dict[str, Any]],
     counts: dict[str, int],
@@ -330,6 +386,7 @@ def compute_passive_state(
     payload = _passive_payload_with_army(unit)
     extra_data = _ensure_extra_data(extra)
     counts = _parse_passive_counts(extra_data)
+    counts = _canonicalize_passive_counts(payload, counts)
     counts = _apply_army_rule_overrides(payload, counts)
     traits = _active_traits_from_payload(payload, counts)
     return PassiveState(payload=payload, counts=counts, traits=traits)
