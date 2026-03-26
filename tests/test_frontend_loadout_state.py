@@ -884,6 +884,50 @@ def test_weapon_cost_internal_applies_ambush_only_to_ranged_part_of_assault_weap
     assert result["withAmbush"] == pytest.approx(result["expected"], rel=1e-6, abs=1e-6)
 
 
+def test_weapon_cost_internal_applies_reserve_to_both_assault_components() -> None:
+    script_body = """
+        const rangedNoReserve = sandbox.weaponCostInternal(
+          4,
+          18,
+          2,
+          1,
+          ['Szturmowa'],
+          [],
+          false,
+        );
+        const meleeNoReserve = sandbox.weaponCostInternal(
+          4,
+          0,
+          2,
+          1,
+          ['Szturmowa'],
+          [],
+          false,
+        );
+        const withReserve = sandbox.weaponCostInternal(
+          4,
+          18,
+          2,
+          1,
+          ['Szturmowa'],
+          ['Rezerwa'],
+          true,
+        );
+
+        console.log(JSON.stringify({
+          rangedNoReserve,
+          meleeNoReserve,
+          withReserve,
+          expected: (rangedNoReserve + meleeNoReserve) * 0.6,
+        }));
+    """
+
+    script = _build_sandbox_script(script_body)
+    result = _run_node(script)
+
+    assert result["withReserve"] == pytest.approx(result["expected"], rel=1e-6, abs=1e-6)
+
+
 def test_weapon_cost_internal_applies_overcharge_multiplier_1_4() -> None:
     script_body = """
         const baseCost = sandbox.weaponCostInternal(4, 18, 2, 1, [], []);
