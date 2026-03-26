@@ -186,6 +186,37 @@ def test_ambush_assault_reduces_only_ranged_component() -> None:
     assert ambush_cost == pytest.approx(expected, rel=1e-3, abs=0.02)
 
 
+def test_reserve_assault_reduces_both_components() -> None:
+    ranged_component = costs._weapon_cost(
+        4,
+        12,
+        1,
+        1,
+        ["Assault"],
+        [],
+        allow_assault_extra=False,
+    )
+    melee_component = costs._weapon_cost(
+        4,
+        0,
+        1,
+        1,
+        ["Assault"],
+        [],
+        allow_assault_extra=False,
+    )
+    expected = (ranged_component + melee_component) * 0.6
+
+    assault_weapon = _weapon("12\"", ap=1, tags="Assault")
+    reserve_cost = costs.weapon_cost(
+        assault_weapon,
+        unit_quality=4,
+        unit_flags=["Rezerwa"],
+    )
+
+    assert reserve_cost == pytest.approx(expected, rel=1e-3, abs=0.02)
+
+
 def test_porazenie_increases_only_melee_weapon_cost() -> None:
     melee_base = _weapon("Melee", attacks=2, ap=1)
     melee_porazenie = _weapon("Melee", attacks=2, ap=1, tags="Porażenie")
