@@ -898,6 +898,14 @@ function normalizeRangeValue(value) {
   return Math.round(numeric);
 }
 
+function stripOptionalFlagSuffix(name) {
+  let normalized = String(name || '').trim();
+  while (normalized.endsWith('?') || normalized.endsWith('!')) {
+    normalized = normalized.slice(0, -1).trim();
+  }
+  return normalized;
+}
+
 function buildWeaponFlags(baseFlags, passiveItems, passiveState) {
   const result = { ...(baseFlags || {}) };
   const identifierKeys = new Map();
@@ -950,17 +958,28 @@ function buildWeaponFlags(baseFlags, passiveItems, passiveState) {
       if (keys.length) {
         const key = keys[0];
         const original = baseFlags ? baseFlags[key] : undefined;
+        const optionalLikeKey = /[?!]\s*$/.test(String(key || '').trim());
+        const targetKey = optionalLikeKey
+          ? stripOptionalFlagSuffix(key) || stripOptionalFlagSuffix(slug) || slug
+          : key;
+        if (optionalLikeKey) {
+          keys.forEach((entryKey) => {
+            if (/[?!]\s*$/.test(String(entryKey || '').trim())) {
+              delete result[entryKey];
+            }
+          });
+        }
         if (typeof original === 'boolean') {
-          result[key] = true;
+          result[targetKey] = true;
         } else if (original === null || original === '' || original === 0) {
-          result[key] = true;
+          result[targetKey] = true;
         } else if (original !== undefined) {
-          result[key] = original;
+          result[targetKey] = original;
         } else {
-          result[key] = true;
+          result[targetKey] = true;
         }
       } else {
-        result[slug] = true;
+        result[stripOptionalFlagSuffix(slug) || slug] = true;
       }
     } else if (keys.length) {
       keys.forEach((key) => {
