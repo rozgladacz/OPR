@@ -995,6 +995,30 @@ def test_passive_cost_delta_depends_on_other_traits_frontend_matches_backend() -
     assert frontend["delta"] == backend_with_plane - backend_no_trait
 
 
+def test_compute_total_cost_total_mode_binary_okopany_scales_for_full_unit() -> None:
+    script_body = """
+        const perModelCost = 2;
+        const state = sandbox.createLoadoutState({
+          mode: 'total',
+          passive: [{ id: 'Okopany', count: 1 }],
+        });
+        const total = sandbox.computeTotalCost(
+          0,
+          10,
+          [],
+          state,
+          { active: new Map(), passive: new Map([['Okopany', perModelCost]]) },
+          [{ slug: 'Okopany', default_count: 0, cost: perModelCost }],
+          new Map(),
+        );
+        console.log(JSON.stringify({ total, expected: perModelCost * 10 }));
+    """
+
+    result = _run_node(_build_sandbox_script(script_body))
+
+    assert result["total"] == result["expected"] == 20
+
+
 def test_render_editors_show_mode_indicator_and_cost_labels_after_mode_switch() -> None:
     script_body = """
         class Element {

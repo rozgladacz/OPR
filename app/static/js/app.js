@@ -4046,7 +4046,15 @@ function computeTotalCost(
       if (diff === 0) {
         return;
       }
-      total += diff * passiveMultiplier;
+      const isUnitWideBinaryPassive = ident !== 'transport'
+        && ident !== 'otwarty_transport'
+        && ident !== 'platforma_strzelecka'
+        && ident !== 'otwarty transport'
+        && ident !== 'platforma strzelecka';
+      const entryMultiplier = isUnitWideBinaryPassive
+        ? count
+        : passiveMultiplier;
+      total += diff * entryMultiplier;
     });
   }
 
