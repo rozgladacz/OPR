@@ -551,3 +551,41 @@ def test_roster_totals_apply_open_transport_dynamic_cost_when_payload_cost_is_ze
     )
 
     assert totals_with_transport["wojownik"] - totals_without_transport["wojownik"] == pytest.approx(7.5)
+
+
+def test_total_mode_binary_passive_okopany_scales_with_unit_model_count() -> None:
+    unit = models.Unit(
+        name="Trench Infantry",
+        quality=4,
+        defense=4,
+        toughness=2,
+        flags="Okopany?",
+        army_id=1,
+    )
+    unit.abilities = []
+    unit.weapon_links = []
+    unit.default_weapon = None
+    unit.default_weapon_id = None
+    roster_unit = models.RosterUnit(unit=unit, count=10)
+
+    totals_without = costs.roster_unit_role_totals(
+        roster_unit,
+        {"mode": "total", "passive": {"Okopany": 0}},
+    )
+    totals_with = costs.roster_unit_role_totals(
+        roster_unit,
+        {"mode": "total", "passive": {"Okopany": 1}},
+    )
+
+    per_model_cost = costs.ability_cost_from_name(
+        "Okopany",
+        None,
+        [],
+        toughness=unit.toughness,
+        quality=unit.quality,
+        defense=unit.defense,
+        weapons=[],
+    )
+    expected_delta = per_model_cost * 10
+
+    assert totals_with["wojownik"] - totals_without["wojownik"] == pytest.approx(expected_delta)

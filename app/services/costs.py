@@ -1576,9 +1576,25 @@ def roster_unit_role_totals(
                 if selected_flag
                 else 0.0
             )
-            passive_diff += selected_cost - default_cost
+            passive_entry_diff = selected_cost - default_cost
+            if passive_entry_diff == 0:
+                continue
+            passive_ident = ability_identifier(str(slug))
+            is_unit_wide_binary_passive = passive_ident not in {
+                "transport",
+                "otwarty_transport",
+                "platforma_strzelecka",
+                "otwarty transport",
+                "platforma strzelecka",
+            }
+            passive_multiplier = (
+                model_count
+                if is_unit_wide_binary_passive
+                else (1 if total_mode else ability_multiplier)
+            )
+            passive_diff += passive_entry_diff * passive_multiplier
         if passive_diff:
-            total += passive_diff * (1 if total_mode else ability_multiplier)
+            total += passive_diff
         return round(total, 2)
 
     warrior_total = _compute_total(_with_role_trait(base_traits, "wojownik"))
