@@ -5995,16 +5995,55 @@ function initRosterEditor() {
     });
   }
 
-  function updateCostDisplays() {
-    const total = computeTotalCost(
-      baseCostPerModel,
-      currentCount,
-      currentWeapons,
+  function computeActiveItemCost() {
+    if (!loadoutState) {
+      return null;
+    }
+
+    const activeContext = {
       loadoutState,
-      abilityCostMap,
-      currentPassives,
-      currentWeaponCostMap,
-    );
+      weapons: currentWeapons,
+      passiveItems: currentPassives,
+      baseFlags: currentBaseFlags,
+      abilityCosts: abilityCostMap,
+      baseCostPerModel,
+      count: currentCount,
+      quality: currentQuality,
+      currentClassification,
+    };
+
+    let partnerContext = null;
+    if (activeItem) {
+      const activeEntry = getEntryElementFromItem(activeItem);
+      const activeId = getUnitIdFromEntry(activeEntry);
+      const partnerId = getPartnerId(activeId);
+      const listElement = rosterListEl || ensureRosterList();
+      if (partnerId && listElement) {
+        const partnerItem = listElement.querySelector(
+          `[data-roster-item][data-roster-unit-id="${partnerId}"]`,
+        );
+        if (partnerItem) {
+          partnerContext = buildClassificationContextFromItem(partnerItem);
+        }
+      }
+    }
+
+    return computeRosterItemCost(activeContext, partnerContext);
+  }
+
+  function updateCostDisplays() {
+    const result = computeActiveItemCost();
+    const total = result && Number.isFinite(result.total)
+      ? result.total
+      : computeTotalCost(
+        baseCostPerModel,
+        currentCount,
+        currentWeapons,
+        loadoutState,
+        abilityCostMap,
+        currentPassives,
+        currentWeaponCostMap,
+      );
     const formatted = formatPoints(total);
     if (costValueEl) {
       costValueEl.textContent = formatted;

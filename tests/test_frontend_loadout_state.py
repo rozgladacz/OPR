@@ -385,6 +385,133 @@ def test_handle_state_change_refreshes_roster_total_immediately_without_server_u
     assert result["applyServerUpdateCalls"] == 0
 
 
+def test_update_cost_displays_keeps_panel_and_unit_cost_in_sync_after_passive_toggle() -> None:
+    script_body = """
+        const source = code;
+        function extractFunction(name, endMarker) {
+          const start = source.indexOf(`function ${name}(`);
+          if (start === -1) {
+            throw new Error(`Cannot find function ${name}`);
+          }
+          const end = source.indexOf(endMarker, start);
+          if (end === -1) {
+            throw new Error(`Cannot find end marker for ${name}`);
+          }
+          return source.slice(start, end);
+        }
+
+        const activeCostSource = extractFunction('computeActiveItemCost', '\\n\\n  function updateCostDisplays');
+        const updateCostSource = extractFunction('updateCostDisplays', '\\n\\n  function computeRosterItemCost');
+        const computeSource = extractFunction('computeRosterItemCost', '\\n\\n  function refreshRosterCostBadges');
+
+        const itemAttrs = new Map([
+          ['data-roster-unit-id', 'u1'],
+          ['data-unit-cost', '0'],
+          ['data-unit-count', '1'],
+          ['data-loadout', '{}'],
+          ['data-unit-classification', JSON.stringify({ slug: 'wojownik' })],
+        ]);
+        const badge = { textContent: '' };
+        const activeItem = {
+          getAttribute(name) { return itemAttrs.get(name) || ''; },
+          setAttribute(name, value) { itemAttrs.set(name, String(value)); },
+          querySelector(selector) {
+            if (selector === '[data-roster-unit-cost]') {
+              return badge;
+            }
+            return null;
+          },
+        };
+        const partnerItem = {
+          getAttribute(name) {
+            if (name === 'data-roster-unit-id') return 'u2';
+            if (name === 'data-unit-count') return '1';
+            if (name === 'data-loadout') return '{}';
+            if (name === 'data-unit-classification') return JSON.stringify({ slug: 'strzelec' });
+            return '';
+          },
+        };
+        const listElement = {
+          querySelector(selector) {
+            const match = /data-roster-unit-id="([^"]+)"/.exec(selector);
+            if (!match) {
+              return null;
+            }
+            return match[1] === 'u2' ? partnerItem : null;
+          },
+        };
+
+        let currentClassification = { slug: 'wojownik' };
+        const loadoutState = { passive: new Map([['wojownik', 1]]) };
+        const currentWeapons = [];
+        const currentPassives = [];
+        const currentBaseFlags = {};
+        const abilityCostMap = new Map();
+        const baseCostPerModel = 0;
+        const currentCount = 1;
+        const currentQuality = '';
+        const currentWeaponCostMap = new Map();
+        const getEntryElementFromItem = () => ({ __id: 'u1' });
+        const getUnitIdFromEntry = (entry) => entry.__id;
+        const getPartnerId = () => 'u2';
+        const rosterListEl = listElement;
+        const ensureRosterList = () => listElement;
+        const buildClassificationContextFromItem = (item) => ({
+          id: item.getAttribute('data-roster-unit-id'),
+          count: Number(item.getAttribute('data-unit-count') || '1'),
+          loadoutState: { passive: new Map() },
+          currentClassification: JSON.parse(item.getAttribute('data-unit-classification') || 'null'),
+        });
+        const estimateCombinedClassification = (context, partnerContext) => {
+          if (partnerContext && partnerContext.currentClassification) {
+            return { classification: partnerContext.currentClassification, weaponMap: new Map() };
+          }
+          return { classification: context.currentClassification, weaponMap: new Map() };
+        };
+        const cloneLoadoutState = (state) => ({
+          passive: new Map(state.passive || []),
+          active: new Map(),
+          aura: new Map(),
+          passiveLabels: new Map(),
+          activeLabels: new Map(),
+          auraLabels: new Map(),
+        });
+        const applyClassificationToState = (state, classification) => {
+          state.passive = new Map([[classification.slug, 1]]);
+        };
+        const buildWeaponCostMap = () => new Map();
+        const computeTotalCost = (_baseCost, _count, _weapons, _state, _abilityCosts, _passiveItems, _weaponMap) => {
+          return _state.passive.has('strzelec') ? 88 : 11;
+        };
+        const formatPoints = (value) => String(value);
+        const costValueEl = { textContent: '' };
+        const costBadgeEl = { classList: { toggle: () => {} } };
+
+        eval(computeSource);
+        eval(activeCostSource);
+        eval(updateCostSource);
+
+        // Symulacja przełączenia pasywki na klasyfikację "strzelec".
+        currentClassification = { slug: 'strzelec' };
+        const total = updateCostDisplays();
+
+        console.log(JSON.stringify({
+          total,
+          panelCost: costValueEl.textContent,
+          badgeCost: badge.textContent,
+          dataUnitCost: activeItem.getAttribute('data-unit-cost'),
+        }));
+    """
+
+    script = _build_sandbox_script(script_body)
+    result = _run_node(script)
+
+    assert result["total"] == 88
+    assert result["panelCost"] == "88"
+    assert result["badgeCost"] == "88 pkt"
+    assert result["dataUnitCost"] == "88"
+
+
 def test_apply_server_update_prefers_backend_cached_cost_without_immediate_frontend_recompute() -> None:
     script_body = """
         const source = code;
