@@ -4216,6 +4216,7 @@ function initRosterEditor() {
   const form = root.querySelector('[data-roster-editor-form]');
   const duplicateForm = root.querySelector('[data-roster-editor-duplicate]');
   const deleteForm = root.querySelector('[data-roster-editor-delete]');
+  const editorActions = root.querySelector('[data-roster-editor-actions]');
   const countInput = root.querySelector('[data-roster-editor-count]');
   const customNameInput = root.querySelector('[data-roster-editor-custom-name]');
   const customLabel = root.querySelector('[data-roster-editor-custom-label]');
@@ -5168,6 +5169,9 @@ function initRosterEditor() {
     if (editor) {
       editor.classList.remove('d-none');
     }
+    if (editorActions) {
+      editorActions.classList.add('d-none');
+    }
     if (!emptyState) {
       return;
     }
@@ -5837,6 +5841,9 @@ function initRosterEditor() {
     if (ensureEditorVisible) {
       editor.classList.remove('d-none');
       emptyState.classList.add('d-none');
+      if (editorActions) {
+        editorActions.classList.remove('d-none');
+      }
     }
 
     autoSaveEnabled = isEditable;
@@ -6609,6 +6616,9 @@ function renderEditors(precomputedWeaponMap = null) {
       } else if (editor && emptyState) {
         editor.classList.add('d-none');
         emptyState.classList.remove('d-none');
+        if (editorActions) {
+          editorActions.classList.add('d-none');
+        }
       }
     } catch (error) {
       console.error('Nie udało się wybrać początkowego oddziału', error);
@@ -6635,6 +6645,9 @@ function renderEditors(precomputedWeaponMap = null) {
     if (!item) {
       editor.classList.add('d-none');
       emptyState.classList.remove('d-none');
+      if (editorActions) {
+        editorActions.classList.add('d-none');
+      }
       if (customNameInput) {
         customNameInput.value = '';
       }
