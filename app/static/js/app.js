@@ -3051,6 +3051,26 @@ function resolveLoadoutEntryKey(entry, ...idKeys) {
   return '';
 }
 
+function canonicalizeAbilityEntryKey(rawKey) {
+  const normalized = normalizeLoadoutKey(rawKey);
+  if (!normalized) {
+    return '';
+  }
+  const separatorIndex = normalized.indexOf(':');
+  if (separatorIndex === -1) {
+    return normalized;
+  }
+  const base = normalized.slice(0, separatorIndex).trim();
+  const variant = normalized.slice(separatorIndex + 1).trim();
+  if (!base) {
+    return '';
+  }
+  if (!variant) {
+    return base;
+  }
+  return `${base}:${variant}`;
+}
+
 function createLoadoutState(rawLoadout) {
   const state = {
     weapons: new Map(),
@@ -3232,33 +3252,53 @@ function serializeLoadoutState(state) {
   state.weapons.forEach((value, id) => {
     result.weapons.push({ id, count: value });
   });
-  state.active.forEach((value, id) => {
-    result.active.push({ id, count: value });
-  });
-  state.aura.forEach((value, id) => {
-    result.aura.push({ id, count: value });
-  });
+  const serializeAbilitySection = (sectionMap, labelMap, outputKey, outputLabelsKey) => {
+    const mergedCounts = new Map();
+    if (sectionMap instanceof Map) {
+      sectionMap.forEach((value, rawId) => {
+        const canonicalId = canonicalizeAbilityEntryKey(rawId);
+        if (!canonicalId) {
+          return;
+        }
+        const parsedCount = Number(value);
+        const safeCount = Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 0;
+        const current = Number(mergedCounts.get(canonicalId) ?? 0);
+        if (safeCount > current) {
+          mergedCounts.set(canonicalId, safeCount);
+        } else if (!mergedCounts.has(canonicalId)) {
+          mergedCounts.set(canonicalId, safeCount);
+        }
+      });
+    }
+    mergedCounts.forEach((count, id) => {
+      result[outputKey].push({ id, count });
+    });
+    if (!(labelMap instanceof Map)) {
+      return;
+    }
+    const mergedLabels = new Map();
+    labelMap.forEach((value, rawId) => {
+      const canonicalId = canonicalizeAbilityEntryKey(rawId);
+      if (!canonicalId || !mergedCounts.has(canonicalId)) {
+        return;
+      }
+      const text = typeof value === 'string' ? value.trim() : String(value || '').trim();
+      if (!text) {
+        return;
+      }
+      if (!mergedLabels.has(canonicalId)) {
+        mergedLabels.set(canonicalId, text.slice(0, ABILITY_NAME_MAX_LENGTH));
+      }
+    });
+    mergedLabels.forEach((name, id) => {
+      result[outputLabelsKey].push({ id, name });
+    });
+  };
+  serializeAbilitySection(state.active, state.activeLabels, 'active', 'active_labels');
+  serializeAbilitySection(state.aura, state.auraLabels, 'aura', 'aura_labels');
   state.passive.forEach((value, slug) => {
     result.passive.push({ slug, enabled: Boolean(value) });
   });
-  if (state.activeLabels instanceof Map) {
-    state.activeLabels.forEach((value, id) => {
-      const text = typeof value === 'string' ? value.trim() : String(value || '').trim();
-      if (!text) {
-        return;
-      }
-      result.active_labels.push({ id, name: text.slice(0, ABILITY_NAME_MAX_LENGTH) });
-    });
-  }
-  if (state.auraLabels instanceof Map) {
-    state.auraLabels.forEach((value, id) => {
-      const text = typeof value === 'string' ? value.trim() : String(value || '').trim();
-      if (!text) {
-        return;
-      }
-      result.aura_labels.push({ id, name: text.slice(0, ABILITY_NAME_MAX_LENGTH) });
-    });
-  }
   return JSON.stringify(result);
 }
 

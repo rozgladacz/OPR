@@ -113,6 +113,25 @@ def test_loadout_state_preserves_aura_variant_counts() -> None:
     assert result["reloadedCounts"] == [3, 1]
 
 
+def test_serialize_loadout_state_deduplicates_active_alias_keys() -> None:
+    script_body = """
+        const state = sandbox.createLoadoutState({});
+        state.active.set('12', 1);
+        state.active.set('12:', 1);
+        state.active.set('12.0', 1);
+        state.activeLabels.set('12:', 'Szarża');
+        const serialized = JSON.parse(sandbox.serializeLoadoutState(state));
+        const active = serialized.active.sort((a, b) => a.id.localeCompare(b.id));
+        const labels = serialized.active_labels.sort((a, b) => a.id.localeCompare(b.id));
+        console.log(JSON.stringify({ active, labels }));
+    """
+
+    result = _run_node(_build_sandbox_script(script_body))
+
+    assert result["active"] == [{"id": "12", "count": 1}, {"id": "12.0", "count": 1}]
+    assert result["labels"] == [{"id": "12", "name": "Szarża"}]
+
+
 def test_compute_total_cost_uses_open_transport_multiplier_with_active_traits() -> None:
     script_body = """
         const passiveItems = [

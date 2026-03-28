@@ -130,3 +130,42 @@ def test_aura_variant_counts_remain_independent() -> None:
     assert refreshed["aura"][medic_key] == 1
     assert refreshed["aura_labels"][banner_key] == "Sztandar"
     assert refreshed["aura_labels"][medic_key] == "Medyk"
+
+
+def test_sanitize_loadout_deduplicates_active_alias_keys_without_double_counting() -> None:
+    unit = _make_unit()
+    active_entry = {
+        "ability_id": 12,
+        "label": "Szarża",
+        "description": "",
+        "cost": 3.0,
+        "is_default": False,
+        "default_count": 0,
+        "custom_name": None,
+        "value": None,
+        "loadout_key": rosters._ability_loadout_key(12, None),
+    }
+
+    payload = {
+        "weapons": {},
+        "active": [
+            {"id": "12", "count": 1},
+            {"loadout_key": "12", "ability_id": 12, "count": 1},
+        ],
+        "aura": {},
+        "passive": {},
+        "active_labels": {},
+        "aura_labels": {},
+    }
+
+    sanitized = rosters._sanitize_loadout(
+        unit,
+        model_count=5,
+        payload=payload,
+        weapon_options=[],
+        active_items=[active_entry],
+        aura_items=[],
+        passive_items=[],
+    )
+
+    assert sanitized["active"] == {"12": 1}

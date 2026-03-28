@@ -2149,6 +2149,21 @@ def _sanitize_loadout(
     aura_items: list[dict] | None = None,
     passive_items: list[dict] | None = None,
 ) -> dict[str, Any]:
+    def _parse_non_negative_int(raw_value: Any, fallback: int = 0) -> int:
+        try:
+            value = int(raw_value)
+        except (TypeError, ValueError):
+            try:
+                value = int(float(raw_value))
+            except (TypeError, ValueError):
+                value = fallback
+        return max(value, 0)
+
+    def _merge_semantic_count(current: Any, incoming: Any) -> int:
+        current_value = _parse_non_negative_int(current, 0)
+        incoming_value = _parse_non_negative_int(incoming, current_value)
+        return max(current_value, incoming_value)
+
     resolved_passive_items = (
         passive_items if passive_items is not None else _passive_entries(unit)
     )
@@ -2261,11 +2276,28 @@ def _sanitize_loadout(
                             or entry.get("value")
                         )
                 else:
-                    entry_id = entry.get("id") or entry.get("weapon_id") or entry.get("ability_id")
+                    entry_id = (
+                        entry.get("loadout_key")
+                        or entry.get("id")
+                        or entry.get("weapon_id")
+                        or entry.get("ability_id")
+                    )
                     raw_value = entry.get("per_model") or entry.get("count") or entry.get("value")
                 if entry_id is None:
                     continue
-                normalized[str(entry_id)] = raw_value
+                candidate_ids: list[Any] = [entry_id]
+                if section in ability_sections:
+                    for alias_key in ("loadout_key", "id", "ability_id"):
+                        alias_value = entry.get(alias_key)
+                        if alias_value is not None:
+                            candidate_ids.append(alias_value)
+                for candidate_id in candidate_ids:
+                    candidate_key = str(candidate_id)
+                    if not candidate_key:
+                        continue
+                    normalized[candidate_key] = _merge_semantic_count(
+                        normalized.get(candidate_key), raw_value
+                    )
             return normalized
         return {}
 
@@ -2281,7 +2313,9 @@ def _sanitize_loadout(
             for raw_key, raw_value in incoming_map.items():
                 label_hint = labels.pop(raw_key, None)
                 canonical_key = _canonical_ability_key(section, raw_key, label_hint)
-                normalized_incoming[canonical_key] = raw_value
+                normalized_incoming[canonical_key] = _merge_semantic_count(
+                    normalized_incoming.get(canonical_key), raw_value
+                )
                 if label_hint:
                     normalized_label_maps.setdefault(section, {})[canonical_key] = label_hint
             for raw_key, label_hint in list(labels.items()):
