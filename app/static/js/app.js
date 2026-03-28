@@ -4286,6 +4286,7 @@ function initRosterEditor() {
   let refreshCycleVersion = 0;
   let latestAppliedRefreshVersion = 0;
   let latestAuthoritativeRefreshVersion = 0;
+  let rosterRefreshCycleCounter = 0;
 
   function nextRefreshVersion(seedVersion = null) {
     const seed = Number(seedVersion);
@@ -5578,8 +5579,14 @@ function initRosterEditor() {
       previousClassification,
     );
     let weaponMap = null;
-    if (classification) {
-      const source = classification.slug === 'wojownik' ? primaryTotals.warrior : primaryTotals.shooter;
+    if (classification && classification.slug) {
+      const slug = String(classification.slug);
+      const source =
+        slug === 'wojownik'
+          ? primaryTotals.warrior
+          : slug === 'strzelec'
+            ? primaryTotals.shooter
+            : null;
       if (source && source.weaponMap instanceof Map) {
         weaponMap = source.weaponMap;
       }
@@ -6365,12 +6372,14 @@ function initRosterEditor() {
           return;
         }
 
-        const formatted = formatPoints(result.total);
-        const badgeEl = item.querySelector('[data-roster-unit-cost]');
-        if (badgeEl) {
-          badgeEl.textContent = `${formatted} pkt`;
+        if (recomputeItems) {
+          const formatted = formatPoints(result.total);
+          const badgeEl = item.querySelector('[data-roster-unit-cost]');
+          if (badgeEl) {
+            badgeEl.textContent = `${formatted} pkt`;
+          }
+          item.setAttribute('data-unit-cost', String(result.total));
         }
-        item.setAttribute('data-unit-cost', String(result.total));
         aggregatedTotal += result.total;
       });
 
@@ -6447,6 +6456,8 @@ function initRosterEditor() {
   }
 
   function handleStateChange() {
+    const editVersion = latestEditVersion + 1;
+    latestEditVersion = editVersion;
     let precomputedWeaponMap = null;
     if (loadoutState) {
       loadoutState.mode = 'total';
@@ -6476,11 +6487,11 @@ function initRosterEditor() {
           }
         }
       }
-      const estimation = estimateCombinedClassification(activeContext, partnerContext);
-      if (estimation) {
-        currentClassification = estimation.classification || null;
-        if (estimation.weaponMap instanceof Map) {
-          precomputedWeaponMap = estimation.weaponMap;
+      const result = computeRosterItemTotal(activeContext, partnerContext);
+      if (result) {
+        currentClassification = result.classification || null;
+        if (result.weaponMap instanceof Map) {
+          precomputedWeaponMap = result.weaponMap;
         }
       }
       applyClassificationToState(loadoutState, currentClassification);
@@ -6502,7 +6513,7 @@ function initRosterEditor() {
       const dedupeKey = [activeId, String(currentCount), classificationSlug, loadoutInput?.value || ''].join('::');
       stateChangeCycleToken = {
         dedupeKey,
-        version: nextRefreshVersion(),
+        version: nextRefreshVersion(editVersion),
         authoritative: false,
       };
     }
@@ -6534,7 +6545,7 @@ function initRosterEditor() {
     }
     if (autoSaveEnabled) {
       setSaveStatus('dirty');
-      scheduleSave();
+      scheduleSave(editVersion);
     }
   }
 
@@ -6592,49 +6603,23 @@ function createClassificationPayload(
     });
   }
   const previousSlug = resolvePreviousClassificationSlug(previousClassification);
-  let preferred = null;
-  if (warrior > shooter) {
-    preferred = 'wojownik';
-  } else if (shooter > warrior) {
-    preferred = 'strzelec';
-  } else if (pool.size === 0) {
-    return null;
-  } else {
-    preferred = previousSlug && pool.has(previousSlug) ? previousSlug : 'wojownik';
-  }
   let slug = null;
-  if (pool.size) {
-    if (preferred && pool.has(preferred)) {
-      slug = preferred;
-    } else if (pool.size === 1) {
-      slug = pool.values().next().value;
-    } else if (preferred && !pool.has(preferred)) {
-      for (const candidate of pool) {
-        if (candidate !== preferred) {
-          slug = candidate;
-          break;
-        }
-      }
-    } else if (!preferred) {
-      if (pool.has('wojownik')) {
-        slug = 'wojownik';
-      } else if (pool.has('strzelec')) {
-        slug = 'strzelec';
-      } else {
-        slug = pool.values().next().value || null;
-      }
-    }
+  if (warrior > shooter) {
+    slug = 'wojownik';
+  } else if (shooter > warrior) {
+    slug = 'strzelec';
   } else {
-    slug = preferred;
+    slug = previousSlug || 'wojownik';
   }
-  if (!slug && pool.size) {
-    if (pool.has('wojownik')) {
-      slug = 'wojownik';
-    } else if (pool.has('strzelec')) {
-      slug = 'strzelec';
-    } else {
-      slug = pool.values().next().value || null;
-    }
+  if (!CLASSIFICATION_SLUGS.has(slug)) {
+    slug = 'wojownik';
+  }
+  if (pool.size && !pool.has(slug)) {
+    slug = pool.has('wojownik')
+      ? 'wojownik'
+      : pool.has('strzelec')
+        ? 'strzelec'
+        : pool.values().next().value || slug;
   }
   if (!slug) {
     return null;
