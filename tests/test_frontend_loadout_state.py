@@ -204,6 +204,66 @@ def test_compute_total_cost_keeps_open_transport_dynamic_when_payload_cost_is_ze
     # otwarty_transport(2) with 'samolot' => 2 * (3.5 + 0.25) = 7.5
     assert result["total"] == 7.5
 
+
+def test_create_classification_payload_tie_prefers_previous_classification_over_strzelec_fallback() -> None:
+    script_body = """
+        const source = code;
+        function extractFunction(name, endMarker) {
+          const start = source.indexOf(`function ${name}(`);
+          if (start === -1) {
+            throw new Error(`Cannot find function ${name}`);
+          }
+          const end = source.indexOf(endMarker, start);
+          if (end === -1) {
+            throw new Error(`Cannot find end marker for ${name}`);
+          }
+          return source.slice(start, end);
+        }
+        const resolvePreviousSource = extractFunction('resolvePreviousClassificationSlug', '\\n\\nfunction createClassificationPayload');
+        const createSource = extractFunction('createClassificationPayload', '\\n\\nfunction renderEditors');
+        const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
+        const abilityIdentifier = (value) => String(value || '').trim().toLowerCase();
+        eval(resolvePreviousSource);
+        eval(createSource);
+
+        const available = new Set(['wojownik', 'strzelec']);
+        const tiedWarrior = 42;
+        const tiedShooter = 42;
+
+        const fromWarrior = createClassificationPayload(
+          tiedWarrior,
+          tiedShooter,
+          available,
+          { slug: 'wojownik' },
+        );
+        const fromShooter = createClassificationPayload(
+          tiedWarrior,
+          tiedShooter,
+          available,
+          { slug: 'strzelec' },
+        );
+        const withoutPrevious = createClassificationPayload(
+          tiedWarrior,
+          tiedShooter,
+          available,
+          null,
+        );
+
+        console.log(JSON.stringify({
+          fromWarrior: fromWarrior ? fromWarrior.slug : null,
+          fromShooter: fromShooter ? fromShooter.slug : null,
+          withoutPrevious: withoutPrevious ? withoutPrevious.slug : null,
+        }));
+    """
+
+    script = _build_sandbox_script(script_body)
+    result = _run_node(script)
+
+    assert result["fromWarrior"] == "wojownik"
+    assert result["fromShooter"] == "strzelec"
+    assert result["withoutPrevious"] == "wojownik"
+
+
 def test_handle_state_change_refreshes_roster_total_immediately_without_server_update() -> None:
     script_body = """
         const source = code;
