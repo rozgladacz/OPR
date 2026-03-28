@@ -54,6 +54,44 @@ def _run_node(script: str) -> dict[str, object]:
     return json.loads(stdout)
 
 
+def test_optional_role_flag_does_not_force_shooter_classification() -> None:
+    script_body = """
+        function extractFunction(name, endMarker) {
+          const start = code.indexOf(`function ${name}(`);
+          if (start === -1) {
+            throw new Error(`Cannot find function ${name}`);
+          }
+          const end = code.indexOf(endMarker, start);
+          if (end === -1) {
+            throw new Error(`Cannot find end marker for ${name}`);
+          }
+          return code.slice(start, end);
+        }
+        const availableSource = extractFunction('availableClassificationSlugs', '\\n\\nfunction createClassificationPayload');
+        const payloadSource = extractFunction('createClassificationPayload', '\\n\\nfunction renderEditors');
+        vm.runInContext(`${availableSource}\\n${payloadSource}`, sandbox);
+
+        const available = vm.runInContext(
+          `availableClassificationSlugs({ 'Strzelec?': true, 'Furia': true })`,
+          sandbox,
+        );
+        const classification = vm.runInContext(
+          `createClassificationPayload(12, 3, availableClassificationSlugs({ 'Strzelec?': true, 'Furia': true }))`,
+          sandbox,
+        );
+        console.log(JSON.stringify({
+          available: Array.from(available.values()),
+          classification: classification ? classification.slug : null,
+        }));
+    """
+
+    script = _build_sandbox_script(script_body)
+    result = _run_node(script)
+
+    assert result["available"] == []
+    assert result["classification"] == "wojownik"
+
+
 def test_loadout_state_preserves_aura_variant_counts() -> None:
     banner_key = "aura::banner"
     medic_key = "aura::medic"

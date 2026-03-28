@@ -6369,7 +6369,22 @@ function initRosterEditor() {
 function availableClassificationSlugs(flags) {
   const result = new Set();
   Object.keys(flags || {}).forEach((key) => {
-    const ident = passiveIdentifier(key);
+    const rawKey = String(key || '').trim();
+    if (!rawKey) {
+      return;
+    }
+    let normalizedKey = rawKey;
+    let isOptional = false;
+    while (normalizedKey.endsWith('?') || normalizedKey.endsWith('!')) {
+      if (normalizedKey.endsWith('?')) {
+        isOptional = true;
+      }
+      normalizedKey = normalizedKey.slice(0, -1).trim();
+    }
+    if (isOptional || !normalizedKey) {
+      return;
+    }
+    const ident = passiveIdentifier(normalizedKey);
     if (CLASSIFICATION_SLUGS.has(ident)) {
       result.add(ident);
     }
