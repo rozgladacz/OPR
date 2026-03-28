@@ -1,6 +1,52 @@
 const abilityDefinitionsCache = new Map();
 const ARMY_RULE_OFF_PREFIX = '__army_off__';
 
+function normalizeRosterRefreshCycleToken(cycleToken, fallbackVersion = 0) {
+  const fallback = Number.isFinite(Number(fallbackVersion)) ? Number(fallbackVersion) : 0;
+  if (!cycleToken || typeof cycleToken !== 'object') {
+    return {
+      dedupeKey: cycleToken ? String(cycleToken) : null,
+      version: fallback,
+      authoritative: false,
+    };
+  }
+  const rawVersion = Number(cycleToken.version);
+  const normalizedVersion = Number.isFinite(rawVersion) ? rawVersion : fallback;
+  const dedupeKeyValue = cycleToken.dedupeKey ?? cycleToken.key ?? cycleToken.token ?? null;
+  return {
+    dedupeKey: dedupeKeyValue ? String(dedupeKeyValue) : null,
+    version: normalizedVersion,
+    authoritative: cycleToken.authoritative === true,
+  };
+}
+
+function resolveRosterRefreshPriority(state, cycleToken) {
+  const currentState = state && typeof state === 'object'
+    ? state
+    : { latestAppliedVersion: 0, latestAuthoritativeVersion: 0 };
+  const token = normalizeRosterRefreshCycleToken(cycleToken, currentState.latestAppliedVersion || 0);
+  const nextState = {
+    latestAppliedVersion: Number.isFinite(Number(currentState.latestAppliedVersion))
+      ? Number(currentState.latestAppliedVersion)
+      : 0,
+    latestAuthoritativeVersion: Number.isFinite(Number(currentState.latestAuthoritativeVersion))
+      ? Number(currentState.latestAuthoritativeVersion)
+      : 0,
+  };
+  const version = Number.isFinite(token.version) ? token.version : 0;
+  if (version < nextState.latestAppliedVersion) {
+    return { apply: false, token, state: nextState };
+  }
+  if (!token.authoritative && version < nextState.latestAuthoritativeVersion) {
+    return { apply: false, token, state: nextState };
+  }
+  nextState.latestAppliedVersion = Math.max(nextState.latestAppliedVersion, version);
+  if (token.authoritative) {
+    nextState.latestAuthoritativeVersion = Math.max(nextState.latestAuthoritativeVersion, version);
+  }
+  return { apply: true, token, state: nextState };
+}
+
 function initAbilityPicker(root) {
   const definitionsData = root.dataset.definitions || '';
   let definitions;
@@ -4237,6 +4283,31 @@ function initRosterEditor() {
   let pendingRefreshOptions = null;
   let pendingRefreshCycleToken = null;
   let lastRefreshRosterCostCycleToken = null;
+  let refreshCycleVersion = 0;
+  let latestAppliedRefreshVersion = 0;
+  let latestAuthoritativeRefreshVersion = 0;
+
+  function nextRefreshVersion(seedVersion = null) {
+    const seed = Number(seedVersion);
+    const next = Number.isFinite(seed)
+      ? Math.max(seed, latestEditVersion, refreshCycleVersion + 1)
+      : Math.max(latestEditVersion, refreshCycleVersion + 1);
+    refreshCycleVersion = next;
+    return next;
+  }
+
+  function applyRefreshPriority(cycleToken) {
+    const decision = resolveRosterRefreshPriority(
+      {
+        latestAppliedVersion: latestAppliedRefreshVersion,
+        latestAuthoritativeVersion: latestAuthoritativeRefreshVersion,
+      },
+      cycleToken,
+    );
+    latestAppliedRefreshVersion = decision.state.latestAppliedVersion;
+    latestAuthoritativeRefreshVersion = decision.state.latestAuthoritativeVersion;
+    return decision;
+  }
   function ensureRosterList() {
     if (rosterListEl && rosterListEl.isConnected) {
       return rosterListEl;
@@ -5629,7 +5700,11 @@ function initRosterEditor() {
     ) {
       return;
     }
-    applyServerUpdate(data || {});
+    applyServerUpdate(data || {}, {
+      version: parsedRequestId,
+      authoritative: true,
+      dedupeKey: `server:${parsedRequestId}`,
+    });
     setSaveStatus('saved');
   }
 
@@ -5850,7 +5925,7 @@ function initRosterEditor() {
     setSaveStatus(currentSaveStatus);
   }
 
-  function applyServerUpdate(payload) {
+  function applyServerUpdate(payload, refreshToken = null) {
     if (!payload || typeof payload !== 'object') {
       return;
     }
@@ -6011,14 +6086,19 @@ function initRosterEditor() {
     } else if (Number.isFinite(payloadRosterTotalCost)) {
       totalCostValue = payloadRosterTotalCost;
     }
-    if (Number.isFinite(totalCostValue)) {
-      updateTotalSummary(totalCostValue);
-    }
-
+    const fallbackServerVersion = nextRefreshVersion();
+    const serverRefreshToken = normalizeRosterRefreshCycleToken(
+      refreshToken || {
+        version: fallbackServerVersion,
+        authoritative: true,
+        dedupeKey: `server:${fallbackServerVersion}`,
+      },
+      fallbackServerVersion,
+    );
     refreshRosterCostBadges({
       totalOverride: Number.isFinite(totalCostValue) ? totalCostValue : null,
       recomputeItems: false,
-    });
+    }, serverRefreshToken);
   }
 
   function computeActiveItemCost() {
@@ -6144,12 +6224,16 @@ function initRosterEditor() {
       ? normalizedOptions.totalOverride
       : null;
     const recomputeItems = normalizedOptions.recomputeItems !== false;
-    if (cycleToken && cycleToken === lastRefreshRosterCostCycleToken) {
+    const normalizedToken = normalizeRosterRefreshCycleToken(cycleToken, nextRefreshVersion());
+    if (normalizedToken.dedupeKey && normalizedToken.dedupeKey === lastRefreshRosterCostCycleToken) {
       return;
     }
     if (refreshRosterCostBadgesInProgress) {
-      pendingRefreshOptions = normalizedOptions;
-      pendingRefreshCycleToken = cycleToken;
+      const pendingToken = normalizeRosterRefreshCycleToken(pendingRefreshCycleToken, -Infinity);
+      if (!pendingRefreshCycleToken || normalizedToken.version >= pendingToken.version) {
+        pendingRefreshOptions = normalizedOptions;
+        pendingRefreshCycleToken = normalizedToken;
+      }
       return;
     }
 
@@ -6163,12 +6247,19 @@ function initRosterEditor() {
       const rosterItems = Array.from(listElement.querySelectorAll('[data-roster-item]'));
       if (!rosterItems.length) {
         if (Number.isFinite(totalOverride)) {
-          updateTotalSummary(totalOverride);
+          const decision = applyRefreshPriority(normalizedToken);
+          if (decision.apply) {
+            updateTotalSummary(totalOverride);
+          }
         }
         return;
       }
 
       if (!recomputeItems) {
+        const decision = applyRefreshPriority(normalizedToken);
+        if (!decision.apply) {
+          return;
+        }
         if (Number.isFinite(totalOverride)) {
           updateTotalSummary(totalOverride);
           return;
@@ -6222,6 +6313,10 @@ function initRosterEditor() {
         aggregatedTotal += result.total;
       });
 
+      const decision = applyRefreshPriority(normalizedToken);
+      if (!decision.apply) {
+        return;
+      }
       if (Number.isFinite(totalOverride)) {
         updateTotalSummary(totalOverride);
       } else if (Number.isFinite(aggregatedTotal)) {
@@ -6229,8 +6324,8 @@ function initRosterEditor() {
       }
     } finally {
       refreshRosterCostBadgesInProgress = false;
-      if (cycleToken) {
-        lastRefreshRosterCostCycleToken = cycleToken;
+      if (normalizedToken.dedupeKey) {
+        lastRefreshRosterCostCycleToken = normalizedToken.dedupeKey;
       }
       if (pendingRefreshOptions !== null || pendingRefreshCycleToken !== null) {
         const nextOptions = pendingRefreshOptions;
@@ -6332,7 +6427,12 @@ function initRosterEditor() {
         currentClassification && typeof currentClassification === 'object' && currentClassification.slug
           ? String(currentClassification.slug)
           : '';
-      stateChangeCycleToken = [activeId, String(currentCount), classificationSlug, loadoutInput?.value || ''].join('::');
+      const dedupeKey = [activeId, String(currentCount), classificationSlug, loadoutInput?.value || ''].join('::');
+      stateChangeCycleToken = {
+        dedupeKey,
+        version: nextRefreshVersion(),
+        authoritative: false,
+      };
     }
     if (activeItem && loadoutInput) {
       activeItem.setAttribute('data-loadout', loadoutInput.value || '{}');
