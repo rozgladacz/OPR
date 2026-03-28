@@ -4237,6 +4237,8 @@ function initRosterEditor() {
   let pendingRefreshOptions = null;
   let pendingRefreshCycleToken = null;
   let lastRefreshRosterCostCycleToken = null;
+  let preserveServerTotalUntilRefreshCycle = 0;
+  let rosterRefreshCycleCounter = 0;
   function ensureRosterList() {
     if (rosterListEl && rosterListEl.isConnected) {
       return rosterListEl;
@@ -5323,6 +5325,30 @@ function initRosterEditor() {
     state.mode = 'total';
   }
 
+  function prepareCostContext(rawContext) {
+    if (!rawContext || !rawContext.loadoutState) {
+      return null;
+    }
+    const count = Math.max(Number(rawContext.count) || 0, 1);
+    const normalizedLoadoutState = cloneLoadoutState(rawContext.loadoutState);
+    normalizeLoadoutStateTotals(normalizedLoadoutState, count);
+    const costs = rawContext.abilityCosts || {};
+    return {
+      ...rawContext,
+      count,
+      loadoutState: normalizedLoadoutState,
+      abilityCosts: {
+        active: costs.active instanceof Map ? costs.active : new Map(),
+        passive: costs.passive instanceof Map ? costs.passive : new Map(),
+        passiveEntries: costs.passiveEntries instanceof Map ? costs.passiveEntries : new Map(),
+      },
+      currentClassification:
+        rawContext.currentClassification && typeof rawContext.currentClassification === 'object'
+          ? rawContext.currentClassification
+          : null,
+    };
+  }
+
   function buildClassificationContextFromItem(item) {
     if (!item) {
       return null;
@@ -5349,9 +5375,8 @@ function initRosterEditor() {
     ensureBaseLabelEntries(loadout.baseActiveLabels, activeItems, 'ability_id', { fallbackIdKeys: ['id'] });
     ensureBaseLabelEntries(loadout.baseAuraLabels, auraItems, 'ability_id', { fallbackIdKeys: ['id'] });
     ensurePassiveStateEntries(loadout.passive, passiveItems);
-    normalizeLoadoutStateTotals(loadout, count);
     const abilityCosts = buildAbilityCostMap(activeItems, auraItems, passiveItems);
-    return {
+    return prepareCostContext({
       item,
       count,
       weapons,
@@ -5365,7 +5390,7 @@ function initRosterEditor() {
       quality: Number.isFinite(qualityValue) ? qualityValue : 4,
       currentClassification:
         classificationData && typeof classificationData === 'object' ? classificationData : null,
-    };
+    });
   }
 
   function evaluateClassificationTotals(context) {
@@ -6022,6 +6047,7 @@ function initRosterEditor() {
     }
     if (Number.isFinite(totalCostValue)) {
       updateTotalSummary(totalCostValue);
+      preserveServerTotalUntilRefreshCycle = rosterRefreshCycleCounter + 1;
     }
 
     refreshRosterCostBadges({
@@ -6035,7 +6061,7 @@ function initRosterEditor() {
       return null;
     }
 
-    const activeContext = {
+    const activeContext = prepareCostContext({
       loadoutState,
       weapons: currentWeapons,
       passiveItems: currentPassives,
@@ -6045,7 +6071,7 @@ function initRosterEditor() {
       count: currentCount,
       quality: currentQuality,
       currentClassification,
-    };
+    });
 
     let partnerContext = null;
     if (activeItem) {
@@ -6096,14 +6122,16 @@ function initRosterEditor() {
     return total;
   }
 
-  function computeRosterItemCost(context, partnerContext = null) {
-    if (!context || !context.loadoutState) {
+  function computeRosterItemTotal(context, partnerContext = null) {
+    const preparedContext = prepareCostContext(context);
+    if (!preparedContext || !preparedContext.loadoutState) {
       return null;
     }
+    const preparedPartnerContext = prepareCostContext(partnerContext);
 
-    let classification = context.currentClassification || null;
+    let classification = preparedContext.currentClassification || null;
     let weaponMap = null;
-    const estimation = estimateCombinedClassification(context, partnerContext);
+    const estimation = estimateCombinedClassification(preparedContext, preparedPartnerContext);
     if (estimation) {
       if (estimation.classification) {
         classification = estimation.classification;
@@ -6113,28 +6141,28 @@ function initRosterEditor() {
       }
     }
 
-    const stateClone = cloneLoadoutState(context.loadoutState);
+    const stateClone = cloneLoadoutState(preparedContext.loadoutState);
     applyClassificationToState(stateClone, classification);
 
     if (!(weaponMap instanceof Map)) {
       const passiveState = stateClone && stateClone.passive instanceof Map ? stateClone.passive : new Map();
       weaponMap = buildWeaponCostMap(
-        context.weapons,
-        context.quality,
-        context.baseFlags,
-        context.passiveItems,
+        preparedContext.weapons,
+        preparedContext.quality,
+        preparedContext.baseFlags,
+        preparedContext.passiveItems,
         passiveState,
         classification,
       );
     }
 
     const total = computeTotalCost(
-      context.baseCostPerModel,
-      context.count,
-      context.weapons,
+      preparedContext.baseCostPerModel,
+      preparedContext.count,
+      preparedContext.weapons,
       stateClone,
-      context.abilityCosts,
-      context.passiveItems,
+      preparedContext.abilityCosts,
+      preparedContext.passiveItems,
       weaponMap,
     );
 
@@ -6143,6 +6171,10 @@ function initRosterEditor() {
       classification,
       weaponMap,
     };
+  }
+
+  function computeRosterItemCost(context, partnerContext = null) {
+    return computeRosterItemTotal(context, partnerContext);
   }
 
   function refreshRosterCostBadges(options = null, cycleToken = null) {
@@ -6162,6 +6194,7 @@ function initRosterEditor() {
       return;
     }
 
+    const currentRefreshCycle = ++rosterRefreshCycleCounter;
     refreshRosterCostBadgesInProgress = true;
     try {
       const listElement = rosterListEl || ensureRosterList();
@@ -6217,7 +6250,7 @@ function initRosterEditor() {
           : null;
         const partnerContext = partnerItem ? getContext(partnerItem) : null;
 
-        const result = computeRosterItemCost(context, partnerContext);
+        const result = computeRosterItemTotal(context, partnerContext);
         if (!result || !Number.isFinite(result.total)) {
           return;
         }
@@ -6233,7 +6266,10 @@ function initRosterEditor() {
 
       if (Number.isFinite(totalOverride)) {
         updateTotalSummary(totalOverride);
-      } else if (Number.isFinite(aggregatedTotal)) {
+      } else if (
+        Number.isFinite(aggregatedTotal)
+        && currentRefreshCycle > preserveServerTotalUntilRefreshCycle
+      ) {
         updateTotalSummary(aggregatedTotal);
       }
     } finally {
