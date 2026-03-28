@@ -4043,6 +4043,9 @@ function computeTotalCost(
       const sourceItem = mappedItem && typeof mappedItem === 'object' ? mappedItem : item;
       let costValue = passiveCostMap.get(key);
       if (!Number.isFinite(costValue)) {
+        costValue = Number(sourceItem.cost_base);
+      }
+      if (!Number.isFinite(costValue)) {
         costValue = Number(sourceItem.cost);
       }
       if (!Number.isFinite(costValue)) {
@@ -5511,9 +5514,12 @@ function initRosterEditor() {
       }
       const key = String(item.slug);
       passiveEntries.set(key, item);
-      const costValue = Number(item.cost);
-      if (Number.isFinite(costValue)) {
-        passiveMap.set(key, costValue);
+      const baseCostValue = Number(item.cost_base);
+      const totalCostValue = Number(item.cost);
+      if (Number.isFinite(baseCostValue)) {
+        passiveMap.set(key, baseCostValue);
+      } else if (Number.isFinite(totalCostValue)) {
+        passiveMap.set(key, totalCostValue);
       }
     });
     return { active: activeMap, passive: passiveMap, passiveEntries, activeIdentifiers };

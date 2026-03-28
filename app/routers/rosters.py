@@ -1369,57 +1369,57 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
         is_default = bool(item.get("is_default", False)) or is_mandatory
         default_count = 1 if is_default else 0
         try:
-            cost_value = float(
-                costs.ability_cost_from_name(
-                    label or slug,
-                    value,
-                    unit_traits,
-                    toughness=unit.toughness,
-                    quality=unit.quality,
-                    defense=unit.defense,
-                    weapons=default_weapons,
-                )
+            components = costs.ability_cost_components_from_name(
+                label or slug,
+                value,
+                unit_traits,
+                toughness=unit.toughness,
+                quality=unit.quality,
+                defense=unit.defense,
+                weapons=default_weapons,
             )
+            cost_base_value = float(components.base)
+            cost_weapon_delta = float(components.weapon_delta)
+            cost_value = float(components.total)
         except Exception:  # pragma: no cover - fallback for unexpected input
-            cost_value = float(
-                costs.ability_cost_from_name(
-                    slug,
-                    value,
-                    unit_traits,
-                    toughness=unit.toughness,
-                    quality=unit.quality,
-                    defense=unit.defense,
-                    weapons=default_weapons,
-                )
+            fallback = costs.ability_cost_components_from_name(
+                slug,
+                value,
+                unit_traits,
+                toughness=unit.toughness,
+                quality=unit.quality,
+                defense=unit.defense,
+                weapons=default_weapons,
             )
+            cost_base_value = float(fallback.base)
+            cost_weapon_delta = float(fallback.weapon_delta)
+            cost_value = float(fallback.total)
         if slug.startswith(prefix):
             base_slug = slug[len(prefix) :].strip()
             cost_source = item.get("value") or base_slug or label
             try:
-                disable_cost = float(
-                    costs.ability_cost_from_name(
-                        cost_source or base_slug,
-                        None,
-                        unit_traits,
-                        toughness=unit.toughness,
-                        quality=unit.quality,
-                        defense=unit.defense,
-                        weapons=default_weapons,
-                    )
+                disable_components = costs.ability_cost_components_from_name(
+                    cost_source or base_slug,
+                    None,
+                    unit_traits,
+                    toughness=unit.toughness,
+                    quality=unit.quality,
+                    defense=unit.defense,
+                    weapons=default_weapons,
                 )
             except Exception:  # pragma: no cover - defensive
-                disable_cost = float(
-                    costs.ability_cost_from_name(
-                        base_slug or slug,
-                        None,
-                        unit_traits,
-                        toughness=unit.toughness,
-                        quality=unit.quality,
-                        defense=unit.defense,
-                        weapons=default_weapons,
-                    )
+                disable_components = costs.ability_cost_components_from_name(
+                    base_slug or slug,
+                    None,
+                    unit_traits,
+                    toughness=unit.toughness,
+                    quality=unit.quality,
+                    defense=unit.defense,
+                    weapons=default_weapons,
                 )
-            cost_value = -disable_cost
+            cost_base_value = -float(disable_components.base)
+            cost_weapon_delta = -float(disable_components.weapon_delta)
+            cost_value = cost_base_value + cost_weapon_delta
         entries.append(
             {
                 "slug": slug,
@@ -1427,6 +1427,8 @@ def _passive_entries(unit: models.Unit) -> list[dict]:
                 "label": label,
                 "description": description,
                 "cost": cost_value,
+                "cost_base": cost_base_value,
+                "cost_weapon_delta": cost_weapon_delta,
                 "is_default": is_default,
                 "default_count": default_count,
                 "is_mandatory": is_mandatory,
