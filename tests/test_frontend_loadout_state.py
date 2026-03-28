@@ -587,7 +587,7 @@ def test_single_unit_command_ability_keeps_unit_cost_and_roster_total_in_sync_af
           return source.slice(start, end);
         }
 
-        const prepareContextSource = extractFunction('prepareCostContext', '\\n\\n  function buildClassificationContextFromItem');
+        const prepareContextSource = extractFunction('prepareCostContext', '\\n\\n  function hydrateLoadoutStateForItem');
         const updateCostSource = extractFunction('updateCostDisplays', '\\n\\n  function computeRosterItemTotal');
         const computeTotalSource = extractFunction('computeRosterItemTotal', '\\n\\n  function computeRosterItemCost');
         const computeSource = extractFunction('computeRosterItemCost', '\\n\\n  function refreshRosterCostBadges');
@@ -699,6 +699,143 @@ def test_single_unit_command_ability_keeps_unit_cost_and_roster_total_in_sync_af
     assert result["unitBadge"] == "35 pkt"
     assert result["rosterTotal"] == 35
     assert result["panelCost"] == "35"
+
+
+def test_single_item_roster_keeps_unit_cost_equal_to_roster_total_after_each_ui_change() -> None:
+    script_body = """
+        const source = code;
+        function extractFunction(name, endMarker) {
+          const start = source.indexOf(`function ${name}(`);
+          if (start === -1) {
+            throw new Error(`Cannot find function ${name}`);
+          }
+          const end = source.indexOf(endMarker, start);
+          if (end === -1) {
+            throw new Error(`Cannot find end marker for ${name}`);
+          }
+          return source.slice(start, end);
+        }
+
+        const prepareContextSource = extractFunction('prepareCostContext', '\\n\\n  function hydrateLoadoutStateForItem');
+        const updateCostSource = extractFunction('updateCostDisplays', '\\n\\n  function computeRosterItemTotal');
+        const computeTotalSource = extractFunction('computeRosterItemTotal', '\\n\\n  function computeRosterItemCost');
+        const computeSource = extractFunction('computeRosterItemCost', '\\n\\n  function refreshRosterCostBadges');
+        const refreshSource = extractFunction('refreshRosterCostBadges', '\\n\\n  function applyClassificationToState');
+
+        const attrs = new Map([
+          ['data-roster-unit-id', 'u1'],
+          ['data-unit-cost', '0'],
+          ['data-unit-count', '1'],
+          ['data-loadout', '{}'],
+          ['data-unit-classification', 'null'],
+        ]);
+        const badge = { textContent: '' };
+        const item = {
+          getAttribute(name) { return attrs.get(name) || ''; },
+          setAttribute(name, value) { attrs.set(name, String(value)); },
+          querySelector(selector) {
+            if (selector === '[data-roster-unit-cost]') {
+              return badge;
+            }
+            return null;
+          },
+        };
+
+        const listElement = {
+          querySelectorAll(selector) {
+            if (selector === '[data-roster-item]') {
+              return [item];
+            }
+            return [];
+          },
+          querySelector(selector) {
+            const match = /data-roster-unit-id="([^"]+)"/.exec(selector);
+            if (!match) {
+              return null;
+            }
+            return match[1] === 'u1' ? item : null;
+          },
+        };
+
+        const cloneLoadoutState = (state) => ({ ...state, mode: state.mode || 'total' });
+        const normalizeLoadoutStateTotals = (state) => { state.mode = 'total'; };
+        const estimateCombinedClassification = (context) => ({ classification: context.currentClassification, weaponMap: new Map() });
+        const applyClassificationToState = () => {};
+        const buildWeaponCostMap = () => new Map();
+        let dynamicCost = 20;
+        const computeTotalCost = () => dynamicCost;
+        const formatPoints = (value) => String(value);
+        const getPartnerId = () => '';
+        const buildClassificationContextFromItem = () => ({
+          loadoutState: { mode: 'total' },
+          abilityCosts: { active: new Map(), passive: new Map() },
+          currentClassification: null,
+          count: 1,
+          weapons: [],
+          passiveItems: [],
+          baseFlags: {},
+          baseCostPerModel: 0,
+          quality: 4,
+        });
+        const totalCalls = [];
+        const updateTotalSummary = (value) => totalCalls.push(value);
+        let rosterListEl = listElement;
+        const ensureRosterList = () => listElement;
+        let refreshRosterCostBadgesInProgress = false;
+        let pendingRefreshOptions = null;
+        let pendingRefreshCycleToken = null;
+        let lastRefreshRosterCostCycleToken = null;
+        let preserveServerTotalUntilRefreshCycle = 0;
+        let rosterRefreshCycleCounter = 0;
+
+        const costValueEl = { textContent: '' };
+        const costBadgeEl = { classList: { toggle: () => {} } };
+        let activeItem = item;
+        const loadoutState = { mode: 'total' };
+        const currentWeapons = [];
+        const currentPassives = [];
+        const currentBaseFlags = {};
+        const abilityCostMap = { active: new Map(), passive: new Map() };
+        const baseCostPerModel = 0;
+        const currentCount = 1;
+        const currentQuality = 4;
+        const currentWeaponCostMap = new Map();
+        const currentClassification = null;
+
+        eval(prepareContextSource);
+        eval(computeTotalSource);
+        eval(computeSource);
+        eval(updateCostSource);
+        eval(refreshSource);
+
+        const checkpoints = [];
+        const step = (label, nextCost) => {
+          dynamicCost = nextCost;
+          updateCostDisplays();
+          refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, `cycle-${label}`);
+          checkpoints.push({
+            label,
+            unitCost: Number(item.getAttribute('data-unit-cost')),
+            rosterTotal: totalCalls[totalCalls.length - 1],
+            panelCost: Number(costValueEl.textContent || '0'),
+          });
+        };
+
+        step('initial', 20);
+        step('active-added', 35);
+        step('active-removed', 20);
+
+        console.log(JSON.stringify({ checkpoints }));
+    """
+
+    script = _build_sandbox_script(script_body)
+    result = _run_node(script)
+
+    assert result["checkpoints"] == [
+        {"label": "initial", "unitCost": 20, "rosterTotal": 20, "panelCost": 20},
+        {"label": "active-added", "unitCost": 35, "rosterTotal": 35, "panelCost": 35},
+        {"label": "active-removed", "unitCost": 20, "rosterTotal": 20, "panelCost": 20},
+    ]
 
 
 def test_apply_server_update_prefers_backend_cached_cost_without_immediate_frontend_recompute() -> None:
