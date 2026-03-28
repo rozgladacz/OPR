@@ -2909,14 +2909,14 @@ function renderPassiveEditor(
       }
       const roundedValue = Math.round(numericValue * 100) / 100;
       const roundedInteger = Math.round(roundedValue);
-      if (Math.abs(roundedValue - roundedInteger) < 0.01) {
+      if (Math.abs(roundedValue - roundedInteger) < 0.005) {
         return roundedInteger;
       }
       return roundedValue;
     };
     const formatDeltaText = () => {
       const normalizedDelta = normalizeDeltaForDisplay(deltaValue);
-      if (!Number.isFinite(normalizedDelta) || Math.abs(normalizedDelta) < 1e-9) {
+      if (!Number.isFinite(normalizedDelta) || Math.abs(normalizedDelta) < 0.005) {
         return 'Δ 0 pkt';
       }
       const prefix = normalizedDelta > 0 ? '+' : '-';
