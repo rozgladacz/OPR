@@ -5452,7 +5452,16 @@ function initRosterEditor() {
     };
     const warriorTotal = sumTotals('warrior');
     const shooterTotal = sumTotals('shooter');
-    const classification = createClassificationPayload(warriorTotal, shooterTotal, available);
+    const previousClassification =
+      (primaryContext && primaryContext.currentClassification)
+      || (partnerContext && partnerContext.currentClassification)
+      || null;
+    const classification = createClassificationPayload(
+      warriorTotal,
+      shooterTotal,
+      available,
+      previousClassification,
+    );
     let weaponMap = null;
     if (classification) {
       const source = classification.slug === 'wojownik' ? primaryTotals.warrior : primaryTotals.shooter;
@@ -6377,7 +6386,29 @@ function availableClassificationSlugs(flags) {
   return result;
 }
 
-function createClassificationPayload(warriorTotal, shooterTotal, availableSlugs) {
+function resolvePreviousClassificationSlug(previousClassification) {
+  if (!previousClassification) {
+    return null;
+  }
+  const slugValue =
+    typeof previousClassification === 'string'
+      ? previousClassification
+      : previousClassification && typeof previousClassification === 'object'
+        ? previousClassification.slug
+        : null;
+  if (!slugValue) {
+    return null;
+  }
+  const normalized = abilityIdentifier(String(slugValue));
+  return CLASSIFICATION_SLUGS.has(normalized) ? normalized : null;
+}
+
+function createClassificationPayload(
+  warriorTotal,
+  shooterTotal,
+  availableSlugs,
+  previousClassification = null,
+) {
   const warrior = Math.max(Number(warriorTotal) || 0, 0);
   const shooter = Math.max(Number(shooterTotal) || 0, 0);
   if (warrior <= 0 && shooter <= 0) {
@@ -6397,6 +6428,7 @@ function createClassificationPayload(warriorTotal, shooterTotal, availableSlugs)
       }
     });
   }
+  const previousSlug = resolvePreviousClassificationSlug(previousClassification);
   let preferred = null;
   if (warrior > shooter) {
     preferred = 'wojownik';
@@ -6404,6 +6436,8 @@ function createClassificationPayload(warriorTotal, shooterTotal, availableSlugs)
     preferred = 'strzelec';
   } else if (pool.size === 0) {
     return null;
+  } else {
+    preferred = previousSlug && pool.has(previousSlug) ? previousSlug : 'wojownik';
   }
   let slug = null;
   if (pool.size) {
@@ -6431,10 +6465,10 @@ function createClassificationPayload(warriorTotal, shooterTotal, availableSlugs)
     slug = preferred;
   }
   if (!slug && pool.size) {
-    if (pool.has('strzelec')) {
-      slug = 'strzelec';
-    } else if (pool.has('wojownik')) {
+    if (pool.has('wojownik')) {
       slug = 'wojownik';
+    } else if (pool.has('strzelec')) {
+      slug = 'strzelec';
     } else {
       slug = pool.values().next().value || null;
     }
