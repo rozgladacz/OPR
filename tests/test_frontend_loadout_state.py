@@ -512,6 +512,135 @@ def test_update_cost_displays_keeps_panel_and_unit_cost_in_sync_after_passive_to
     assert result["dataUnitCost"] == "88"
 
 
+def test_single_unit_command_ability_keeps_unit_cost_and_roster_total_in_sync_after_full_refresh_cycle() -> None:
+    script_body = """
+        const source = code;
+        function extractFunction(name, endMarker) {
+          const start = source.indexOf(`function ${name}(`);
+          if (start === -1) {
+            throw new Error(`Cannot find function ${name}`);
+          }
+          const end = source.indexOf(endMarker, start);
+          if (end === -1) {
+            throw new Error(`Cannot find end marker for ${name}`);
+          }
+          return source.slice(start, end);
+        }
+
+        const prepareContextSource = extractFunction('prepareCostContext', '\\n\\n  function buildClassificationContextFromItem');
+        const updateCostSource = extractFunction('updateCostDisplays', '\\n\\n  function computeRosterItemTotal');
+        const computeTotalSource = extractFunction('computeRosterItemTotal', '\\n\\n  function computeRosterItemCost');
+        const computeSource = extractFunction('computeRosterItemCost', '\\n\\n  function refreshRosterCostBadges');
+        const refreshSource = extractFunction('refreshRosterCostBadges', '\\n\\n  function applyClassificationToState');
+
+        const attrs = new Map([
+          ['data-roster-unit-id', 'u1'],
+          ['data-unit-cost', '0'],
+          ['data-unit-count', '1'],
+          ['data-loadout', '{}'],
+          ['data-unit-classification', 'null'],
+        ]);
+        const badge = { textContent: '' };
+        const item = {
+          getAttribute(name) { return attrs.get(name) || ''; },
+          setAttribute(name, value) { attrs.set(name, String(value)); },
+          querySelector(selector) {
+            if (selector === '[data-roster-unit-cost]') {
+              return badge;
+            }
+            return null;
+          },
+        };
+
+        const listElement = {
+          querySelectorAll(selector) {
+            if (selector === '[data-roster-item]') {
+              return [item];
+            }
+            return [];
+          },
+          querySelector(selector) {
+            const match = /data-roster-unit-id="([^"]+)"/.exec(selector);
+            if (!match) {
+              return null;
+            }
+            return match[1] === 'u1' ? item : null;
+          },
+        };
+
+        const cloneLoadoutState = (state) => ({ ...state, mode: state.mode || 'total' });
+        const normalizeLoadoutStateTotals = (state) => { state.mode = 'total'; };
+        const estimateCombinedClassification = (context) => ({ classification: context.currentClassification, weaponMap: new Map() });
+        const applyClassificationToState = () => {};
+        const buildWeaponCostMap = () => new Map();
+        const computeTotalCost = (_baseCost, _count, _weapons, _state, abilityCosts) => (
+          abilityCosts && abilityCosts.active instanceof Map && abilityCosts.active.get('rozkaz') ? 35 : 20
+        );
+        const formatPoints = (value) => String(value);
+        const getPartnerId = () => '';
+        const buildClassificationContextFromItem = () => ({
+          loadoutState: { mode: 'total' },
+          abilityCosts: { active: new Map([['rozkaz', 15]]) },
+          currentClassification: null,
+          count: 1,
+          weapons: [],
+          passiveItems: [],
+          baseFlags: {},
+          baseCostPerModel: 20,
+          quality: 4,
+        });
+        const updateTotalSummaryCalls = [];
+        const updateTotalSummary = (value) => updateTotalSummaryCalls.push(value);
+        let rosterListEl = listElement;
+        const ensureRosterList = () => listElement;
+        let refreshRosterCostBadgesInProgress = false;
+        let pendingRefreshOptions = null;
+        let pendingRefreshCycleToken = null;
+        let lastRefreshRosterCostCycleToken = null;
+        let preserveServerTotalUntilRefreshCycle = 0;
+        let rosterRefreshCycleCounter = 0;
+
+        const costValueEl = { textContent: '' };
+        const costBadgeEl = { classList: { toggle: () => {} } };
+        let activeItem = item;
+        const loadoutState = { mode: 'total' };
+        const currentWeapons = [];
+        const currentPassives = [];
+        const currentBaseFlags = {};
+        const abilityCostMap = { active: new Map([['rozkaz', 15]]), passive: new Map() };
+        const baseCostPerModel = 20;
+        const currentCount = 1;
+        const currentQuality = 4;
+        const currentWeaponCostMap = new Map();
+        const currentClassification = null;
+
+        eval(prepareContextSource);
+        eval(computeTotalSource);
+        eval(computeSource);
+        eval(updateCostSource);
+        eval(refreshSource);
+
+        // Lokalny cykl: dodanie aktywnej zdolności rozkazowej.
+        updateCostDisplays();
+        refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, 'cycle-command');
+
+        console.log(JSON.stringify({
+          dataUnitCost: item.getAttribute('data-unit-cost'),
+          unitBadge: badge.textContent,
+          rosterTotal: updateTotalSummaryCalls[updateTotalSummaryCalls.length - 1],
+          panelCost: costValueEl.textContent,
+        }));
+    """
+
+    script = _build_sandbox_script(script_body)
+    result = _run_node(script)
+
+    assert result["dataUnitCost"] == "35"
+    assert result["unitBadge"] == "35 pkt"
+    assert result["rosterTotal"] == 35
+    assert result["panelCost"] == "35"
+
+
 def test_apply_server_update_prefers_backend_cached_cost_without_immediate_frontend_recompute() -> None:
     script_body = """
         const source = code;
