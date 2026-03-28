@@ -2902,12 +2902,25 @@ function renderPassiveEditor(
       return Number.NaN;
     };
     let deltaValue = computeDelta();
+    const normalizeDeltaForDisplay = (value) => {
+      const numericValue = Number(value);
+      if (!Number.isFinite(numericValue)) {
+        return Number.NaN;
+      }
+      const roundedValue = Math.round(numericValue * 100) / 100;
+      const roundedInteger = Math.round(roundedValue);
+      if (Math.abs(roundedValue - roundedInteger) < 0.01) {
+        return roundedInteger;
+      }
+      return roundedValue;
+    };
     const formatDeltaText = () => {
-      if (!Number.isFinite(deltaValue) || Math.abs(deltaValue) < 1e-9) {
+      const normalizedDelta = normalizeDeltaForDisplay(deltaValue);
+      if (!Number.isFinite(normalizedDelta) || Math.abs(normalizedDelta) < 1e-9) {
         return 'Δ 0 pkt';
       }
-      const prefix = deltaValue > 0 ? '+' : '-';
-      return `Δ ${prefix}${formatPoints(Math.abs(deltaValue))} pkt`;
+      const prefix = normalizedDelta > 0 ? '+' : '-';
+      return `Δ ${prefix}${formatPoints(Math.abs(normalizedDelta))} pkt`;
     };
     cost.textContent = formatDeltaText();
     info.appendChild(cost);

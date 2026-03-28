@@ -1320,3 +1320,112 @@ def test_render_editors_show_mode_indicator_and_cost_labels_after_mode_switch() 
     assert result["perModelWeaponCosts"] == ["+5 pkt/model"]
     assert result["perModelAbilityCosts"] == ["+3 pkt/model"]
     assert result["perModelIndicators"] == ["Tryb: pkt/model", "Tryb: pkt/model"]
+
+
+def test_render_passive_editor_formats_okopany_delta_identically_with_rezerwa_toggle() -> None:
+    script_body = """
+        class Element {
+          constructor(tag) {
+            this.tagName = String(tag || '').toUpperCase();
+            this.children = [];
+            this.className = '';
+            this.textContent = '';
+            this.title = '';
+            this.value = '';
+            this.type = '';
+            this.min = '';
+            this.max = '';
+            this.checked = false;
+            this.disabled = false;
+            this.parentNode = null;
+            this._listeners = new Map();
+            this._innerHTML = '';
+          }
+          appendChild(child) {
+            if (child && typeof child === 'object') {
+              child.parentNode = this;
+              this.children.push(child);
+            }
+            return child;
+          }
+          setAttribute(name, value) {
+            this[name] = String(value);
+          }
+          set innerHTML(value) {
+            this._innerHTML = String(value || '');
+            this.children = [];
+          }
+          get innerHTML() {
+            return this._innerHTML;
+          }
+          addEventListener(type, handler) {
+            this._listeners.set(type, handler);
+          }
+          querySelectorAllByClass(className) {
+            const wanted = String(className || '').trim();
+            const out = [];
+            const hasClass = (node, cls) => {
+              const classes = String(node.className || '').split(/\\s+/).filter(Boolean);
+              return classes.includes(cls);
+            };
+            const walk = (node) => {
+              if (!node || !Array.isArray(node.children)) {
+                return;
+              }
+              node.children.forEach((child) => {
+                if (hasClass(child, wanted)) {
+                  out.push(child);
+                }
+                walk(child);
+              });
+            };
+            walk(this);
+            return out;
+          }
+        }
+
+        sandbox.document.createElement = (tag) => new Element(tag);
+        const extractCosts = (root) => root
+          .querySelectorAllByClass('roster-ability-cost')
+          .map((node) => node.textContent);
+
+        const passiveItems = [{ slug: 'Okopany', label: 'Okopany', default_count: 0, cost: 10 }];
+        const passiveState = new Map([['Okopany', 1]]);
+        const onChange = () => {};
+
+        let reserveEnabled = false;
+        const getDelta = () => (reserveEnabled ? 10.0001 : 9.9999);
+
+        const withoutReserveContainer = new Element('div');
+        reserveEnabled = false;
+        sandbox.renderPassiveEditor(
+          withoutReserveContainer,
+          passiveItems,
+          passiveState,
+          10,
+          true,
+          onChange,
+          getDelta,
+        );
+        const withoutReserveCosts = extractCosts(withoutReserveContainer);
+
+        const withReserveContainer = new Element('div');
+        reserveEnabled = true;
+        sandbox.renderPassiveEditor(
+          withReserveContainer,
+          passiveItems,
+          passiveState,
+          10,
+          true,
+          onChange,
+          getDelta,
+        );
+        const withReserveCosts = extractCosts(withReserveContainer);
+
+        console.log(JSON.stringify({ withoutReserveCosts, withReserveCosts }));
+    """
+
+    result = _run_node(_build_sandbox_script(script_body))
+
+    assert result["withoutReserveCosts"] == ["Δ +10 pkt"]
+    assert result["withReserveCosts"] == ["Δ +10 pkt"]
