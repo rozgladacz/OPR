@@ -4286,6 +4286,7 @@ function initRosterEditor() {
   let refreshCycleVersion = 0;
   let latestAppliedRefreshVersion = 0;
   let latestAuthoritativeRefreshVersion = 0;
+  let rosterRefreshCycleCounter = 0;
 
   function nextRefreshVersion(seedVersion = null) {
     const seed = Number(seedVersion);
@@ -6300,23 +6301,6 @@ function initRosterEditor() {
         return;
       }
 
-      if (!recomputeItems) {
-        const decision = applyRefreshPriority(normalizedToken);
-        if (!decision.apply) {
-          return;
-        }
-        if (Number.isFinite(totalOverride)) {
-          updateTotalSummary(totalOverride);
-          return;
-        }
-        const summedTotal = rosterItems.reduce((sum, item) => {
-          const value = Number(item?.getAttribute?.('data-unit-cost'));
-          return Number.isFinite(value) ? sum + value : sum;
-        }, 0);
-        updateTotalSummary(summedTotal);
-        return;
-      }
-
       const contextCache = new Map();
       const getContext = (item) => {
         if (!item) {
@@ -6349,12 +6333,14 @@ function initRosterEditor() {
           return;
         }
 
-        const formatted = formatPoints(result.total);
-        const badgeEl = item.querySelector('[data-roster-unit-cost]');
-        if (badgeEl) {
-          badgeEl.textContent = `${formatted} pkt`;
+        if (recomputeItems) {
+          const formatted = formatPoints(result.total);
+          const badgeEl = item.querySelector('[data-roster-unit-cost]');
+          if (badgeEl) {
+            badgeEl.textContent = `${formatted} pkt`;
+          }
+          item.setAttribute('data-unit-cost', String(result.total));
         }
-        item.setAttribute('data-unit-cost', String(result.total));
         aggregatedTotal += result.total;
       });
 
@@ -6364,10 +6350,7 @@ function initRosterEditor() {
       }
       if (Number.isFinite(totalOverride)) {
         updateTotalSummary(totalOverride);
-      } else if (
-        Number.isFinite(aggregatedTotal)
-        && currentRefreshCycle > preserveServerTotalUntilRefreshCycle
-      ) {
+      } else if (Number.isFinite(aggregatedTotal) && currentRefreshCycle >= 0) {
         updateTotalSummary(aggregatedTotal);
       }
     } finally {
@@ -6423,6 +6406,8 @@ function initRosterEditor() {
   }
 
   function handleStateChange() {
+    const editVersion = latestEditVersion + 1;
+    latestEditVersion = editVersion;
     let precomputedWeaponMap = null;
     if (loadoutState) {
       loadoutState.mode = 'total';
@@ -6478,7 +6463,7 @@ function initRosterEditor() {
       const dedupeKey = [activeId, String(currentCount), classificationSlug, loadoutInput?.value || ''].join('::');
       stateChangeCycleToken = {
         dedupeKey,
-        version: nextRefreshVersion(),
+        version: nextRefreshVersion(editVersion),
         authoritative: false,
       };
     }
@@ -6510,7 +6495,7 @@ function initRosterEditor() {
     }
     if (autoSaveEnabled) {
       setSaveStatus('dirty');
-      scheduleSave();
+      scheduleSave(editVersion);
     }
   }
 
