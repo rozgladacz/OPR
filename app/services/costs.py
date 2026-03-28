@@ -125,6 +125,16 @@ class PassiveState:
     traits: list[str]
 
 
+@dataclass
+class AbilityCostComponents:
+    base: float
+    weapon_delta: float = 0.0
+
+    @property
+    def total(self) -> float:
+        return self.base + self.weapon_delta
+
+
 def _ensure_extra_data(extra: Any) -> dict[str, Any] | None:
     if isinstance(extra, dict):
         return extra
@@ -719,7 +729,7 @@ def _parse_aura_value(name: str, value: str | None) -> tuple[str, float]:
     return slug, aura_range
 
 
-def ability_cost_from_name(
+def ability_cost_components_from_name(
     name: str,
     value: str | None = None,
     unit_abilities: Sequence[str] | None = None,
@@ -728,10 +738,10 @@ def ability_cost_from_name(
     quality: int | None = None,
     defense: int | None = None,
     weapons: Sequence[models.Weapon] | None = None,
-) -> float:
+) -> AbilityCostComponents:
     desc = normalize_name(name)
     if not desc:
-        return 0.0
+        return AbilityCostComponents(base=0.0, weapon_delta=0.0)
 
     abilities: list[str] = list(unit_abilities or [])
     slug = ability_identifier(name)
@@ -871,7 +881,29 @@ def ability_cost_from_name(
     if row_delta is not None:
         base_result = row_delta
 
-    return base_result + weapon_delta
+    return AbilityCostComponents(base=float(base_result), weapon_delta=float(weapon_delta))
+
+
+def ability_cost_from_name(
+    name: str,
+    value: str | None = None,
+    unit_abilities: Sequence[str] | None = None,
+    *,
+    toughness: int | float | None = None,
+    quality: int | None = None,
+    defense: int | None = None,
+    weapons: Sequence[models.Weapon] | None = None,
+) -> float:
+    components = ability_cost_components_from_name(
+        name,
+        value,
+        unit_abilities,
+        toughness=toughness,
+        quality=quality,
+        defense=defense,
+        weapons=weapons,
+    )
+    return components.total
 
 
 def base_model_cost(
@@ -1397,7 +1429,7 @@ def roster_unit_role_totals(
             label = entry.get("label") or slug
             value = entry.get("value")
             default_count = int(entry.get("default_count") or 0)
-            cost_value = ability_cost_from_name(
+            components = ability_cost_components_from_name(
                 label or slug,
                 value,
                 current_traits,
@@ -1410,7 +1442,7 @@ def roster_unit_role_totals(
                 {
                     "slug": slug,
                     "default_count": default_count,
-                    "cost": float(cost_value),
+                    "cost": float(components.base),
                 }
             )
         return entries

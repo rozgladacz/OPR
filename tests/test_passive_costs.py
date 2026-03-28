@@ -387,6 +387,57 @@ def test_przygotowanie_only_modifies_weapon_cost() -> None:
 
     assert totals_default["strzelec"] > totals_without["strzelec"]
     assert totals_default["strzelec"] - totals_without["strzelec"] >= expected_delta - 1e-6
+
+
+def test_rezerwa_passive_delta_is_not_doubled_when_weapon_costs_are_counted_separately() -> None:
+    weapon = models.Weapon(
+        id=77,
+        name="Karabin szturmowy",
+        range='12"',
+        attacks=1.0,
+        ap=1,
+        tags=None,
+        armory_id=1,
+    )
+    unit = models.Unit(
+        name="Zwiad",
+        quality=4,
+        defense=4,
+        toughness=3,
+        flags="Rezerwa?",
+        army_id=1,
+    )
+    unit.abilities = []
+    unit.weapon_links = []
+    unit.default_weapon = weapon
+    unit.default_weapon_id = weapon.id
+    roster_unit = models.RosterUnit(unit=unit, count=10)
+
+    without_reserve = costs.weapon_cost(weapon, unit.quality, [], use_cached=False)
+    with_reserve = costs.weapon_cost(
+        weapon,
+        unit.quality,
+        ["Rezerwa"],
+        use_cached=False,
+    )
+    expected_single_delta = (with_reserve - without_reserve) * 10
+    expected_double_delta = expected_single_delta * 2
+
+    base_loadout = rosters._default_loadout_payload(unit)
+    without_payload = dict(base_loadout)
+    without_payload["passive"] = {"Rezerwa": 0}
+    with_payload = dict(base_loadout)
+    with_payload["passive"] = {"Rezerwa": 1}
+
+    totals_without = costs.roster_unit_role_totals(roster_unit, without_payload)
+    totals_with = costs.roster_unit_role_totals(roster_unit, with_payload)
+    delta = totals_with["wojownik"] - totals_without["wojownik"]
+
+    assert delta == pytest.approx(expected_single_delta, abs=0.02)
+    assert delta != pytest.approx(expected_double_delta, abs=0.02)
+    assert delta == pytest.approx(-19.67, abs=0.5)
+
+
 def test_instynkt_cost_scaling_with_toughness() -> None:
     assert costs.passive_cost("instynkt", 5) == pytest.approx(-5)
 

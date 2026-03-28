@@ -1099,6 +1099,76 @@ def test_build_weapon_cost_map_applies_reserve_when_base_flag_is_optional_label(
     assert result["withoutReserve"] > 0
     assert result["withReserve"] < result["withoutReserve"]
 
+
+def test_compute_total_cost_with_rezerwa_uses_base_passive_component_and_weapon_preview_delta() -> None:
+    script_body = """
+        const weapon = {
+          id: 201,
+          range: 12,
+          attacks: 1,
+          ap: 1,
+          traits: '',
+          cost: sandbox.weaponCostInternal(4, 12, 1, 1, [], [], true),
+        };
+
+        const withoutReserveWeapon = sandbox.weaponCostInternal(4, 12, 1, 1, [], [], true);
+        const withReserveWeapon = sandbox.weaponCostInternal(4, 12, 1, 1, [], ['Rezerwa'], true);
+        const passiveTotalDelta = withReserveWeapon - withoutReserveWeapon;
+
+        const passiveItems = [
+          {
+            slug: 'Rezerwa',
+            default_count: 0,
+            cost: passiveTotalDelta,
+            cost_base: 0,
+          },
+        ];
+
+        const baseState = sandbox.createLoadoutState({
+          mode: 'per_model',
+          weapons: [{ id: 201, count: 1 }],
+          passive: [{ id: 'Rezerwa', count: 0 }],
+        });
+        const reserveState = sandbox.createLoadoutState({
+          mode: 'per_model',
+          weapons: [{ id: 201, count: 1 }],
+          passive: [{ id: 'Rezerwa', count: 1 }],
+        });
+
+        const totalWithout = sandbox.computeTotalCost(
+          0,
+          10,
+          [weapon],
+          baseState,
+          { active: new Map(), passive: new Map([['Rezerwa', 0]]) },
+          passiveItems,
+          new Map([[201, withoutReserveWeapon]]),
+        );
+        const totalWith = sandbox.computeTotalCost(
+          0,
+          10,
+          [weapon],
+          reserveState,
+          { active: new Map(), passive: new Map([['Rezerwa', 0]]) },
+          passiveItems,
+          new Map([[201, withReserveWeapon]]),
+        );
+
+        console.log(JSON.stringify({
+          totalWithout,
+          totalWith,
+          delta: totalWith - totalWithout,
+          expected: (withReserveWeapon - withoutReserveWeapon) * 10,
+          doubledExpected: (withReserveWeapon - withoutReserveWeapon) * 20,
+        }));
+    """
+    result = _run_node(_build_sandbox_script(script_body))
+
+    assert result["delta"] == pytest.approx(result["expected"], abs=1e-6)
+    assert result["delta"] != pytest.approx(result["doubledExpected"], abs=1e-6)
+    assert result["delta"] == pytest.approx(-19.67, abs=0.5)
+
+
 def test_weapon_cost_internal_applies_overcharge_multiplier_1_4() -> None:
     script_body = """
         const baseCost = sandbox.weaponCostInternal(4, 18, 2, 1, [], []);
