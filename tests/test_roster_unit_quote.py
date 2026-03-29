@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
@@ -224,3 +226,9 @@ def test_calculate_roster_unit_quote_preserves_totals_for_suffixed_loadout_keys(
     assert quote["components"]["weapon"] == expected_weapon
     assert quote["components"]["active"] == expected_active
     assert quote["components"]["aura"] == expected_aura
+
+
+@pytest.mark.parametrize("count", [0, -1, -5])
+def test_calculate_roster_unit_quote_rejects_non_positive_count(count: int) -> None:
+    with pytest.raises(ValueError, match="count must be greater than 0"):
+        costs.calculate_roster_unit_quote(_unit(), loadout={}, count=count)

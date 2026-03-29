@@ -1424,7 +1424,11 @@ def calculate_roster_unit_quote(
     loadout: dict[str, Any] | None = None,
     count: int = 1,
 ) -> dict[str, Any]:
-    """Public quote interface for a single roster unit."""
+    """Public quote interface for a single roster unit.
+
+    ``count`` must be a positive integer (> 0). Passing ``count <= 0``
+    is rejected with ``ValueError``.
+    """
     if unit is None:
         empty_loadout = normalize_roster_unit_loadout(unit, loadout)
         return {
@@ -1443,8 +1447,12 @@ def calculate_roster_unit_quote(
             "loadout": empty_loadout,
         }
 
+    unit_count = int(count)
+    if unit_count <= 0:
+        raise ValueError("count must be greater than 0")
+
     normalized_loadout = normalize_roster_unit_loadout(unit, loadout)
-    roster_unit = SimpleNamespace(unit=unit, count=max(int(count), 0), extra_weapons_json=None)
+    roster_unit = SimpleNamespace(unit=unit, count=unit_count, extra_weapons_json=None)
     totals = roster_unit_role_totals(roster_unit, normalized_loadout)
     warrior_total = float(totals.get("wojownik") or 0.0)
     shooter_total = float(totals.get("strzelec") or 0.0)
@@ -1456,9 +1464,8 @@ def calculate_roster_unit_quote(
         compute_passive_state(unit, normalized_loadout).traits
     )
     selected_traits = _with_role_trait(base_traits, selected_role_slug)
-    unit_count = max(int(count), 0)
     mode_total = normalized_loadout.get("mode") == "total"
-    model_count = max(unit_count, 1)
+    model_count = unit_count
 
     base_component = round(
         base_model_cost(
@@ -1555,6 +1562,11 @@ def roster_unit_role_totals(
     roster_unit: models.RosterUnit,
     payload: dict[str, dict[str, int]] | None = None,
 ) -> dict[str, float]:
+    """Return totals for both role variants for one roster unit.
+
+    ``roster_unit.count`` must be a positive integer (> 0). Values
+    less than or equal to zero are rejected with ``ValueError``.
+    """
     unit = getattr(roster_unit, "unit", None)
     if unit is None:
         return {"wojownik": 0.0, "strzelec": 0.0}
@@ -1627,8 +1639,10 @@ def roster_unit_role_totals(
     passive_counts = passive_state.counts
 
     total_mode = loadout_mode == "total"
-    model_multiplier = max(int(getattr(roster_unit, "count", 0)), 0)
-    model_count = max(model_multiplier, 1)
+    model_multiplier = int(getattr(roster_unit, "count", 0))
+    if model_multiplier <= 0:
+        raise ValueError("count must be greater than 0")
+    model_count = model_multiplier
 
     ability_multiplier = (
         0 if model_multiplier == 0 else 1 if has_massive_trait else model_count
