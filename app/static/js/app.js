@@ -6165,6 +6165,18 @@ function initRosterEditor() {
     return Number(item.getAttribute('data-unit-cost'));
   }
 
+  function setRosterItemCostStatus(item, status) {
+    if (!item) {
+      return;
+    }
+    const badgeEl = item.querySelector('[data-roster-unit-cost]');
+    if (!badgeEl) {
+      return;
+    }
+    badgeEl.classList.toggle('text-bg-danger', status === 'error');
+    badgeEl.classList.toggle('opacity-50', status === 'loading');
+  }
+
   async function fetchRosterUnitQuote(rosterUnitId, quotePayload, signal) {
     if (!rosterId || !rosterUnitId) {
       throw new Error('Brak identyfikatora oddziału do wyceny');
@@ -6386,40 +6398,36 @@ function initRosterEditor() {
 
         let aggregatedTotal = 0;
         const refreshConcurrencyLimit = 5;
-        const quoteTasks = rosterItems.map((item) => async () => {
-          const unitId = item.getAttribute('data-roster-unit-id') || '';
-          const count = Math.max(Number(item.getAttribute('data-unit-count') || '1'), 1);
-          const itemLoadout = hydrateLoadoutStateForItem(item, {
-            count,
-            weapons: getUnitDatasetList(item, 'weapon_options'),
-            activeItems: getUnitDatasetList(item, 'active_items'),
-            auraItems: getUnitDatasetList(item, 'aura_items'),
-            passiveItems: getUnitDatasetList(item, 'passive_items'),
+        const quoteSettledResults = new Array(rosterItems.length);
+        for (let startIndex = 0; startIndex < rosterItems.length; startIndex += refreshConcurrencyLimit) {
+          const batchItems = rosterItems.slice(startIndex, startIndex + refreshConcurrencyLimit);
+          batchItems.forEach((item) => {
+            setRosterItemCostStatus(item, 'loading');
           });
-          const quotePayload = serializeQuotePayloadFromState(itemLoadout, count);
-          const quote = await fetchRosterUnitQuote(unitId, quotePayload, null);
-          return {
-            item,
-            unitId,
-            total: quote.total,
-          };
-        });
-        const quoteSettledResults = [];
-        let nextTaskIndex = 0;
-        const workerCount = Math.max(1, Math.min(refreshConcurrencyLimit, quoteTasks.length));
-        const quoteWorkers = Array.from({ length: workerCount }, async () => {
-          while (nextTaskIndex < quoteTasks.length) {
-            const taskIndex = nextTaskIndex;
-            nextTaskIndex += 1;
-            try {
-              const taskResult = await quoteTasks[taskIndex]();
-              quoteSettledResults[taskIndex] = { status: 'fulfilled', value: taskResult };
-            } catch (taskError) {
-              quoteSettledResults[taskIndex] = { status: 'rejected', reason: taskError };
-            }
-          }
-        });
-        await Promise.allSettled(quoteWorkers);
+          const batchResults = await Promise.allSettled(
+            batchItems.map(async (item) => {
+              const unitId = item.getAttribute('data-roster-unit-id') || '';
+              const count = Math.max(Number(item.getAttribute('data-unit-count') || '1'), 1);
+              const itemLoadout = hydrateLoadoutStateForItem(item, {
+                count,
+                weapons: getUnitDatasetList(item, 'weapon_options'),
+                activeItems: getUnitDatasetList(item, 'active_items'),
+                auraItems: getUnitDatasetList(item, 'aura_items'),
+                passiveItems: getUnitDatasetList(item, 'passive_items'),
+              });
+              const quotePayload = serializeQuotePayloadFromState(itemLoadout, count);
+              const quote = await fetchRosterUnitQuote(unitId, quotePayload, null);
+              return {
+                item,
+                unitId,
+                total: quote.total,
+              };
+            }),
+          );
+          batchResults.forEach((result, batchIndex) => {
+            quoteSettledResults[startIndex + batchIndex] = result;
+          });
+        }
 
         quoteSettledResults.forEach((result, index) => {
           const item = rosterItems[index];
@@ -6430,14 +6438,17 @@ function initRosterEditor() {
           let total = Number.NaN;
           if (result && result.status === 'fulfilled') {
             total = result.value.total;
+            setRosterItemCostStatus(item, 'ready');
           } else {
             const knownTotal = getLastKnownItemCost(item);
             if (Number.isFinite(knownTotal)) {
               total = knownTotal;
+              setRosterItemCostStatus(item, 'error');
             } else {
               const errorReason = result && result.status === 'rejected'
                 ? result.reason
                 : new Error('Brak wyniku zapytania');
+              setRosterItemCostStatus(item, 'error');
               console.error(`Nie udało się pobrać quote dla oddziału ${unitId}`, errorReason);
             }
           }
