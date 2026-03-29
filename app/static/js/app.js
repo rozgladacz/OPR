@@ -6385,7 +6385,8 @@ function initRosterEditor() {
         }
 
         let aggregatedTotal = 0;
-        for (const item of rosterItems) {
+        const refreshConcurrencyLimit = 5;
+        const quoteTasks = rosterItems.map((item) => async () => {
           const unitId = item.getAttribute('data-roster-unit-id') || '';
           const count = Math.max(Number(item.getAttribute('data-unit-count') || '1'), 1);
           const itemLoadout = hydrateLoadoutStateForItem(item, {
@@ -6396,21 +6397,52 @@ function initRosterEditor() {
             passiveItems: getUnitDatasetList(item, 'passive_items'),
           });
           const quotePayload = serializeQuotePayloadFromState(itemLoadout, count);
+          const quote = await fetchRosterUnitQuote(unitId, quotePayload, null);
+          return {
+            item,
+            unitId,
+            total: quote.total,
+          };
+        });
+        const quoteSettledResults = [];
+        let nextTaskIndex = 0;
+        const workerCount = Math.max(1, Math.min(refreshConcurrencyLimit, quoteTasks.length));
+        const quoteWorkers = Array.from({ length: workerCount }, async () => {
+          while (nextTaskIndex < quoteTasks.length) {
+            const taskIndex = nextTaskIndex;
+            nextTaskIndex += 1;
+            try {
+              const taskResult = await quoteTasks[taskIndex]();
+              quoteSettledResults[taskIndex] = { status: 'fulfilled', value: taskResult };
+            } catch (taskError) {
+              quoteSettledResults[taskIndex] = { status: 'rejected', reason: taskError };
+            }
+          }
+        });
+        await Promise.allSettled(quoteWorkers);
 
+        quoteSettledResults.forEach((result, index) => {
+          const item = rosterItems[index];
+          if (!item) {
+            return;
+          }
+          const unitId = item.getAttribute('data-roster-unit-id') || '';
           let total = Number.NaN;
-          try {
-            const quote = await fetchRosterUnitQuote(unitId, quotePayload, null);
-            total = quote.total;
-          } catch (error) {
+          if (result && result.status === 'fulfilled') {
+            total = result.value.total;
+          } else {
             const knownTotal = getLastKnownItemCost(item);
             if (Number.isFinite(knownTotal)) {
               total = knownTotal;
             } else {
-              console.error(`Nie udało się pobrać quote dla oddziału ${unitId}`, error);
+              const errorReason = result && result.status === 'rejected'
+                ? result.reason
+                : new Error('Brak wyniku zapytania');
+              console.error(`Nie udało się pobrać quote dla oddziału ${unitId}`, errorReason);
             }
           }
           if (!Number.isFinite(total)) {
-            continue;
+            return;
           }
           const formatted = formatPoints(total);
           const badgeEl = item.querySelector('[data-roster-unit-cost]');
@@ -6419,7 +6451,7 @@ function initRosterEditor() {
           }
           item.setAttribute('data-unit-cost', String(total));
           aggregatedTotal += total;
-        }
+        });
 
         const decision = applyRefreshPriority(normalizedToken);
         if (!decision.apply) {
