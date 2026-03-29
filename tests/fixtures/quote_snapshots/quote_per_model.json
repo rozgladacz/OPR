@@ -1,0 +1,22 @@
+{
+  "components": {
+    "active": 0.0,
+    "aura": 0.0,
+    "base": 43.12,
+    "passive": 0.0,
+    "weapon": 0.0
+  },
+  "cost_engine_version": "quote-v1",
+  "count": 3,
+  "loadout": {
+    "active": {},
+    "aura": {},
+    "mode": "per_model",
+    "passive": {},
+    "weapons": {}
+  },
+  "selected_total": 43.12,
+  "shooter_total": 43.12,
+  "unit_id": 1,
+  "warrior_total": 43.12
+}

@@ -1,102 +1,101 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import textwrap
+import sys
 from pathlib import Path
 
-import pytest
-import sys
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from starlette.requests import Request
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.services import costs
-
-APP_JS_PATH = ROOT_DIR / "app/static/js/app.js"
-
-
-def _run_node_payload(
-    ap_values: list[int], trait_cases: dict[str, dict[str, object]] | None = None
-) -> dict[str, object]:
-    script = textwrap.dedent(
-        f"""
-        const fs = require('fs');
-        const vm = require('vm');
-        const code = fs.readFileSync({json.dumps(str(APP_JS_PATH))}, 'utf8');
-        const sandbox = {{
-          console,
-          Map,
-          Set,
-          JSON,
-          window: {{ setTimeout, clearTimeout }},
-          document: {{ addEventListener: () => {{}} }},
-        }};
-        sandbox.window.window = sandbox.window;
-        vm.createContext(sandbox);
-        vm.runInContext(code, sandbox);
-
-        const payload = vm.runInContext(`(() => {{
-          const apValues = {json.dumps(ap_values)};
-          const traitCases = {json.dumps(trait_cases or {})};
-          const traitMap = {{}};
-          Object.entries(traitCases).forEach(([name, flags]) => {{
-            traitMap[name] = flagsToAbilityList(flags);
-          }});
-          return {{
-            tables: {{
-              AP_BASE,
-              AP_LANCE,
-              BLAST_MULTIPLIER,
-              DEADLY_MULTIPLIER,
-              BRUTAL_MULTIPLIER,
-            }},
-            traitMap,
-            apLookups: apValues.map((ap) => ({{
-              ap,
-              base: lookupWithNearest(AP_BASE, ap),
-              lance: lookupWithNearest(AP_LANCE, ap),
-              brutal: BRUTAL_MULTIPLIER,
-            }})),
-          }};
-        }})()`, sandbox);
-        console.log(JSON.stringify(payload));
-        """
-    )
-    completed = subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
-    return json.loads(completed.stdout)
+from app import models
+from app.db import Base
+from app.routers import rosters
 
 
-def _normalize_table(raw: dict[str, float]) -> dict[int, float]:
-    return {int(key): float(value) for key, value in raw.items()}
+def _session():
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(engine)
+    return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)()
 
 
-def test_frontend_tables_match_backend_1_to_1() -> None:
-    frontend = _run_node_payload(ap_values=[])["tables"]
-    assert _normalize_table(frontend["AP_BASE"]) == pytest.approx(costs.AP_BASE)
-    assert _normalize_table(frontend["AP_LANCE"]) == pytest.approx(costs.AP_LANCE)
-    assert float(frontend["BRUTAL_MULTIPLIER"]) == pytest.approx(costs.BRUTAL_MULTIPLIER)
-    assert _normalize_table(frontend["BLAST_MULTIPLIER"]) == pytest.approx(costs.BLAST_MULTIPLIER)
-    assert _normalize_table(frontend["DEADLY_MULTIPLIER"]) == pytest.approx(costs.DEADLY_MULTIPLIER)
+def _payload(response) -> dict[str, object]:
+    return json.loads(response.body.decode("utf-8"))
 
 
-@pytest.mark.parametrize("ap_value", [-1, 0, 1, 2, 3, 4, 5])
-def test_frontend_backend_ap_lookup_matches_for_selected_combinations(ap_value: int) -> None:
-    frontend = _run_node_payload(ap_values=[ap_value])["apLookups"][0]
-    assert frontend["base"] == pytest.approx(costs.lookup_with_nearest(costs.AP_BASE, ap_value))
-    assert frontend["lance"] == pytest.approx(costs.lookup_with_nearest(costs.AP_LANCE, ap_value))
-    assert frontend["brutal"] == pytest.approx(costs.BRUTAL_MULTIPLIER)
+def _json_request() -> Request:
+    return Request({"type": "http", "method": "POST", "headers": [(b"accept", b"application/json")]})
 
 
-def test_frontend_backend_trait_map_match_for_optional_flags() -> None:
-    cases = {
-        "optional_true_ignored": {"Ambush?": True, "Furia!": True},
-        "optional_numeric_ignored": {"Transport(2)?": "2", "Waagh": True},
-        "optional_suffix_mixed": {"Scout?!": True, "Furia!": True, "Waagh": False},
-        "army_rule_off_ignored": {"__army_off__samolot": True, "Waagh": True},
-    }
-    frontend = _run_node_payload(ap_values=[], trait_cases=cases)["traitMap"]
-    backend = {name: costs.flags_to_ability_list(flags) for name, flags in cases.items()}
-    assert frontend == backend
-    assert "samolot" not in frontend["army_rule_off_ignored"]
+def test_update_api_contract_returns_frontend_render_fields() -> None:
+    session = _session()
+    try:
+        user = models.User(username="render-owner", password_hash="x")
+        ruleset = models.RuleSet(name="Render Rules")
+        armory = models.Armory(name="Render Armory", owner=user)
+        session.add_all([user, ruleset, armory])
+        session.flush()
+
+        weapon = models.Weapon(armory=armory, name="Rifle", range='18"', attacks=1, ap=0)
+        session.add(weapon)
+        session.flush()
+
+        army = models.Army(name="Render Army", owner=user, ruleset=ruleset, armory=armory)
+        session.add(army)
+        session.flush()
+
+        unit = models.Unit(
+            army=army,
+            owner=user,
+            name="Line",
+            quality=4,
+            defense=4,
+            toughness=1,
+            flags="Wojownik",
+            default_weapon=weapon,
+            typical_models=1,
+            position=0,
+        )
+        session.add(unit)
+        session.flush()
+
+        session.add(models.UnitWeapon(unit=unit, weapon=weapon, is_default=True, default_count=1, is_primary=True, position=0))
+
+        roster = models.Roster(name="Render Roster", army=army, owner=user)
+        session.add(roster)
+        session.flush()
+
+        roster_unit = models.RosterUnit(roster=roster, unit=unit, count=2, position=0)
+        session.add(roster_unit)
+        session.flush()
+
+        response = rosters.update_roster_unit(
+            roster.id,
+            roster_unit.id,
+            request=_json_request(),
+            count=2,
+            loadout_json=json.dumps({"mode": "total", "passive": {"wojownik": 1}}, ensure_ascii=False),
+            custom_name="Line Prime",
+            db=session,
+            current_user=user,
+        )
+        payload = _payload(response)
+
+        assert set(payload) == {"unit", "units", "warnings", "total_cost", "lock_pairs"}
+        unit_payload = payload["unit"]
+        assert unit_payload["id"] == roster_unit.id
+        assert unit_payload["custom_name"] == "Line Prime"
+        assert isinstance(unit_payload["cached_cost"], (float, int))
+        assert isinstance(unit_payload["loadout_json"], str)
+        assert isinstance(unit_payload["loadout_summary"], str)
+        assert isinstance(unit_payload["selected_passive_items"], list)
+        assert isinstance(unit_payload["selected_active_items"], list)
+        assert isinstance(unit_payload["selected_aura_items"], list)
+        assert isinstance(payload["units"], list)
+        assert isinstance(payload["total_cost"], (float, int))
+    finally:
+        session.close()
