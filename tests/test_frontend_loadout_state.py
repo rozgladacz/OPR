@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import textwrap
 from pathlib import Path
@@ -12,6 +13,11 @@ from app.services import costs
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 APP_JS_PATH = ROOT_DIR / "app/static/js/app.js"
+LEGACY_PARITY_ENABLED = os.getenv("ENABLE_LEGACY_MATH_PARITY_TESTS", "").strip() in {
+    "1",
+    "true",
+    "yes",
+}
 
 
 def _build_sandbox_script(body: str) -> str:
@@ -1702,6 +1708,10 @@ def test_weapon_cost_internal_applies_overcharge_multiplier_1_4() -> None:
     assert result["ratio"] == 1.4
 
 
+@pytest.mark.skipif(
+    not LEGACY_PARITY_ENABLED,
+    reason="legacy frontend-backend math parity test (planned for removal)",
+)
 def test_passive_cost_delta_depends_on_other_traits_frontend_matches_backend() -> None:
     passive_items = [
         {

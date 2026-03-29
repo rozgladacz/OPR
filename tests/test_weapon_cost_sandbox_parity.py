@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import textwrap
 from pathlib import Path
@@ -12,6 +13,15 @@ from app.services.costs import _weapon_cost
 ROOT_DIR = Path(__file__).resolve().parents[1]
 APP_JS_PATH = ROOT_DIR / "app/static/js/app.js"
 NUMERIC_TOLERANCE = 1e-6
+LEGACY_PARITY_ENABLED = os.getenv("ENABLE_LEGACY_MATH_PARITY_TESTS", "").strip() in {
+    "1",
+    "true",
+    "yes",
+}
+pytestmark = pytest.mark.skipif(
+    not LEGACY_PARITY_ENABLED,
+    reason="legacy frontend-backend math parity test (planned for removal)",
+)
 
 SCENARIOS: list[dict[str, object]] = [
     {

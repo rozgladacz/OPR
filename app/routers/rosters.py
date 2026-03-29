@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from .. import models
+from .. import config, models
 from ..db import get_db
 from ..paths import TEMPLATES_DIR
 from ..security import get_current_user
@@ -574,6 +574,7 @@ def edit_roster(
             "selected_id": selected_id,
             "unit_payloads": unit_payloads,
             "lock_pairs": lock_pairs,
+            "local_cost_engine_enabled": config.LOCAL_COST_ENGINE_ENABLED,
         },
     )
 
