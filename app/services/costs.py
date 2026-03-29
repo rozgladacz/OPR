@@ -7,6 +7,7 @@ import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Iterable, Sequence
 
 from .. import models
@@ -77,6 +78,7 @@ _RULESET_FALLBACK_PATH = (
 )
 
 ORDER_LIKE_ACTIVE_SLUGS = {"rozkaz", "klatwa", "oznaczenie"}
+COST_ENGINE_VERSION = "quote-v1"
 
 
 @lru_cache()
@@ -1306,6 +1308,244 @@ def unit_typical_total_cost(
     return round(per_model_value * count, 2)
 
 
+def _normalize_loadout_section_ids(
+    section_data: Any,
+    *,
+    allowed_ids: set[int],
+) -> dict[str, int]:
+    normalized: dict[str, int] = {}
+    if isinstance(section_data, dict):
+        items = section_data.items()
+    elif isinstance(section_data, list):
+        pairs: list[tuple[Any, Any]] = []
+        for entry in section_data:
+            if not isinstance(entry, dict):
+                continue
+            entry_id = (
+                entry.get("loadout_key")
+                or entry.get("key")
+                or entry.get("id")
+                or entry.get("weapon_id")
+                or entry.get("ability_id")
+            )
+            if entry_id is None:
+                continue
+            pairs.append((entry_id, entry.get("count") or entry.get("per_model") or 0))
+        items = pairs
+    else:
+        items = []
+
+    for raw_id, raw_value in items:
+        raw_id_str = str(raw_id).strip()
+        if not raw_id_str:
+            continue
+        base_id = raw_id_str.split(":", 1)[0]
+        try:
+            parsed_id = int(base_id)
+        except (TypeError, ValueError):
+            try:
+                parsed_id = int(float(base_id))
+            except (TypeError, ValueError):
+                continue
+        if parsed_id not in allowed_ids:
+            continue
+        try:
+            parsed_value = int(raw_value)
+        except (TypeError, ValueError):
+            try:
+                parsed_value = int(float(raw_value))
+            except (TypeError, ValueError):
+                parsed_value = 0
+        normalized[raw_id_str] = max(parsed_value, 0)
+    return normalized
+
+
+def normalize_roster_unit_loadout(
+    unit: models.Unit | None,
+    loadout: dict[str, Any] | None,
+) -> dict[str, Any]:
+    raw_loadout = loadout if isinstance(loadout, dict) else {}
+    mode = str(raw_loadout.get("mode") or "").strip().lower()
+    normalized_mode = "total" if mode == "total" else "per_model"
+
+    weapon_ids: set[int] = set()
+    for link in getattr(unit, "weapon_links", []) or []:
+        weapon_id = getattr(link, "weapon_id", None)
+        if weapon_id is not None:
+            weapon_ids.add(int(weapon_id))
+    default_weapon_id = getattr(unit, "default_weapon_id", None)
+    if default_weapon_id is not None:
+        weapon_ids.add(int(default_weapon_id))
+
+    active_ids: set[int] = set()
+    aura_ids: set[int] = set()
+    for link in getattr(unit, "abilities", []) or []:
+        ability = getattr(link, "ability", None)
+        ability_id = getattr(ability, "id", None)
+        if ability is None or ability_id is None:
+            continue
+        if ability.type == "active":
+            active_ids.add(int(ability_id))
+        elif ability.type == "aura":
+            aura_ids.add(int(ability_id))
+
+    passive_state = compute_passive_state(unit, raw_loadout)
+    allowed_passive_slugs = {
+        str(entry.get("slug") or "").strip()
+        for entry in passive_state.payload
+        if str(entry.get("slug") or "").strip()
+    }
+
+    passive_counts = _parse_passive_counts(raw_loadout)
+    sanitized_passive: dict[str, int] = {}
+    for slug, value in passive_counts.items():
+        slug_text = str(slug).strip()
+        if not slug_text or slug_text not in allowed_passive_slugs:
+            continue
+        sanitized_passive[slug_text] = 1 if int(value) > 0 else 0
+
+    return {
+        "mode": normalized_mode,
+        "weapons": _normalize_loadout_section_ids(
+            raw_loadout.get("weapons"), allowed_ids=weapon_ids
+        ),
+        "active": _normalize_loadout_section_ids(
+            raw_loadout.get("active"), allowed_ids=active_ids
+        ),
+        "aura": _normalize_loadout_section_ids(
+            raw_loadout.get("aura"), allowed_ids=aura_ids
+        ),
+        "passive": sanitized_passive,
+    }
+
+
+def calculate_roster_unit_quote(
+    unit: models.Unit | None,
+    loadout: dict[str, Any] | None = None,
+    count: int = 1,
+) -> dict[str, Any]:
+    """Public quote interface for a single roster unit."""
+    if unit is None:
+        empty_loadout = normalize_roster_unit_loadout(unit, loadout)
+        return {
+            "cost_engine_version": COST_ENGINE_VERSION,
+            "warrior_total": 0.0,
+            "shooter_total": 0.0,
+            "selected_total": 0.0,
+            "components": {
+                "base": 0.0,
+                "weapon": 0.0,
+                "active": 0.0,
+                "aura": 0.0,
+                "passive": 0.0,
+            },
+            "loadout": empty_loadout,
+        }
+
+    normalized_loadout = normalize_roster_unit_loadout(unit, loadout)
+    roster_unit = SimpleNamespace(unit=unit, count=max(int(count), 0), extra_weapons_json=None)
+    totals = roster_unit_role_totals(roster_unit, normalized_loadout)
+    warrior_total = float(totals.get("wojownik") or 0.0)
+    shooter_total = float(totals.get("strzelec") or 0.0)
+    selected_total = round(max(warrior_total, shooter_total), 2)
+
+    base_traits = _strip_role_traits(
+        compute_passive_state(unit, normalized_loadout).traits
+    )
+    warrior_traits = _with_role_trait(base_traits, "wojownik")
+    unit_count = max(int(count), 0)
+    mode_total = normalized_loadout.get("mode") == "total"
+    model_count = max(unit_count, 1)
+
+    base_component = round(
+        base_model_cost(
+            unit.quality,
+            unit.defense,
+            unit.toughness,
+            warrior_traits,
+        )
+        * model_count,
+        2,
+    )
+
+    def _section_total(section: str, ability: bool = False) -> float:
+        data = normalized_loadout.get(section)
+        if not isinstance(data, dict):
+            return 0.0
+        total = 0.0
+        for raw_key, raw_count in data.items():
+            key_str = str(raw_key).strip()
+            if not key_str:
+                continue
+            base_id = key_str.split(":", 1)[0]
+            try:
+                item_id = int(base_id)
+            except (TypeError, ValueError):
+                continue
+            per_model_count = max(int(raw_count), 0)
+            if per_model_count <= 0:
+                continue
+            multiplier = 1 if mode_total else model_count
+            if ability and any(ability_identifier(trait) == "masywny" for trait in base_traits):
+                multiplier = 1 if mode_total else 1
+            selected_count = per_model_count if mode_total else per_model_count * multiplier
+            if section == "weapons":
+                link = next(
+                    (
+                        item
+                        for item in getattr(unit, "weapon_links", []) or []
+                        if getattr(item, "weapon_id", None) == item_id
+                        and getattr(item, "weapon", None) is not None
+                    ),
+                    None,
+                )
+                weapon = getattr(link, "weapon", None)
+                if weapon is None and getattr(unit, "default_weapon_id", None) == item_id:
+                    weapon = getattr(unit, "default_weapon", None)
+                if weapon is None:
+                    continue
+                total += weapon_cost(weapon, unit.quality, warrior_traits) * selected_count
+            else:
+                ability_link = next(
+                    (
+                        item
+                        for item in getattr(unit, "abilities", []) or []
+                        if getattr(getattr(item, "ability", None), "id", None) == item_id
+                    ),
+                    None,
+                )
+                if ability_link is None:
+                    continue
+                total += ability_cost(
+                    ability_link, warrior_traits, toughness=unit.toughness
+                ) * selected_count
+        return round(total, 2)
+
+    weapon_component = _section_total("weapons")
+    active_component = _section_total("active", ability=True)
+    aura_component = _section_total("aura", ability=True)
+
+    passive_component = round(
+        selected_total - (base_component + weapon_component + active_component + aura_component),
+        2,
+    )
+
+    return {
+        "cost_engine_version": COST_ENGINE_VERSION,
+        "warrior_total": round(warrior_total, 2),
+        "shooter_total": round(shooter_total, 2),
+        "selected_total": selected_total,
+        "components": {
+            "base": base_component,
+            "weapon": weapon_component,
+            "active": active_component,
+            "aura": aura_component,
+            "passive": passive_component,
+        },
+        "loadout": normalized_loadout,
+    }
+
+
 def roster_unit_role_totals(
     roster_unit: models.RosterUnit,
     payload: dict[str, dict[str, int]] | None = None,
@@ -1635,10 +1875,12 @@ def roster_unit_role_totals(
 
 
 def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
-    totals = roster_unit_role_totals(roster_unit)
-    warrior = float(totals.get("wojownik") or 0.0)
-    shooter = float(totals.get("strzelec") or 0.0)
-    return round(max(warrior, shooter), 2)
+    quote = calculate_roster_unit_quote(
+        getattr(roster_unit, "unit", None),
+        _ensure_extra_data(getattr(roster_unit, "extra_weapons_json", None)),
+        int(getattr(roster_unit, "count", 1) or 1),
+    )
+    return float(quote.get("selected_total") or 0.0)
 
 
 def roster_total(roster: models.Roster) -> float:
