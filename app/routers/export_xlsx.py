@@ -59,9 +59,10 @@ def _weapon_details_text(details: list[dict[str, Any]]) -> str:
 def _append_roster_sheet(
     workbook: Workbook,
     entries: list[dict[str, Any]],
+    roster_total: float,
     spells: list[dict[str, Any]] | None = None,
     army_rules: list[str] | None = None,
-) -> float:
+) -> None:
     sheet = workbook.active
     sheet.title = "Lista"
     header = [
@@ -86,10 +87,8 @@ def _append_roster_sheet(
 
     sheet.append(header)
 
-    total_cost = 0.0
     for entry in entries:
         total_value = float(entry.get("total_cost", 0.0))
-        total_cost += total_value
         rounded_value = entry.get("rounded_total_cost")
         if rounded_value is None:
             rounded_value = utils.round_points(total_value)
@@ -123,7 +122,7 @@ def _append_roster_sheet(
         "",
         "Razem",
         "",
-        utils.round_points(total_cost),
+        utils.round_points(roster_total),
     ]
     for index, value in enumerate(total_row):
         if index < len(column_widths):
@@ -149,7 +148,6 @@ def _append_roster_sheet(
     for index, max_length in enumerate(column_widths, start=1):
         column_letter = sheet.cell(row=1, column=index).column_letter
         sheet.column_dimensions[column_letter].width = min(max_length + 2, 60)
-    return total_cost
 
 
 def _append_weapons_sheet(
@@ -202,7 +200,7 @@ def export_xlsx(
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
 
-    costs.update_cached_costs(roster.roster_units)
+    total_cost, _ = costs.recalculate_roster_costs(roster)
     workbook = Workbook()
     unit_cache: dict[int, dict[str, Any]] = {}
     loadouts: dict[int, dict[str, Any]] = {}
@@ -226,8 +224,8 @@ def export_xlsx(
         )
     spell_entries = _army_spell_entries(roster, entries)
     army_rules = _army_rule_labels(getattr(roster, "army", None))
-    total_cost = _append_roster_sheet(
-        workbook, entries, spell_entries, army_rules=army_rules
+    _append_roster_sheet(
+        workbook, entries, total_cost, spell_entries, army_rules=army_rules
     )
     _append_weapons_sheet(workbook, entries, army_rules=army_rules)
 

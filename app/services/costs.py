@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from .. import models
 from ..data import abilities as ability_catalog
@@ -1883,20 +1883,46 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
     return float(quote.get("selected_total") or 0.0)
 
 
-def roster_total(roster: models.Roster) -> float:
+def recalculate_roster_costs(
+    roster: models.Roster | None,
+    loadout_overrides: Mapping[int, dict[str, Any] | None] | None = None,
+) -> tuple[float, dict[int, float]]:
+    """Recalculate ``cached_cost`` for every roster unit and return total + per-unit map.
+
+    ``loadout_overrides`` can provide transient loadouts keyed by ``RosterUnit.id``.
+    Overrides are used for cost calculation in the current call and persisted back to
+    ``cached_cost`` immediately.
+    """
+
+    if roster is None:
+        return 0.0, {}
     total = 0.0
-    for roster_unit in getattr(roster, "roster_units", []):
-        cost_value = getattr(roster_unit, "cached_cost", None)
-        if cost_value is None:
-            cost_value = roster_unit_cost(roster_unit)
-            if hasattr(roster_unit, "cached_cost"):
-                roster_unit.cached_cost = cost_value
-        try:
-            numeric = float(cost_value)
-        except (TypeError, ValueError):
-            continue
-        total += numeric
-    return round(total, 2)
+    unit_costs: dict[int, float] = {}
+    roster_units = getattr(roster, "roster_units", []) or []
+    for roster_unit in roster_units:
+        override = None
+        unit_id = getattr(roster_unit, "id", None)
+        if loadout_overrides and unit_id is not None:
+            override = loadout_overrides.get(unit_id)
+        quote = calculate_roster_unit_quote(
+            getattr(roster_unit, "unit", None),
+            override
+            if override is not None
+            else _ensure_extra_data(getattr(roster_unit, "extra_weapons_json", None)),
+            int(getattr(roster_unit, "count", 1) or 1),
+        )
+        cost_value = float(quote.get("selected_total") or 0.0)
+        if hasattr(roster_unit, "cached_cost"):
+            roster_unit.cached_cost = cost_value
+        if unit_id is not None:
+            unit_costs[unit_id] = cost_value
+        total += cost_value
+    return round(total, 2), unit_costs
+
+
+def roster_total(roster: models.Roster) -> float:
+    total, _ = recalculate_roster_costs(roster)
+    return total
 
 
 def ensure_cached_costs(roster_units: Iterable[models.RosterUnit]) -> None:
