@@ -340,3 +340,46 @@ def test_quote_endpoint_snapshots_for_controlled_fixtures() -> None:
         _assert_snapshot("quote_massive_total", quote_massive_total)
     finally:
         session.close()
+
+
+def test_quote_endpoint_coerces_zero_and_negative_count_to_one() -> None:
+    session = _session()
+    try:
+        fixture = _build_roster_fixture(session)
+        roster = fixture["roster"]
+        roster_unit = fixture["unit_a"]
+
+        quoted_zero = _json_response_payload(
+            rosters.quote_roster_unit(
+                roster.id,
+                roster_unit.id,
+                payload={"count": 0, "loadout": {"mode": "per_model"}},
+                db=session,
+                current_user=fixture["user"],
+            )
+        )
+        quoted_negative = _json_response_payload(
+            rosters.quote_roster_unit(
+                roster.id,
+                roster_unit.id,
+                payload={"count": -3, "loadout": {"mode": "per_model"}},
+                db=session,
+                current_user=fixture["user"],
+            )
+        )
+        quoted_one = _json_response_payload(
+            rosters.quote_roster_unit(
+                roster.id,
+                roster_unit.id,
+                payload={"count": 1, "loadout": {"mode": "per_model"}},
+                db=session,
+                current_user=fixture["user"],
+            )
+        )
+
+        assert quoted_zero["count"] == 1
+        assert quoted_negative["count"] == 1
+        assert quoted_zero["selected_total"] == quoted_one["selected_total"]
+        assert quoted_negative["selected_total"] == quoted_one["selected_total"]
+    finally:
+        session.close()
