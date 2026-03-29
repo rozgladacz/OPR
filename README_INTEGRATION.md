@@ -52,6 +52,14 @@ Ten pakiet dodaje:
 
 ## Single source of truth for costs
 
+
+### Migracja kontraktu endpointu quote (2026-03-29)
+
+- Endpoint `POST /rosters/{roster_id}/units/{roster_unit_id}/quote` używa teraz parametru ścieżki `roster_unit_id` (wcześniej `unit_id`).
+- W JSON odpowiedzi dodano pole `roster_unit_id` jako nowe pole docelowe.
+- Pole `unit_id` jest zwracane tymczasowo dla kompatybilności wstecznej (deprecated) i powinno zostać usunięte po migracji klientów zewnętrznych.
+- Jeśli integracja poza frontendem mapuje identyfikator jednostki z quote API, przełącz mapowanie na `roster_unit_id`.
+
 ### Kontrakt cache (`RosterUnit.cached_cost`)
 
 - `cached_cost` jest **authoritative tylko po refreshu** wykonanym przez `app/services/costs.py::recalculate_roster_costs(...)`.
