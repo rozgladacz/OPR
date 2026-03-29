@@ -1227,6 +1227,7 @@ def quote_roster_unit(
         _json_safe(
             {
                 "roster_unit_id": roster_unit.id,
+                # TODO: remove legacy alias after frontend/clients fully migrate.
                 "unit_id": roster_unit.id,
                 "count": count,
                 "cost_engine_version": quote.get("cost_engine_version"),
