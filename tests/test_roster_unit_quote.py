@@ -228,6 +228,73 @@ def test_calculate_roster_unit_quote_preserves_totals_for_suffixed_loadout_keys(
     assert quote["components"]["aura"] == expected_aura
 
 
+@pytest.mark.parametrize("mode", ["per_model", "total"])
+def test_calculate_roster_unit_quote_matches_legacy_section_totals_regression(mode: str) -> None:
+    default_weapon = _weapon(101, ap=1)
+    heavy_weapon = _weapon(102, ap=3)
+    active_ability = SimpleNamespace(id=201, name="Scout", type="active", cost_hint=3, config_json=None)
+    aura_ability = SimpleNamespace(id=202, name="Fear", type="aura", cost_hint=2, config_json=None)
+    unit = SimpleNamespace(
+        quality=4,
+        defense=4,
+        toughness=1,
+        flags="Wojownik,Masywny",
+        army=None,
+        abilities=[
+            SimpleNamespace(ability=active_ability, params_json=None, unit=None),
+            SimpleNamespace(ability=aura_ability, params_json=None, unit=None),
+        ],
+        weapon_links=[
+            SimpleNamespace(weapon_id=101, weapon=default_weapon, is_default=True, default_count=1),
+            SimpleNamespace(weapon_id=102, weapon=heavy_weapon, is_default=False, default_count=0),
+        ],
+        default_weapon=default_weapon,
+        default_weapon_id=101,
+    )
+    loadout = {
+        "mode": mode,
+        "weapons": {"101:base": 1, "102:alt": 2},
+        "active": {"201:banner": 2},
+        "aura": {"202:fearful": 1},
+    }
+
+    quote = costs.calculate_roster_unit_quote(unit, loadout=loadout, count=3)
+    normalized_loadout = quote["loadout"]
+    base_traits = costs._strip_role_traits(costs.compute_passive_state(unit, normalized_loadout).traits)
+    selected_traits = costs._with_role_trait(base_traits, quote["selected_role"])
+
+    expected_weapon = _legacy_section_total(
+        unit,
+        normalized_loadout,
+        base_traits,
+        selected_traits,
+        3,
+        section="weapons",
+    )
+    expected_active = _legacy_section_total(
+        unit,
+        normalized_loadout,
+        base_traits,
+        selected_traits,
+        3,
+        section="active",
+        ability=True,
+    )
+    expected_aura = _legacy_section_total(
+        unit,
+        normalized_loadout,
+        base_traits,
+        selected_traits,
+        3,
+        section="aura",
+        ability=True,
+    )
+
+    assert quote["components"]["weapon"] == expected_weapon
+    assert quote["components"]["active"] == expected_active
+    assert quote["components"]["aura"] == expected_aura
+
+
 @pytest.mark.parametrize("count", [0, -1, -5])
 def test_calculate_roster_unit_quote_rejects_non_positive_count(count: int) -> None:
     with pytest.raises(ValueError, match="count must be greater than 0"):
