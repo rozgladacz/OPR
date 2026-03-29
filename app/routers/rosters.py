@@ -1187,10 +1187,10 @@ def update_roster_unit(
     )
 
 
-@router.post("/{roster_id}/units/{unit_id}/quote")
+@router.post("/{roster_id}/units/{roster_unit_id}/quote")
 def quote_roster_unit(
     roster_id: int,
-    unit_id: int,
+    roster_unit_id: int,
     payload: dict[str, Any] | None = Body(default=None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
@@ -1202,7 +1202,7 @@ def quote_roster_unit(
             .options(
                 selectinload(models.RosterUnit.unit).options(*_unit_eager_options())
             )
-            .where(models.RosterUnit.id == unit_id)
+            .where(models.RosterUnit.id == roster_unit_id)
         )
         .scalars()
         .first()
@@ -1226,6 +1226,7 @@ def quote_roster_unit(
     return JSONResponse(
         _json_safe(
             {
+                "roster_unit_id": roster_unit.id,
                 "unit_id": roster_unit.id,
                 "count": count,
                 "cost_engine_version": quote.get("cost_engine_version"),

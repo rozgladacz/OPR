@@ -6165,11 +6165,11 @@ function initRosterEditor() {
     return Number(item.getAttribute('data-unit-cost'));
   }
 
-  async function fetchRosterUnitQuote(unitId, quotePayload, signal) {
-    if (!rosterId || !unitId) {
+  async function fetchRosterUnitQuote(rosterUnitId, quotePayload, signal) {
+    if (!rosterId || !rosterUnitId) {
       throw new Error('Brak identyfikatora oddziału do wyceny');
     }
-    const response = await fetch(`/rosters/${rosterId}/units/${unitId}/quote`, {
+    const response = await fetch(`/rosters/${rosterId}/units/${rosterUnitId}/quote`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
