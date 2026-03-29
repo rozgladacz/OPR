@@ -690,7 +690,8 @@ const RANGE_TABLE = { 0: 0.6, 12: 0.65, 18: 1.0, 24: 1.25, 30: 1.45, 36: 1.55 };
 const ARTILLERY_RANGE_BONUS = { 0: 0.0, 12: 0.85, 18: 0.55, 24: 0.35, 30: 0.2, 36: 0.15 };
 const UNWIELDY_RANGE_PENALTY = { 0: 0.0, 12: 0.6, 18: 0.4, 24: 0.4, 30: 0.3, 36: 0.15 };
 const CAUTIOUS_HIT_BONUS = { 0: 0.0, 12: 0.0, 18: 0.6, 24: 0.7, 30: 0.8, 36: 0.9 };
-// Keep in sync with app/services/costs.py
+// @deprecated Local pricing tables are retained only for optional JS fallback
+// (feature flag: window.__ENABLE_JS_COST_FALLBACK__ or data-enable-js-cost-fallback).
 const AP_BASE = { '-1': 0.8, 0: 1.0, 1: 1.4, 2: 1.8, 3: 2.1, 4: 2.3, 5: 2.4 };
 const AP_LANCE = { '-1': 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05 };
 const BRUTAL_MULTIPLIER = 1.05;
@@ -1038,6 +1039,7 @@ function buildWeaponFlags(baseFlags, passiveItems, passiveState) {
   return result;
 }
 
+// @deprecated Production flow should use backend quote endpoint.
 function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unitTraits, allowAssaultExtra = true) {
   let chance = 6.65;
   const attacksValue = Math.max(Number(attacks) || 0, 0);
@@ -4287,6 +4289,12 @@ function initRosterEditor() {
   let latestAppliedRefreshVersion = 0;
   let latestAuthoritativeRefreshVersion = 0;
   let rosterRefreshCycleCounter = 0;
+  const ENABLE_JS_COST_FALLBACK =
+    root.dataset.enableJsCostFallback === 'true'
+    || window.__ENABLE_JS_COST_FALLBACK__ === true;
+  let quoteRefreshTimer = null;
+  let activeQuoteController = null;
+  let quoteRequestVersion = 0;
 
   function nextRefreshVersion(seedVersion = null) {
     const seed = Number(seedVersion);
@@ -6125,58 +6133,56 @@ function initRosterEditor() {
     }, serverRefreshToken);
   }
 
-  function computeActiveItemCost() {
-    if (!loadoutState) {
-      return null;
-    }
-
-    const activeContext = prepareCostContext({
-      loadoutState,
-      weapons: currentWeapons,
-      passiveItems: currentPassives,
-      baseFlags: currentBaseFlags,
-      abilityCosts: abilityCostMap,
-      baseCostPerModel,
-      count: currentCount,
-      quality: currentQuality,
-      currentClassification,
-    });
-
-    let partnerContext = null;
-    if (activeItem) {
-      const activeEntry = getEntryElementFromItem(activeItem);
-      const activeId = getUnitIdFromEntry(activeEntry);
-      const partnerId = getPartnerId(activeId);
-      const listElement = rosterListEl || ensureRosterList();
-      if (partnerId && listElement) {
-        const partnerItem = listElement.querySelector(
-          `[data-roster-item][data-roster-unit-id="${partnerId}"]`,
-        );
-        if (partnerItem) {
-          partnerContext = buildClassificationContextFromItem(partnerItem);
-        }
-      }
-    }
-
-    return computeRosterItemCost(activeContext, partnerContext);
+  function serializeQuotePayloadFromState(state, count) {
+    const serialized = serializeLoadoutState(state);
+    const parsedLoadout = parseJsonValue(
+      serialized,
+      'Nie udało się zserializować konfiguracji oddziału',
+      {},
+    );
+    return {
+      count: Math.max(Number(count) || 1, 1),
+      loadout: parsedLoadout && typeof parsedLoadout === 'object' ? parsedLoadout : {},
+    };
   }
 
-  function updateCostDisplays() {
-    const result = computeActiveItemCost();
-    const total = result && Number.isFinite(result.total)
-      ? result.total
-      : computeUnitTotalFromState(
-        loadoutState,
-        currentCount,
-        currentClassification,
-        abilityCostMap,
-        currentWeaponCostMap,
-        {
-          baseCostPerModel,
-          weapons: currentWeapons,
-          passiveItems: currentPassives,
-        },
-      );
+  function setCostDisplayStatus(status) {
+    if (!costBadgeEl) {
+      return;
+    }
+    costBadgeEl.classList.toggle('opacity-50', status === 'loading');
+    costBadgeEl.classList.toggle('text-bg-danger', status === 'error');
+  }
+
+  async function fetchRosterUnitQuote(unitId, quotePayload, signal) {
+    if (!rosterId || !unitId) {
+      throw new Error('Brak identyfikatora oddziału do wyceny');
+    }
+    const response = await fetch(`/rosters/${rosterId}/units/${unitId}/quote`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(quotePayload || {}),
+      credentials: 'same-origin',
+      signal,
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    const selectedTotal = Number(payload?.selected_total);
+    if (!Number.isFinite(selectedTotal)) {
+      throw new Error('Nieprawidłowa odpowiedź endpointu quote');
+    }
+    return {
+      total: selectedTotal,
+      loadout: payload?.loadout && typeof payload.loadout === 'object' ? payload.loadout : null,
+    };
+  }
+
+  function renderActiveCost(total) {
     const formatted = formatPoints(total);
     if (costValueEl) {
       costValueEl.textContent = formatted;
@@ -6192,6 +6198,40 @@ function initRosterEditor() {
       }
     }
     return total;
+  }
+
+  async function updateCostDisplays() {
+    if (!activeItem || !loadoutState) {
+      return null;
+    }
+    const unitId = activeItem.getAttribute('data-roster-unit-id') || '';
+    const quotePayload = serializeQuotePayloadFromState(loadoutState, currentCount);
+    setCostDisplayStatus('loading');
+    try {
+      const quote = await fetchRosterUnitQuote(unitId, quotePayload, null);
+      setCostDisplayStatus('ready');
+      return renderActiveCost(quote.total);
+    } catch (error) {
+      console.error('Nie udało się pobrać wyceny oddziału (quote)', error);
+      if (ENABLE_JS_COST_FALLBACK) {
+        const total = computeUnitTotalFromState(
+          loadoutState,
+          currentCount,
+          currentClassification,
+          abilityCostMap,
+          currentWeaponCostMap,
+          {
+            baseCostPerModel,
+            weapons: currentWeapons,
+            passiveItems: currentPassives,
+          },
+        );
+        setCostDisplayStatus('ready');
+        return renderActiveCost(total);
+      }
+      setCostDisplayStatus('error');
+      return null;
+    }
   }
 
   function computeUnitTotalFromState(
@@ -6220,6 +6260,9 @@ function initRosterEditor() {
   }
 
   function computeRosterItemTotal(context, partnerContext = null) {
+    if (!ENABLE_JS_COST_FALLBACK) {
+      return null;
+    }
     const preparedContext = prepareCostContext(context);
     if (!preparedContext || !preparedContext.loadoutState) {
       return null;
@@ -6302,120 +6345,117 @@ function initRosterEditor() {
 
     const currentRefreshCycle = ++rosterRefreshCycleCounter;
     refreshRosterCostBadgesInProgress = true;
-    try {
-      const listElement = rosterListEl || ensureRosterList();
-      if (!listElement) {
-        return;
-      }
-
-      const rosterItems = Array.from(listElement.querySelectorAll('[data-roster-item]'));
-      if (!rosterItems.length) {
-        if (Number.isFinite(totalOverride)) {
-          const decision = applyRefreshPriority(normalizedToken);
-          if (decision.apply) {
-            updateTotalSummary(totalOverride);
-          }
+    (async () => {
+      try {
+        const listElement = rosterListEl || ensureRosterList();
+        if (!listElement) {
+          return;
         }
-        return;
-      }
 
-      if (!recomputeItems) {
+        const rosterItems = Array.from(listElement.querySelectorAll('[data-roster-item]'));
+        if (!rosterItems.length) {
+          if (Number.isFinite(totalOverride)) {
+            const decision = applyRefreshPriority(normalizedToken);
+            if (decision.apply) {
+              updateTotalSummary(totalOverride);
+            }
+          }
+          return;
+        }
+
+        if (!recomputeItems) {
+          const decision = applyRefreshPriority(normalizedToken);
+          if (!decision.apply) {
+            return;
+          }
+          if (Number.isFinite(totalOverride)) {
+            updateTotalSummary(totalOverride);
+            return;
+          }
+          const summedTotal = rosterItems.reduce((sum, item) => {
+            const value = Number(item?.getAttribute?.('data-unit-cost'));
+            return Number.isFinite(value) ? sum + value : sum;
+          }, 0);
+          const expectedSingleUnitTotal = rosterItems.length === 1
+            ? Number(rosterItems[0].getAttribute('data-unit-cost'))
+            : null;
+          const safeTotal = Number.isFinite(expectedSingleUnitTotal) ? expectedSingleUnitTotal : summedTotal;
+          updateTotalSummary(safeTotal);
+          return;
+        }
+
+        let aggregatedTotal = 0;
+        for (const item of rosterItems) {
+          const unitId = item.getAttribute('data-roster-unit-id') || '';
+          const count = Math.max(Number(item.getAttribute('data-unit-count') || '1'), 1);
+          const itemLoadout = hydrateLoadoutStateForItem(item, {
+            count,
+            weapons: getUnitDatasetList(item, 'weapon_options'),
+            activeItems: getUnitDatasetList(item, 'active_items'),
+            auraItems: getUnitDatasetList(item, 'aura_items'),
+            passiveItems: getUnitDatasetList(item, 'passive_items'),
+          });
+          const quotePayload = serializeQuotePayloadFromState(itemLoadout, count);
+
+          let total = Number.NaN;
+          try {
+            const quote = await fetchRosterUnitQuote(unitId, quotePayload, null);
+            total = quote.total;
+          } catch (error) {
+            if (ENABLE_JS_COST_FALLBACK) {
+              const context = buildClassificationContextFromItem(item);
+              const result = computeRosterItemTotal(context, null);
+              total = Number(result?.total);
+            } else {
+              console.error(`Nie udało się pobrać quote dla oddziału ${unitId}`, error);
+            }
+          }
+          if (!Number.isFinite(total)) {
+            continue;
+          }
+          const formatted = formatPoints(total);
+          const badgeEl = item.querySelector('[data-roster-unit-cost]');
+          if (badgeEl) {
+            badgeEl.textContent = `${formatted} pkt`;
+          }
+          item.setAttribute('data-unit-cost', String(total));
+          aggregatedTotal += total;
+        }
+
         const decision = applyRefreshPriority(normalizedToken);
         if (!decision.apply) {
           return;
         }
         if (Number.isFinite(totalOverride)) {
-          updateTotalSummary(totalOverride);
-          return;
+          const expectedSingleUnitTotal = rosterItems.length === 1
+            ? Number(rosterItems[0].getAttribute('data-unit-cost'))
+            : null;
+          const safeTotal = Number.isFinite(expectedSingleUnitTotal) ? expectedSingleUnitTotal : totalOverride;
+          updateTotalSummary(safeTotal);
+        } else if (
+          Number.isFinite(aggregatedTotal)
+          && currentRefreshCycle > preserveServerTotalUntilRefreshCycle
+        ) {
+          const expectedSingleUnitTotal = rosterItems.length === 1
+            ? Number(rosterItems[0].getAttribute('data-unit-cost'))
+            : null;
+          const safeTotal = Number.isFinite(expectedSingleUnitTotal) ? expectedSingleUnitTotal : aggregatedTotal;
+          updateTotalSummary(safeTotal);
         }
-        const summedTotal = rosterItems.reduce((sum, item) => {
-          const value = Number(item?.getAttribute?.('data-unit-cost'));
-          return Number.isFinite(value) ? sum + value : sum;
-        }, 0);
-        const expectedSingleUnitTotal = rosterItems.length === 1
-          ? Number(rosterItems[0].getAttribute('data-unit-cost'))
-          : null;
-        const safeTotal = Number.isFinite(expectedSingleUnitTotal) ? expectedSingleUnitTotal : summedTotal;
-        updateTotalSummary(safeTotal);
-        return;
+      } finally {
+        refreshRosterCostBadgesInProgress = false;
+        if (normalizedToken.dedupeKey) {
+          lastRefreshRosterCostCycleToken = normalizedToken.dedupeKey;
+        }
+        if (pendingRefreshOptions !== null || pendingRefreshCycleToken !== null) {
+          const nextOptions = pendingRefreshOptions;
+          const nextCycleToken = pendingRefreshCycleToken;
+          pendingRefreshOptions = null;
+          pendingRefreshCycleToken = null;
+          refreshRosterCostBadges(nextOptions, nextCycleToken);
+        }
       }
-
-      const contextCache = new Map();
-      const getContext = (item) => {
-        if (!item) {
-          return null;
-        }
-        const unitId = item.getAttribute('data-roster-unit-id') || '';
-        if (contextCache.has(unitId)) {
-          return contextCache.get(unitId);
-        }
-        const context = buildClassificationContextFromItem(item);
-        contextCache.set(unitId, context);
-        return context;
-      };
-
-      let aggregatedTotal = 0;
-      rosterItems.forEach((item) => {
-        const context = getContext(item);
-        if (!context) {
-          return;
-        }
-        const unitId = item.getAttribute('data-roster-unit-id') || '';
-        const partnerId = getPartnerId(unitId);
-        const partnerItem = partnerId
-          ? listElement.querySelector(`[data-roster-item][data-roster-unit-id="${partnerId}"]`)
-          : null;
-        const partnerContext = partnerItem ? getContext(partnerItem) : null;
-
-        const result = computeRosterItemTotal(context, partnerContext);
-        if (!result || !Number.isFinite(result.total)) {
-          return;
-        }
-
-        if (recomputeItems) {
-          const formatted = formatPoints(result.total);
-          const badgeEl = item.querySelector('[data-roster-unit-cost]');
-          if (badgeEl) {
-            badgeEl.textContent = `${formatted} pkt`;
-          }
-          item.setAttribute('data-unit-cost', String(result.total));
-        }
-        aggregatedTotal += result.total;
-      });
-
-      const decision = applyRefreshPriority(normalizedToken);
-      if (!decision.apply) {
-        return;
-      }
-      if (Number.isFinite(totalOverride)) {
-        const expectedSingleUnitTotal = rosterItems.length === 1
-          ? Number(rosterItems[0].getAttribute('data-unit-cost'))
-          : null;
-        const safeTotal = Number.isFinite(expectedSingleUnitTotal) ? expectedSingleUnitTotal : totalOverride;
-        updateTotalSummary(safeTotal);
-      } else if (
-        Number.isFinite(aggregatedTotal)
-        && currentRefreshCycle > preserveServerTotalUntilRefreshCycle
-      ) {
-        const expectedSingleUnitTotal = rosterItems.length === 1
-          ? Number(rosterItems[0].getAttribute('data-unit-cost'))
-          : null;
-        const safeTotal = Number.isFinite(expectedSingleUnitTotal) ? expectedSingleUnitTotal : aggregatedTotal;
-        updateTotalSummary(safeTotal);
-      }
-    } finally {
-      refreshRosterCostBadgesInProgress = false;
-      if (normalizedToken.dedupeKey) {
-        lastRefreshRosterCostCycleToken = normalizedToken.dedupeKey;
-      }
-      if (pendingRefreshOptions !== null || pendingRefreshCycleToken !== null) {
-        const nextOptions = pendingRefreshOptions;
-        const nextCycleToken = pendingRefreshCycleToken;
-        pendingRefreshOptions = null;
-        pendingRefreshCycleToken = null;
-        refreshRosterCostBadges(nextOptions, nextCycleToken);
-      }
-    }
+    })();
   }
 
 
@@ -6501,7 +6541,48 @@ function initRosterEditor() {
     if (loadoutInput && loadoutState) {
       loadoutInput.value = serializeLoadoutState(loadoutState);
     }
-    updateCostDisplays();
+    if (quoteRefreshTimer) {
+      window.clearTimeout(quoteRefreshTimer);
+      quoteRefreshTimer = null;
+    }
+    if (activeQuoteController) {
+      activeQuoteController.abort();
+      activeQuoteController = null;
+    }
+    quoteRefreshTimer = window.setTimeout(() => {
+      quoteRefreshTimer = null;
+      quoteRequestVersion += 1;
+      const requestVersion = quoteRequestVersion;
+      activeQuoteController = new AbortController();
+      const currentSignal = activeQuoteController.signal;
+      const unitId = activeItem ? activeItem.getAttribute('data-roster-unit-id') || '' : '';
+      const quotePayload = serializeQuotePayloadFromState(loadoutState, currentCount);
+      setCostDisplayStatus('loading');
+      fetchRosterUnitQuote(unitId, quotePayload, currentSignal)
+        .then((quote) => {
+          if (requestVersion !== quoteRequestVersion) {
+            return;
+          }
+          setCostDisplayStatus('ready');
+          renderActiveCost(quote.total);
+        })
+        .catch((error) => {
+          if (error && error.name === 'AbortError') {
+            return;
+          }
+          console.error('Nie udało się odświeżyć wyceny aktywnego oddziału', error);
+          if (ENABLE_JS_COST_FALLBACK) {
+            updateCostDisplays();
+            return;
+          }
+          setCostDisplayStatus('error');
+        })
+        .finally(() => {
+          if (activeQuoteController && activeQuoteController.signal === currentSignal) {
+            activeQuoteController = null;
+          }
+        });
+    }, 250);
     let stateChangeCycleToken = null;
     if (activeItem) {
       const activeEntry = getEntryElementFromItem(activeItem);
