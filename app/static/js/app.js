@@ -690,8 +690,8 @@ const RANGE_TABLE = { 0: 0.6, 12: 0.65, 18: 1.0, 24: 1.25, 30: 1.45, 36: 1.55 };
 const ARTILLERY_RANGE_BONUS = { 0: 0.0, 12: 0.85, 18: 0.55, 24: 0.35, 30: 0.2, 36: 0.15 };
 const UNWIELDY_RANGE_PENALTY = { 0: 0.0, 12: 0.6, 18: 0.4, 24: 0.4, 30: 0.3, 36: 0.15 };
 const CAUTIOUS_HIT_BONUS = { 0: 0.0, 12: 0.0, 18: 0.6, 24: 0.7, 30: 0.8, 36: 0.9 };
-// @deprecated Local pricing tables are retained only for optional JS fallback
-// (feature flag: window.__ENABLE_JS_COST_FALLBACK__ or data-enable-js-cost-fallback).
+// @deprecated Local pricing tables are retained only for local development mode.
+// Production flow should rely on the backend quote endpoint.
 const AP_BASE = { '-1': 0.8, 0: 1.0, 1: 1.4, 2: 1.8, 3: 2.1, 4: 2.3, 5: 2.4 };
 const AP_LANCE = { '-1': 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05 };
 const BRUTAL_MULTIPLIER = 1.05;
@@ -4289,9 +4289,13 @@ function initRosterEditor() {
   let latestAppliedRefreshVersion = 0;
   let latestAuthoritativeRefreshVersion = 0;
   let rosterRefreshCycleCounter = 0;
+  const LOCAL_COST_ENGINE_ENABLED =
+    root.dataset.localCostEngineEnabled === 'true'
+    || window.__LOCAL_COST_ENGINE_ENABLED__ === true;
   const ENABLE_JS_COST_FALLBACK =
-    root.dataset.enableJsCostFallback === 'true'
-    || window.__ENABLE_JS_COST_FALLBACK__ === true;
+    LOCAL_COST_ENGINE_ENABLED
+    && (root.dataset.enableJsCostFallback === 'true'
+      || window.__ENABLE_JS_COST_FALLBACK__ === true);
   let quoteRefreshTimer = null;
   let activeQuoteController = null;
   let quoteRequestVersion = 0;
@@ -6154,6 +6158,13 @@ function initRosterEditor() {
     costBadgeEl.classList.toggle('text-bg-danger', status === 'error');
   }
 
+  function getLastKnownItemCost(item) {
+    if (!item || typeof item.getAttribute !== 'function') {
+      return Number.NaN;
+    }
+    return Number(item.getAttribute('data-unit-cost'));
+  }
+
   async function fetchRosterUnitQuote(unitId, quotePayload, signal) {
     if (!rosterId || !unitId) {
       throw new Error('Brak identyfikatora oddziału do wyceny');
@@ -6213,19 +6224,8 @@ function initRosterEditor() {
       return renderActiveCost(quote.total);
     } catch (error) {
       console.error('Nie udało się pobrać wyceny oddziału (quote)', error);
-      if (ENABLE_JS_COST_FALLBACK) {
-        const total = computeUnitTotalFromState(
-          loadoutState,
-          currentCount,
-          currentClassification,
-          abilityCostMap,
-          currentWeaponCostMap,
-          {
-            baseCostPerModel,
-            weapons: currentWeapons,
-            passiveItems: currentPassives,
-          },
-        );
+      const total = getLastKnownItemCost(activeItem);
+      if (Number.isFinite(total)) {
         setCostDisplayStatus('ready');
         return renderActiveCost(total);
       }
@@ -6402,10 +6402,9 @@ function initRosterEditor() {
             const quote = await fetchRosterUnitQuote(unitId, quotePayload, null);
             total = quote.total;
           } catch (error) {
-            if (ENABLE_JS_COST_FALLBACK) {
-              const context = buildClassificationContextFromItem(item);
-              const result = computeRosterItemTotal(context, null);
-              total = Number(result?.total);
+            const knownTotal = getLastKnownItemCost(item);
+            if (Number.isFinite(knownTotal)) {
+              total = knownTotal;
             } else {
               console.error(`Nie udało się pobrać quote dla oddziału ${unitId}`, error);
             }
@@ -6499,39 +6498,42 @@ function initRosterEditor() {
     const editVersion = latestEditVersion + 1;
     latestEditVersion = editVersion;
     let precomputedWeaponMap = null;
+    const activeEntry = activeItem ? getEntryElementFromItem(activeItem) : null;
+    const activeId = getUnitIdFromEntry(activeEntry);
+    const quoteEndpointAvailable = Boolean(rosterId && activeId);
     if (loadoutState) {
       loadoutState.mode = 'total';
-      const activeContext = {
-        loadoutState,
-        weapons: currentWeapons,
-        passiveItems: currentPassives,
-        baseFlags: currentBaseFlags,
-        abilityCosts: abilityCostMap,
-        baseCostPerModel,
-        count: currentCount,
-        quality: currentQuality,
-        currentClassification,
-      };
-      let partnerContext = null;
-      if (activeItem) {
-        const activeEntry = getEntryElementFromItem(activeItem);
-        const activeId = getUnitIdFromEntry(activeEntry);
-        const partnerId = getPartnerId(activeId);
-        const listElement = rosterListEl || ensureRosterList();
-        if (partnerId && listElement) {
-          const partnerItem = listElement.querySelector(
-            `[data-roster-item][data-roster-unit-id="${partnerId}"]`,
-          );
-          if (partnerItem) {
-            partnerContext = buildClassificationContextFromItem(partnerItem);
+      if (LOCAL_COST_ENGINE_ENABLED && !quoteEndpointAvailable) {
+        const activeContext = {
+          loadoutState,
+          weapons: currentWeapons,
+          passiveItems: currentPassives,
+          baseFlags: currentBaseFlags,
+          abilityCosts: abilityCostMap,
+          baseCostPerModel,
+          count: currentCount,
+          quality: currentQuality,
+          currentClassification,
+        };
+        let partnerContext = null;
+        if (activeItem) {
+          const partnerId = getPartnerId(activeId);
+          const listElement = rosterListEl || ensureRosterList();
+          if (partnerId && listElement) {
+            const partnerItem = listElement.querySelector(
+              `[data-roster-item][data-roster-unit-id="${partnerId}"]`,
+            );
+            if (partnerItem) {
+              partnerContext = buildClassificationContextFromItem(partnerItem);
+            }
           }
         }
-      }
-      const result = computeRosterItemTotal(activeContext, partnerContext);
-      if (result) {
-        currentClassification = result.classification || null;
-        if (result.weaponMap instanceof Map) {
-          precomputedWeaponMap = result.weaponMap;
+        const result = computeRosterItemTotal(activeContext, partnerContext);
+        if (result) {
+          currentClassification = result.classification || null;
+          if (result.weaponMap instanceof Map) {
+            precomputedWeaponMap = result.weaponMap;
+          }
         }
       }
       applyClassificationToState(loadoutState, currentClassification);
@@ -6571,8 +6573,10 @@ function initRosterEditor() {
             return;
           }
           console.error('Nie udało się odświeżyć wyceny aktywnego oddziału', error);
-          if (ENABLE_JS_COST_FALLBACK) {
-            updateCostDisplays();
+          const total = getLastKnownItemCost(activeItem);
+          if (Number.isFinite(total)) {
+            setCostDisplayStatus('ready');
+            renderActiveCost(total);
             return;
           }
           setCostDisplayStatus('error');
@@ -6585,8 +6589,6 @@ function initRosterEditor() {
     }, 250);
     let stateChangeCycleToken = null;
     if (activeItem) {
-      const activeEntry = getEntryElementFromItem(activeItem);
-      const activeId = getUnitIdFromEntry(activeEntry);
       const classificationSlug =
         currentClassification && typeof currentClassification === 'object' && currentClassification.slug
           ? String(currentClassification.slug)
@@ -6606,8 +6608,6 @@ function initRosterEditor() {
       updateItemClassification(activeItem, currentClassification);
       activeItem.setAttribute('data-unit-count', String(currentCount));
       invalidateCachedAttribute(activeItem, 'data-unit-count');
-      const activeEntry = getEntryElementFromItem(activeItem);
-      const activeId = getUnitIdFromEntry(activeEntry);
       const partnerId = getPartnerId(activeId);
       const listElement = rosterListEl || ensureRosterList();
       if (partnerId && listElement) {

@@ -73,6 +73,7 @@
   data-selected-id="{{ selected_id or '' }}"
   data-roster-unit-datasets='{{ unit_payloads | tojson | e }}'
   data-roster-lock-pairs='{{ lock_pairs | tojson | e }}'
+  data-local-cost-engine-enabled="{{ 'true' if local_cost_engine_enabled else 'false' }}"
 >
   {% if can_edit %}
   <div class="col-12 d-xl-none">
