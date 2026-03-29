@@ -216,6 +216,8 @@ def test_quote_endpoint_handles_modes_dynamic_passives_and_classification() -> N
         transport_payload = _json_response_payload(transport_with_fly_response)
 
         assert base_payload["count"] == 3
+        assert base_payload["roster_unit_id"] == roster_unit.id
+        assert base_payload["unit_id"] == roster_unit.id
         assert base_payload["selected_total"] >= base_payload["warrior_total"]
         assert base_payload["selected_total"] >= base_payload["shooter_total"]
         assert blocked_payload["selected_total"] != base_payload["selected_total"]
@@ -285,6 +287,8 @@ def test_quote_endpoint_and_update_flow_persists_cached_cost_and_roster_total() 
 
         assert update_payload["unit"]["id"] == roster_unit.id
         assert update_payload["unit"]["custom_name"] == "Veterans Prime"
+        assert quote_payload["roster_unit_id"] == roster_unit.id
+        assert quote_payload["unit_id"] == roster_unit.id
         assert quote_payload["selected_total"] > 0
         assert update_payload["unit"]["cached_cost"] == persisted_quote["selected_total"]
         assert update_payload["total_cost"] == total_from_units
@@ -379,6 +383,10 @@ def test_quote_endpoint_coerces_zero_and_negative_count_to_one() -> None:
 
         assert quoted_zero["count"] == 1
         assert quoted_negative["count"] == 1
+        assert quoted_zero["roster_unit_id"] == roster_unit.id
+        assert quoted_negative["roster_unit_id"] == roster_unit.id
+        assert quoted_zero["unit_id"] == roster_unit.id
+        assert quoted_negative["unit_id"] == roster_unit.id
         assert quoted_zero["selected_total"] == quoted_one["selected_total"]
         assert quoted_negative["selected_total"] == quoted_one["selected_total"]
     finally:

@@ -108,6 +108,7 @@ def test_quote_api_contract_contains_frontend_required_fields() -> None:
         }
         assert payload["roster_unit_id"] == roster_unit.id
         assert payload["unit_id"] == roster_unit.id
+        assert payload["unit_id"] == payload["roster_unit_id"]
         assert isinstance(payload["selected_total"], (float, int))
         assert isinstance(payload["components"], dict)
         assert set(payload["components"]) == {"base", "weapon", "active", "aura", "passive"}

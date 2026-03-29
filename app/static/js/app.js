@@ -6177,11 +6177,11 @@ function initRosterEditor() {
     badgeEl.classList.toggle('opacity-50', status === 'loading');
   }
 
-  async function fetchRosterUnitQuote(rosterUnitId, quotePayload, signal) {
-    if (!rosterId || !rosterUnitId) {
+  async function fetchRosterUnitQuote(requestedRosterUnitId, quotePayload, signal) {
+    if (!rosterId || !requestedRosterUnitId) {
       throw new Error('Brak identyfikatora oddziału do wyceny');
     }
-    const response = await fetch(`/rosters/${rosterId}/units/${rosterUnitId}/quote`, {
+    const response = await fetch(`/rosters/${rosterId}/units/${requestedRosterUnitId}/quote`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -6199,8 +6199,17 @@ function initRosterEditor() {
     if (!Number.isFinite(selectedTotal)) {
       throw new Error('Nieprawidłowa odpowiedź endpointu quote');
     }
+    const responseRosterUnitIdRaw = payload?.roster_unit_id ?? payload?.unit_id;
+    const responseRosterUnitId = normalizeRosterUnitId(responseRosterUnitIdRaw);
+    if (
+      responseRosterUnitId
+      && String(responseRosterUnitId) !== String(requestedRosterUnitId)
+    ) {
+      throw new Error('Nieprawidłowy identyfikator oddziału w odpowiedzi endpointu quote');
+    }
     return {
       total: selectedTotal,
+      rosterUnitId: responseRosterUnitId || String(requestedRosterUnitId),
       loadout: payload?.loadout && typeof payload.loadout === 'object' ? payload.loadout : null,
     };
   }
@@ -6227,11 +6236,11 @@ function initRosterEditor() {
     if (!activeItem || !loadoutState) {
       return null;
     }
-    const unitId = activeItem.getAttribute('data-roster-unit-id') || '';
+    const rosterUnitId = activeItem.getAttribute('data-roster-unit-id') || '';
     const quotePayload = serializeQuotePayloadFromState(loadoutState, currentCount);
     setCostDisplayStatus('loading');
     try {
-      const quote = await fetchRosterUnitQuote(unitId, quotePayload, null);
+      const quote = await fetchRosterUnitQuote(rosterUnitId, quotePayload, null);
       setCostDisplayStatus('ready');
       return renderActiveCost(quote.total);
     } catch (error) {
@@ -6406,7 +6415,7 @@ function initRosterEditor() {
           });
           const batchResults = await Promise.allSettled(
             batchItems.map(async (item) => {
-              const unitId = item.getAttribute('data-roster-unit-id') || '';
+              const rosterUnitId = item.getAttribute('data-roster-unit-id') || '';
               const count = Math.max(Number(item.getAttribute('data-unit-count') || '1'), 1);
               const itemLoadout = hydrateLoadoutStateForItem(item, {
                 count,
@@ -6416,10 +6425,10 @@ function initRosterEditor() {
                 passiveItems: getUnitDatasetList(item, 'passive_items'),
               });
               const quotePayload = serializeQuotePayloadFromState(itemLoadout, count);
-              const quote = await fetchRosterUnitQuote(unitId, quotePayload, null);
+              const quote = await fetchRosterUnitQuote(rosterUnitId, quotePayload, null);
               return {
                 item,
-                unitId,
+                rosterUnitId,
                 total: quote.total,
               };
             }),
@@ -6434,7 +6443,7 @@ function initRosterEditor() {
           if (!item) {
             return;
           }
-          const unitId = item.getAttribute('data-roster-unit-id') || '';
+          const rosterUnitId = item.getAttribute('data-roster-unit-id') || '';
           let total = Number.NaN;
           if (result && result.status === 'fulfilled') {
             total = result.value.total;
@@ -6449,7 +6458,7 @@ function initRosterEditor() {
                 ? result.reason
                 : new Error('Brak wyniku zapytania');
               setRosterItemCostStatus(item, 'error');
-              console.error(`Nie udało się pobrać quote dla oddziału ${unitId}`, errorReason);
+              console.error(`Nie udało się pobrać quote dla oddziału ${rosterUnitId}`, errorReason);
             }
           }
           if (!Number.isFinite(total)) {
@@ -6600,10 +6609,10 @@ function initRosterEditor() {
       const requestVersion = quoteRequestVersion;
       activeQuoteController = new AbortController();
       const currentSignal = activeQuoteController.signal;
-      const unitId = activeItem ? activeItem.getAttribute('data-roster-unit-id') || '' : '';
+      const rosterUnitId = activeItem ? activeItem.getAttribute('data-roster-unit-id') || '' : '';
       const quotePayload = serializeQuotePayloadFromState(loadoutState, currentCount);
       setCostDisplayStatus('loading');
-      fetchRosterUnitQuote(unitId, quotePayload, currentSignal)
+      fetchRosterUnitQuote(rosterUnitId, quotePayload, currentSignal)
         .then((quote) => {
           if (requestVersion !== quoteRequestVersion) {
             return;
