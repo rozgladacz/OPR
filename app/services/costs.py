@@ -1471,6 +1471,25 @@ def calculate_roster_unit_quote(
         2,
     )
 
+    weapon_by_id: dict[int, Any] = {}
+    for link in getattr(unit, "weapon_links", []) or []:
+        weapon_id = getattr(link, "weapon_id", None)
+        weapon = getattr(link, "weapon", None)
+        if weapon_id is None or weapon is None:
+            continue
+        weapon_by_id[int(weapon_id)] = weapon
+    default_weapon_id = getattr(unit, "default_weapon_id", None)
+    default_weapon = getattr(unit, "default_weapon", None)
+    if default_weapon_id is not None and default_weapon is not None:
+        weapon_by_id[int(default_weapon_id)] = default_weapon
+
+    ability_link_by_id: dict[int, Any] = {}
+    for link in getattr(unit, "abilities", []) or []:
+        ability_id = getattr(getattr(link, "ability", None), "id", None)
+        if ability_id is None:
+            continue
+        ability_link_by_id[int(ability_id)] = link
+
     def _section_total(section: str, ability: bool = False) -> float:
         data = normalized_loadout.get(section)
         if not isinstance(data, dict):
@@ -1493,30 +1512,12 @@ def calculate_roster_unit_quote(
                 multiplier = 1 if mode_total else 1
             selected_count = per_model_count if mode_total else per_model_count * multiplier
             if section == "weapons":
-                link = next(
-                    (
-                        item
-                        for item in getattr(unit, "weapon_links", []) or []
-                        if getattr(item, "weapon_id", None) == item_id
-                        and getattr(item, "weapon", None) is not None
-                    ),
-                    None,
-                )
-                weapon = getattr(link, "weapon", None)
-                if weapon is None and getattr(unit, "default_weapon_id", None) == item_id:
-                    weapon = getattr(unit, "default_weapon", None)
+                weapon = weapon_by_id.get(item_id)
                 if weapon is None:
                     continue
                 total += weapon_cost(weapon, unit.quality, selected_traits) * selected_count
             else:
-                ability_link = next(
-                    (
-                        item
-                        for item in getattr(unit, "abilities", []) or []
-                        if getattr(getattr(item, "ability", None), "id", None) == item_id
-                    ),
-                    None,
-                )
+                ability_link = ability_link_by_id.get(item_id)
                 if ability_link is None:
                     continue
                 total += ability_cost(
