@@ -1429,6 +1429,7 @@ def calculate_roster_unit_quote(
         empty_loadout = normalize_roster_unit_loadout(unit, loadout)
         return {
             "cost_engine_version": COST_ENGINE_VERSION,
+            "selected_role": None,
             "warrior_total": 0.0,
             "shooter_total": 0.0,
             "selected_total": 0.0,
@@ -1447,12 +1448,14 @@ def calculate_roster_unit_quote(
     totals = roster_unit_role_totals(roster_unit, normalized_loadout)
     warrior_total = float(totals.get("wojownik") or 0.0)
     shooter_total = float(totals.get("strzelec") or 0.0)
-    selected_total = round(max(warrior_total, shooter_total), 2)
+    selected_role_slug = "strzelec" if shooter_total >= warrior_total else "wojownik"
+    selected_total_raw = shooter_total if selected_role_slug == "strzelec" else warrior_total
+    selected_total = round(selected_total_raw, 2)
 
     base_traits = _strip_role_traits(
         compute_passive_state(unit, normalized_loadout).traits
     )
-    warrior_traits = _with_role_trait(base_traits, "wojownik")
+    selected_traits = _with_role_trait(base_traits, selected_role_slug)
     unit_count = max(int(count), 0)
     mode_total = normalized_loadout.get("mode") == "total"
     model_count = max(unit_count, 1)
@@ -1462,7 +1465,7 @@ def calculate_roster_unit_quote(
             unit.quality,
             unit.defense,
             unit.toughness,
-            warrior_traits,
+            selected_traits,
         )
         * model_count,
         2,
@@ -1504,7 +1507,7 @@ def calculate_roster_unit_quote(
                     weapon = getattr(unit, "default_weapon", None)
                 if weapon is None:
                     continue
-                total += weapon_cost(weapon, unit.quality, warrior_traits) * selected_count
+                total += weapon_cost(weapon, unit.quality, selected_traits) * selected_count
             else:
                 ability_link = next(
                     (
@@ -1517,7 +1520,7 @@ def calculate_roster_unit_quote(
                 if ability_link is None:
                     continue
                 total += ability_cost(
-                    ability_link, warrior_traits, toughness=unit.toughness
+                    ability_link, selected_traits, toughness=unit.toughness
                 ) * selected_count
         return round(total, 2)
 
@@ -1532,6 +1535,7 @@ def calculate_roster_unit_quote(
 
     return {
         "cost_engine_version": COST_ENGINE_VERSION,
+        "selected_role": selected_role_slug,
         "warrior_total": round(warrior_total, 2),
         "shooter_total": round(shooter_total, 2),
         "selected_total": selected_total,

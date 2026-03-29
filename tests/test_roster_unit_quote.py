@@ -48,6 +48,7 @@ def test_calculate_roster_unit_quote_returns_contract_fields() -> None:
     quote = costs.calculate_roster_unit_quote(_unit(), loadout={}, count=3)
 
     assert quote["cost_engine_version"] == costs.COST_ENGINE_VERSION
+    assert quote["selected_role"] in {"wojownik", "strzelec"}
     assert set(quote["components"]) == {"base", "weapon", "active", "aura", "passive"}
     assert quote["selected_total"] == max(quote["warrior_total"], quote["shooter_total"])
 
@@ -69,3 +70,25 @@ def test_calculate_roster_unit_quote_normalizes_loadout() -> None:
     assert normalized["active"] == {}
     assert normalized["aura"] == {}
     assert normalized["passive"] == {"wojownik": 1}
+
+
+def test_calculate_roster_unit_quote_uses_selected_role_variant_components() -> None:
+    quote = costs.calculate_roster_unit_quote(_unit(), loadout={}, count=1)
+
+    assert quote["selected_total"] == quote["shooter_total"]
+    assert quote["selected_role"] == "strzelec"
+
+    base_traits = costs._strip_role_traits(costs.compute_passive_state(_unit(), quote["loadout"]).traits)
+    shooter_traits = costs._with_role_trait(base_traits, "strzelec")
+    expected_base = round(
+        costs.base_model_cost(4, 4, 1, shooter_traits),
+        2,
+    )
+    expected_weapon = round(
+        costs.weapon_cost(_unit().default_weapon, 4, shooter_traits),
+        2,
+    )
+
+    assert quote["components"]["base"] == expected_base
+    assert quote["components"]["weapon"] == expected_weapon
+    assert round(sum(quote["components"].values()), 2) == quote["shooter_total"]
