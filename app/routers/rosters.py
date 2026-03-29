@@ -408,13 +408,7 @@ def edit_roster(
 
     selected_id = request.query_params.get("selected")
 
-    uncached_units = [
-        roster_unit
-        for roster_unit in roster.roster_units
-        if getattr(roster_unit, "cached_cost", None) is None
-    ]
-    if uncached_units:
-        costs.update_cached_costs(uncached_units)
+    total_cost, _ = costs.recalculate_roster_costs(roster)
     available_units_stmt = (
         select(models.Unit)
         .where(models.Unit.army_id == roster.army_id)
@@ -560,7 +554,6 @@ def edit_roster(
         if getattr(item.get("instance"), "unit", None) is not None
         and not item.get("is_hero", False)
     )
-    total_cost = costs.roster_total(roster)
     can_edit = current_user.is_admin or roster.owner_id == current_user.id
     can_delete = can_edit
 
@@ -771,7 +764,7 @@ def add_roster_unit(
             loadout_payload, active_items, "active"
         )
         selected_auras = _selected_ability_entries(loadout_payload, aura_items, "aura")
-        total_cost = costs.roster_total(roster)
+        total_cost, _ = costs.recalculate_roster_costs(roster)
         loadout_mapping = (
             {roster_unit.id: loadout_payload} if roster_unit.id is not None else None
         )
@@ -1024,16 +1017,6 @@ def update_roster_unit(
     def _unit_payload(unit: models.Unit) -> dict[str, Any]:
         return _unit_payload_cached(unit, unit_data_cache, unit_payloads)
 
-    roster_unit_rows = db.execute(
-        select(
-            models.RosterUnit.id,
-            models.RosterUnit.position,
-            models.RosterUnit.cached_cost,
-        )
-        .where(models.RosterUnit.roster_id == roster_id)
-        .order_by(models.RosterUnit.position, models.RosterUnit.id)
-    ).all()
-
     lock_pairs = (
         db.execute(
             select(models.RosterUnitPair).where(
@@ -1126,17 +1109,15 @@ def update_roster_unit(
         )
 
     for ru in affected_units:
-        totals = totals_by_id.get(ru.id, {}) if isinstance(totals_by_id, dict) else {}
-        warrior_total = float(totals.get("wojownik") or 0.0)
-        shooter_total = float(totals.get("strzelec") or 0.0)
         ru.extra_weapons_json = json.dumps(
             applied_loadouts.get(ru.id, {}), ensure_ascii=False
         )
         if ru.id == roster_unit.id:
             ru.custom_name = custom_name.strip() if custom_name else None
             ru.count = roster_unit.count
-        quote = _internal_roster_unit_quote(ru, applied_loadouts.get(ru.id))
-        ru.cached_cost = float(quote.get("selected_total") or max(warrior_total, shooter_total))
+    total_cost, _ = costs.recalculate_roster_costs(
+        roster, loadout_overrides=applied_loadouts
+    )
 
     db.commit()
     loadout_mapping = {
@@ -1144,17 +1125,6 @@ def update_roster_unit(
     }
     accept_header = (request.headers.get("accept") or "").lower()
     if "application/json" in accept_header:
-        cached_cost_map = {
-            row.id: float(row.cached_cost)
-            for row in roster_unit_rows
-            if row.cached_cost is not None and row.id is not None
-        }
-        base_total = sum(cached_cost_map.values())
-        for ru in affected_units:
-            base_total -= cached_cost_map.get(ru.id, 0.0)
-            base_total += float(ru.cached_cost or 0.0)
-        total_cost = round(base_total, 2)
-
         def _unit_payload_for_response(target: models.RosterUnit) -> dict[str, Any]:
             payload = payload_cache.get(target.id) or _unit_payload(target.unit)
             passive_items = payload["passive_items"]
