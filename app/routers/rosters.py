@@ -249,14 +249,28 @@ def _classification_map(
 
     for unit_id, roster_unit in units_by_id.items():
         loadout_payload = loadouts.get(unit_id)
-        totals_by_id[unit_id] = costs.roster_unit_role_totals(
-            roster_unit, loadout_payload
-        )
+        quote = _internal_roster_unit_quote(roster_unit, loadout_payload)
+        totals_by_id[unit_id] = {
+            "wojownik": float(quote.get("warrior_total") or 0.0),
+            "strzelec": float(quote.get("shooter_total") or 0.0),
+        }
         classifications[unit_id] = _roster_unit_classification(
             roster_unit, loadout_payload, totals=totals_by_id.get(unit_id)
         )
 
     return classifications, totals_by_id
+
+
+def _internal_roster_unit_quote(
+    roster_unit: models.RosterUnit,
+    loadout: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Internal adapter that routes all roster-unit quote calculations via costs.py."""
+    return costs.calculate_roster_unit_quote(
+        getattr(roster_unit, "unit", None),
+        loadout,
+        int(getattr(roster_unit, "count", 1) or 1),
+    )
 
 
 @router.get("", response_class=HTMLResponse)
@@ -719,11 +733,14 @@ def add_roster_unit(
     )
     roster_unit.position = max_position + 1
 
-    totals = costs.roster_unit_role_totals(roster_unit, loadout)
-    warrior_total = float(totals.get("wojownik") or 0.0)
-    shooter_total = float(totals.get("strzelec") or 0.0)
+    quote = _internal_roster_unit_quote(roster_unit, loadout)
+    warrior_total = float(quote.get("warrior_total") or 0.0)
+    shooter_total = float(quote.get("shooter_total") or 0.0)
+    selected_total = float(quote.get("selected_total") or 0.0)
     classification = _roster_unit_classification(
-        roster_unit, loadout, totals=totals
+        roster_unit,
+        loadout,
+        totals={"wojownik": warrior_total, "strzelec": shooter_total},
     )
     loadout = (
         _apply_classification_to_loadout(
@@ -733,7 +750,7 @@ def add_roster_unit(
     )
 
     roster_unit.extra_weapons_json = json.dumps(loadout, ensure_ascii=False)
-    roster_unit.cached_cost = max(warrior_total, shooter_total)
+    roster_unit.cached_cost = selected_total
     db.add(roster_unit)
     db.flush()
     db.commit()
@@ -1118,7 +1135,8 @@ def update_roster_unit(
         if ru.id == roster_unit.id:
             ru.custom_name = custom_name.strip() if custom_name else None
             ru.count = roster_unit.count
-        ru.cached_cost = max(warrior_total, shooter_total)
+        quote = _internal_roster_unit_quote(ru, applied_loadouts.get(ru.id))
+        ru.cached_cost = float(quote.get("selected_total") or max(warrior_total, shooter_total))
 
     db.commit()
     loadout_mapping = {
@@ -1195,6 +1213,58 @@ def update_roster_unit(
     return RedirectResponse(
         url=f"/rosters/{roster.id}?selected={roster_unit.id}",
         status_code=303,
+    )
+
+
+@router.post("/{roster_id}/units/{unit_id}/quote")
+def quote_roster_unit(
+    roster_id: int,
+    unit_id: int,
+    payload: dict[str, Any] | None = Body(default=None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    roster = db.get(models.Roster, roster_id)
+    roster_unit = (
+        db.execute(
+            select(models.RosterUnit)
+            .options(
+                selectinload(models.RosterUnit.unit).options(*_unit_eager_options())
+            )
+            .where(models.RosterUnit.id == unit_id)
+        )
+        .scalars()
+        .first()
+    )
+    if not roster or roster_unit is None or roster_unit.roster_id != roster.id:
+        raise HTTPException(status_code=404)
+    _ensure_roster_edit_access(roster, current_user)
+
+    request_payload = payload if isinstance(payload, dict) else {}
+    requested_count = request_payload.get("count")
+    if requested_count is None:
+        count = int(roster_unit.count or 1)
+    else:
+        count = max(_coerce_int(requested_count, int(roster_unit.count or 1)), 1)
+
+    quote = costs.calculate_roster_unit_quote(
+        roster_unit.unit,
+        request_payload.get("loadout"),
+        count,
+    )
+    return JSONResponse(
+        _json_safe(
+            {
+                "unit_id": roster_unit.id,
+                "count": count,
+                "cost_engine_version": quote.get("cost_engine_version"),
+                "warrior_total": quote.get("warrior_total"),
+                "shooter_total": quote.get("shooter_total"),
+                "selected_total": quote.get("selected_total"),
+                "components": quote.get("components") or {},
+                "loadout": quote.get("loadout") or {},
+            }
+        )
     )
 
 
@@ -2470,7 +2540,11 @@ def _roster_unit_classification(
     if isinstance(totals, Mapping):
         totals_map = totals
     else:
-        totals_map = costs.roster_unit_role_totals(roster_unit, loadout)
+        quote = _internal_roster_unit_quote(roster_unit, loadout)
+        totals_map = {
+            "wojownik": float(quote.get("warrior_total") or 0.0),
+            "strzelec": float(quote.get("shooter_total") or 0.0),
+        }
     warrior_total = float(totals_map.get("wojownik") or 0.0)
     shooter_total = float(totals_map.get("strzelec") or 0.0)
     available_slugs: set[str] = set()
@@ -2649,10 +2723,13 @@ def _roster_unit_export_data(
     if isinstance(totals, Mapping):
         totals_map = totals
     else:
-        totals_map = costs.roster_unit_role_totals(roster_unit, loadout)
-    warrior_total = float(totals_map.get("wojownik") or 0.0)
-    shooter_total = float(totals_map.get("strzelec") or 0.0)
-    total_value = max(warrior_total, shooter_total)
+        quote = _internal_roster_unit_quote(roster_unit, loadout)
+        totals_map = {
+            "wojownik": float(quote.get("warrior_total") or 0.0),
+            "strzelec": float(quote.get("shooter_total") or 0.0),
+        }
+    quote = _internal_roster_unit_quote(roster_unit, loadout)
+    total_value = float(quote.get("selected_total") or 0.0)
     rounded_total = utils.round_points(total_value)
 
     active_slugs: list[str] = []
