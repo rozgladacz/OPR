@@ -2023,3 +2023,140 @@ def test_render_passive_editor_formats_okopany_delta_identically_with_rezerwa_to
 
     assert result["withoutReserveCosts"] == ["Δ +10 pkt"]
     assert result["withReserveCosts"] == ["Δ +10 pkt"]
+
+
+def test_refresh_roster_cost_badges_keeps_total_stable_when_part_of_batch_quote_fails() -> None:
+    script_body = """
+        const source = code;
+        function extractFunction(name, endMarker) {
+          const start = source.indexOf(`function ${name}(`);
+          if (start === -1) {
+            throw new Error(`Cannot find function ${name}`);
+          }
+          const end = source.indexOf(endMarker, start);
+          if (end === -1) {
+            throw new Error(`Cannot find end marker for ${name}`);
+          }
+          return source.slice(start, end);
+        }
+
+        const refreshSource = extractFunction('refreshRosterCostBadges', '\\n\\n  function applyClassificationToState');
+
+        const makeItem = (id, baseCost) => {
+          const attrs = new Map([
+            ['data-roster-unit-id', id],
+            ['data-unit-cost', String(baseCost)],
+            ['data-unit-count', '1'],
+          ]);
+          const badge = { textContent: `${baseCost} pkt` };
+          return {
+            getAttribute(name) { return attrs.get(name) || ''; },
+            setAttribute(name, value) { attrs.set(name, String(value)); },
+            querySelector(selector) {
+              if (selector === '[data-roster-unit-cost]') {
+                return badge;
+              }
+              return null;
+            },
+            badge,
+          };
+        };
+
+        const items = [makeItem('u1', 10), makeItem('u2', 20), makeItem('u3', 30)];
+        const listElement = {
+          querySelectorAll(selector) {
+            if (selector === '[data-roster-item]') {
+              return items;
+            }
+            return [];
+          },
+        };
+
+        const statusById = {};
+        const totals = [];
+        const quoteResults = new Map([
+          ['u1', { total: 11 }],
+          ['u2', new Error('HTTP 500')],
+          ['u3', { total: 31 }],
+        ]);
+
+        const normalizeRosterRefreshCycleToken = (token, fallbackVersion = 0) => {
+          if (token && typeof token === 'object') {
+            return {
+              dedupeKey: token.dedupeKey ? String(token.dedupeKey) : null,
+              version: Number.isFinite(Number(token.version)) ? Number(token.version) : fallbackVersion,
+              authoritative: token.authoritative === true,
+            };
+          }
+          return {
+            dedupeKey: token ? String(token) : null,
+            version: Number.isFinite(Number(fallbackVersion)) ? Number(fallbackVersion) : 0,
+            authoritative: false,
+          };
+        };
+        let priorityState = { latestAppliedVersion: 0, latestAuthoritativeVersion: 0 };
+        const applyRefreshPriority = (cycleToken) => {
+          const token = normalizeRosterRefreshCycleToken(cycleToken, priorityState.latestAppliedVersion || 0);
+          if (token.version < priorityState.latestAppliedVersion) {
+            return { apply: false, token, state: priorityState };
+          }
+          priorityState = {
+            latestAppliedVersion: Math.max(priorityState.latestAppliedVersion, token.version),
+            latestAuthoritativeVersion: token.authoritative
+              ? Math.max(priorityState.latestAuthoritativeVersion, token.version)
+              : priorityState.latestAuthoritativeVersion,
+          };
+          return { apply: true, token, state: priorityState };
+        };
+
+        let refreshRosterCostBadgesInProgress = false;
+        let pendingRefreshOptions = null;
+        let pendingRefreshCycleToken = null;
+        let lastRefreshRosterCostCycleToken = null;
+        let preserveServerTotalUntilRefreshCycle = 0;
+        let rosterRefreshCycleCounter = 0;
+        let refreshVersion = 0;
+        const nextRefreshVersion = () => {
+          refreshVersion += 1;
+          return refreshVersion;
+        };
+        let rosterListEl = listElement;
+        const ensureRosterList = () => listElement;
+        const setRosterItemCostStatus = (item, status) => {
+          statusById[item.getAttribute('data-roster-unit-id')] = status;
+        };
+        const getLastKnownItemCost = (item) => Number(item.getAttribute('data-unit-cost'));
+        const hydrateLoadoutStateForItem = () => ({ mode: 'total' });
+        const getUnitDatasetList = () => [];
+        const serializeQuotePayloadFromState = () => ({ mode: 'total' });
+        const fetchRosterUnitQuote = (id) => {
+          const result = quoteResults.get(id);
+          if (result instanceof Error) {
+            return Promise.reject(result);
+          }
+          return Promise.resolve(result);
+        };
+        const formatPoints = (value) => String(value);
+        const updateTotalSummary = (value) => totals.push(value);
+
+        eval(refreshSource);
+
+        refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, { dedupeKey: 'cycle-1', version: 1, authoritative: false });
+
+        setTimeout(() => {
+          refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, { dedupeKey: 'cycle-1', version: 1, authoritative: false });
+          setTimeout(() => {
+            console.log(JSON.stringify({
+              costs: items.map((item) => Number(item.getAttribute('data-unit-cost'))),
+              statuses: statusById,
+              totals,
+            }));
+          }, 0);
+        }, 0);
+    """
+
+    result = _run_node(_build_sandbox_script(script_body))
+
+    assert result["costs"] == [11, 20, 31]
+    assert result["statuses"] == {"u1": "ready", "u2": "error", "u3": "ready"}
+    assert result["totals"] == [62]
