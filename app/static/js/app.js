@@ -6407,7 +6407,6 @@ function initRosterEditor() {
 
         let aggregatedTotal = 0;
         const refreshConcurrencyLimit = 5;
-        const quoteSettledResults = new Array(rosterItems.length);
         for (let startIndex = 0; startIndex < rosterItems.length; startIndex += refreshConcurrencyLimit) {
           const batchItems = rosterItems.slice(startIndex, startIndex + refreshConcurrencyLimit);
           batchItems.forEach((item) => {
@@ -6433,45 +6432,38 @@ function initRosterEditor() {
               };
             }),
           );
-          batchResults.forEach((result, batchIndex) => {
-            quoteSettledResults[startIndex + batchIndex] = result;
-          });
-        }
 
-        quoteSettledResults.forEach((result, index) => {
-          const item = rosterItems[index];
-          if (!item) {
-            return;
-          }
-          const rosterUnitId = item.getAttribute('data-roster-unit-id') || '';
-          let total = Number.NaN;
-          if (result && result.status === 'fulfilled') {
-            total = result.value.total;
-            setRosterItemCostStatus(item, 'ready');
-          } else {
-            const knownTotal = getLastKnownItemCost(item);
-            if (Number.isFinite(knownTotal)) {
-              total = knownTotal;
-              setRosterItemCostStatus(item, 'error');
+          batchResults.forEach((result, batchIndex) => {
+            const item = batchItems[batchIndex];
+            if (!item) {
+              return;
+            }
+            const rosterUnitId = item.getAttribute('data-roster-unit-id') || '';
+            let total = Number.NaN;
+            if (result.status === 'fulfilled') {
+              total = Number(result.value?.total);
+              setRosterItemCostStatus(item, 'ready');
             } else {
-              const errorReason = result && result.status === 'rejected'
-                ? result.reason
-                : new Error('Brak wyniku zapytania');
+              const knownTotal = getLastKnownItemCost(item);
+              if (Number.isFinite(knownTotal)) {
+                total = knownTotal;
+              }
+              const errorReason = result.reason || new Error('Brak wyniku zapytania');
               setRosterItemCostStatus(item, 'error');
               console.error(`Nie udało się pobrać quote dla oddziału ${rosterUnitId}`, errorReason);
             }
-          }
-          if (!Number.isFinite(total)) {
-            return;
-          }
-          const formatted = formatPoints(total);
-          const badgeEl = item.querySelector('[data-roster-unit-cost]');
-          if (badgeEl) {
-            badgeEl.textContent = `${formatted} pkt`;
-          }
-          item.setAttribute('data-unit-cost', String(total));
-          aggregatedTotal += total;
-        });
+            if (!Number.isFinite(total)) {
+              return;
+            }
+            const formatted = formatPoints(total);
+            const badgeEl = item.querySelector('[data-roster-unit-cost]');
+            if (badgeEl) {
+              badgeEl.textContent = `${formatted} pkt`;
+            }
+            item.setAttribute('data-unit-cost', String(total));
+            aggregatedTotal += total;
+          });
+        }
 
         const decision = applyRefreshPriority(normalizedToken);
         if (!decision.apply) {
