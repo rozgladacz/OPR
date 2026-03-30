@@ -1911,6 +1911,10 @@ def recalculate_roster_costs(
     ``loadout_overrides`` can provide transient loadouts keyed by ``RosterUnit.id``.
     Overrides are used for cost calculation in the current call and persisted back to
     ``cached_cost`` immediately.
+
+    Architectural rule: ORM entities and SQLAlchemy ``Session`` are processed
+    sequentially in-request. If CPU parallelism is introduced in the future, it must
+    run only on immutable snapshots (DTO/dict) prepared before worker execution.
     """
 
     if roster is None:

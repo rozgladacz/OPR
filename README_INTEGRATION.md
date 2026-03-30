@@ -68,6 +68,22 @@ Ten pakiet dodaje:
   - zwraca krotkę `(roster_total, unit_cost_map)`, gdzie `unit_cost_map` to mapa `{roster_unit_id: koszt}`.
 - `loadout_overrides` służy do tymczasowego przeliczenia (np. przy edycji formularza), ale wynik nadal jest zapisywany do `cached_cost`.
 
+### Zasada architektoniczna: brak wielowątkowości na ORM Session i żywych encjach
+
+- **Nie uruchamiamy workerów równoległych** na obiektach SQLAlchemy (`Session`, encje ORM, relacje lazy/eager).
+- Operacje `quote` / `update` wykonują się per-request z własną sesją i bez współdzielenia sesji między wątkami.
+- Zapis `cached_cost` pozostaje **sekwencyjny** w granicach jednego requestu i jednej transakcji.
+
+### Snapshot przed ewentualną równoległością CPU
+
+Jeśli pojawi się potrzeba równoległych obliczeń CPU:
+
+1. Najpierw wykonujemy etap **snapshotu**: serializacja danych wejściowych do niemutowalnych DTO/dict/list/tuple (bez referencji do ORM).
+2. Dopiero potem uruchamiamy worker pool wyłącznie na tych snapshotach.
+3. Wyniki z workerów składamy ponownie w wątku requestu i dopiero wtedy wykonujemy sekwencyjny zapis `cached_cost` w aktywnej sesji.
+
+Ten schemat eliminuje ryzyko współdzielenia sesji między wątkami i race condition na żywych encjach.
+
 ### Kiedy `cached_cost` musi być invalidated
 
 Traktuj `cached_cost` jako przeterminowany po każdej zmianie wpływającej na koszt, m.in.:
