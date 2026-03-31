@@ -346,7 +346,7 @@ def test_quote_endpoint_snapshots_for_controlled_fixtures() -> None:
         session.close()
 
 
-def test_quote_endpoint_coerces_zero_and_negative_count_to_one() -> None:
+def test_quote_endpoint_returns_zero_totals_for_zero_negative_and_unparsable_count() -> None:
     session = _session()
     try:
         fixture = _build_roster_fixture(session)
@@ -371,23 +371,27 @@ def test_quote_endpoint_coerces_zero_and_negative_count_to_one() -> None:
                 current_user=fixture["user"],
             )
         )
-        quoted_one = _json_response_payload(
+        quoted_unparsable = _json_response_payload(
             rosters.quote_roster_unit(
                 roster.id,
                 roster_unit.id,
-                payload={"count": 1, "loadout": {"mode": "per_model"}},
+                payload={"count": "oops", "loadout": {"mode": "per_model"}},
                 db=session,
                 current_user=fixture["user"],
             )
         )
 
-        assert quoted_zero["count"] == 1
-        assert quoted_negative["count"] == 1
+        assert quoted_zero["count"] == 0
+        assert quoted_negative["count"] == 0
+        assert quoted_unparsable["count"] == 0
         assert quoted_zero["roster_unit_id"] == roster_unit.id
         assert quoted_negative["roster_unit_id"] == roster_unit.id
+        assert quoted_unparsable["roster_unit_id"] == roster_unit.id
         assert quoted_zero["unit_id"] == roster_unit.id
         assert quoted_negative["unit_id"] == roster_unit.id
-        assert quoted_zero["selected_total"] == quoted_one["selected_total"]
-        assert quoted_negative["selected_total"] == quoted_one["selected_total"]
+        assert quoted_unparsable["unit_id"] == roster_unit.id
+        assert quoted_zero["selected_total"] == 0.0
+        assert quoted_negative["selected_total"] == 0.0
+        assert quoted_unparsable["selected_total"] == 0.0
     finally:
         session.close()
