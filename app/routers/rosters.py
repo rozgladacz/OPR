@@ -266,10 +266,13 @@ def _internal_roster_unit_quote(
     loadout: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Internal adapter that routes all roster-unit quote calculations via costs.py."""
+    normalized_count = costs.normalize_roster_unit_count(
+        getattr(roster_unit, "count", 1), default=1
+    )
     return costs.calculate_roster_unit_quote(
         getattr(roster_unit, "unit", None),
         loadout,
-        int(getattr(roster_unit, "count", 1) or 1),
+        normalized_count,
     )
 
 
@@ -1213,10 +1216,16 @@ def quote_roster_unit(
 
     request_payload = payload if isinstance(payload, dict) else {}
     requested_count = request_payload.get("count")
+    default_count = costs.normalize_roster_unit_count(
+        getattr(roster_unit, "count", 1), default=1
+    )
     if requested_count is None:
-        count = int(roster_unit.count or 1)
+        count = default_count
     else:
-        count = max(_coerce_int(requested_count, int(roster_unit.count or 1)), 1)
+        count = costs.normalize_roster_unit_count(
+            requested_count,
+            default=0,
+        )
 
     quote = costs.calculate_roster_unit_quote(
         roster_unit.unit,

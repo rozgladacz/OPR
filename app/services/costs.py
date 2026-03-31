@@ -137,6 +137,22 @@ class AbilityCostComponents:
         return self.base + self.weapon_delta
 
 
+def normalize_roster_unit_count(count: Any, *, default: int = 0) -> int:
+    """Normalize roster-unit ``count`` to a deterministic non-negative integer.
+
+    Parsing failures return ``default``. Values less than or equal to zero
+    are clamped to ``0``.
+    """
+    try:
+        normalized = int(count)
+    except (TypeError, ValueError):
+        try:
+            normalized = int(float(count))
+        except (TypeError, ValueError):
+            normalized = int(default)
+    return normalized if normalized > 0 else 0
+
+
 def _ensure_extra_data(extra: Any) -> dict[str, Any] | None:
     if isinstance(extra, dict):
         return extra
@@ -1426,8 +1442,9 @@ def calculate_roster_unit_quote(
 ) -> dict[str, Any]:
     """Public quote interface for a single roster unit.
 
-    ``count`` must be a positive integer (> 0). Passing ``count <= 0``
-    is rejected with ``ValueError``.
+    ``count`` is normalized through :func:`normalize_roster_unit_count`.
+    ``count <= 0`` or unparsable values produce zero totals and normalized
+    loadout payload.
     """
     if unit is None:
         empty_loadout = normalize_roster_unit_loadout(unit, loadout)
@@ -1447,11 +1464,25 @@ def calculate_roster_unit_quote(
             "loadout": empty_loadout,
         }
 
-    unit_count = int(count)
-    if unit_count <= 0:
-        raise ValueError("count must be greater than 0")
-
     normalized_loadout = normalize_roster_unit_loadout(unit, loadout)
+    unit_count = normalize_roster_unit_count(count, default=0)
+    if unit_count <= 0:
+        return {
+            "cost_engine_version": COST_ENGINE_VERSION,
+            "selected_role": None,
+            "warrior_total": 0.0,
+            "shooter_total": 0.0,
+            "selected_total": 0.0,
+            "components": {
+                "base": 0.0,
+                "weapon": 0.0,
+                "active": 0.0,
+                "aura": 0.0,
+                "passive": 0.0,
+            },
+            "loadout": normalized_loadout,
+        }
+
     roster_unit = SimpleNamespace(unit=unit, count=unit_count, extra_weapons_json=None)
     totals = roster_unit_role_totals(roster_unit, normalized_loadout)
     warrior_total = float(totals.get("wojownik") or 0.0)
@@ -1564,8 +1595,9 @@ def roster_unit_role_totals(
 ) -> dict[str, float]:
     """Return totals for both role variants for one roster unit.
 
-    ``roster_unit.count`` must be a positive integer (> 0). Values
-    less than or equal to zero are rejected with ``ValueError``.
+    ``roster_unit.count`` is normalized through :func:`normalize_roster_unit_count`.
+    Values less than or equal to zero (or unparsable values) return
+    zero totals for both roles.
     """
     unit = getattr(roster_unit, "unit", None)
     if unit is None:
@@ -1639,9 +1671,11 @@ def roster_unit_role_totals(
     passive_counts = passive_state.counts
 
     total_mode = loadout_mode == "total"
-    model_multiplier = int(getattr(roster_unit, "count", 0))
+    model_multiplier = normalize_roster_unit_count(
+        getattr(roster_unit, "count", 0), default=0
+    )
     if model_multiplier <= 0:
-        raise ValueError("count must be greater than 0")
+        return {"wojownik": 0.0, "strzelec": 0.0}
     model_count = model_multiplier
 
     ability_multiplier = (
@@ -1894,10 +1928,11 @@ def roster_unit_role_totals(
 
 
 def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
+    count = normalize_roster_unit_count(getattr(roster_unit, "count", 1), default=1)
     quote = calculate_roster_unit_quote(
         getattr(roster_unit, "unit", None),
         _ensure_extra_data(getattr(roster_unit, "extra_weapons_json", None)),
-        int(getattr(roster_unit, "count", 1) or 1),
+        count,
     )
     return float(quote.get("selected_total") or 0.0)
 
@@ -1932,7 +1967,7 @@ def recalculate_roster_costs(
             override
             if override is not None
             else _ensure_extra_data(getattr(roster_unit, "extra_weapons_json", None)),
-            int(getattr(roster_unit, "count", 1) or 1),
+            normalize_roster_unit_count(getattr(roster_unit, "count", 1), default=1),
         )
         cost_value = float(quote.get("selected_total") or 0.0)
         if hasattr(roster_unit, "cached_cost"):

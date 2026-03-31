@@ -295,7 +295,33 @@ def test_calculate_roster_unit_quote_matches_legacy_section_totals_regression(mo
     assert quote["components"]["aura"] == expected_aura
 
 
-@pytest.mark.parametrize("count", [0, -1, -5])
-def test_calculate_roster_unit_quote_rejects_non_positive_count(count: int) -> None:
-    with pytest.raises(ValueError, match="count must be greater than 0"):
-        costs.calculate_roster_unit_quote(_unit(), loadout={}, count=count)
+@pytest.mark.parametrize("count", [0, -1, -5, "abc"])
+def test_calculate_roster_unit_quote_returns_zero_contract_for_non_positive_or_unparsable_count(
+    count: int | str,
+) -> None:
+    quote = costs.calculate_roster_unit_quote(_unit(), loadout={"mode": "TOTAL"}, count=count)
+
+    assert quote["selected_role"] is None
+    assert quote["warrior_total"] == 0.0
+    assert quote["shooter_total"] == 0.0
+    assert quote["selected_total"] == 0.0
+    assert quote["components"] == {
+        "base": 0.0,
+        "weapon": 0.0,
+        "active": 0.0,
+        "aura": 0.0,
+        "passive": 0.0,
+    }
+    assert quote["loadout"]["mode"] == "total"
+
+
+@pytest.mark.parametrize("count", [0, -2, "oops"])
+def test_roster_unit_role_totals_returns_zero_for_non_positive_or_unparsable_count(
+    count: int | str,
+) -> None:
+    roster_unit = SimpleNamespace(unit=_unit(), count=count, extra_weapons_json=None)
+
+    assert costs.roster_unit_role_totals(roster_unit) == {
+        "wojownik": 0.0,
+        "strzelec": 0.0,
+    }
