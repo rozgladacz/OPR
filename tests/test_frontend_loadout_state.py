@@ -2160,3 +2160,37 @@ def test_refresh_roster_cost_badges_keeps_total_stable_when_part_of_batch_quote_
     assert result["costs"] == [11, 20, 31]
     assert result["statuses"] == {"u1": "ready", "u2": "error", "u3": "ready"}
     assert result["totals"] == [62]
+
+
+def test_weapon_cost_components_internal_matches_legacy_total_without_classification() -> None:
+    script_body = """
+        const components = sandbox.weaponCostComponentsInternal(
+          4,
+          24,
+          2,
+          1,
+          ['Assault', 'Deadly(2)'],
+          [],
+        );
+        const legacy = sandbox.weaponCostInternal(
+          4,
+          24,
+          2,
+          1,
+          ['Assault', 'Deadly(2)'],
+          [],
+          true,
+        );
+        console.log(JSON.stringify({
+          components,
+          legacy: Math.round(legacy * 100) / 100,
+          sum: Math.round((components.melee + components.ranged) * 100) / 100,
+        }));
+    """
+
+    result = _run_node(_build_sandbox_script(script_body))
+
+    assert result["components"]["melee"] > 0
+    assert result["components"]["ranged"] > 0
+    assert result["components"]["total"] == pytest.approx(result["legacy"], abs=0.01)
+    assert result["sum"] == pytest.approx(result["legacy"], abs=0.01)
