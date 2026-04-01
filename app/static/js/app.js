@@ -1188,6 +1188,30 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
   return cost;
 }
 
+function weaponCostComponentsInternal(quality, rangeValue, attacks, ap, weaponTraits, unitTraits) {
+  const normalizedRange = normalizeRangeValue(rangeValue);
+  const traitList = Array.isArray(weaponTraits) ? weaponTraits : splitTraits(weaponTraits);
+  const hasAssault = traitList.some((trait) => ['szturmowy', 'szturmowa', 'assault'].includes(normalizeName(trait)));
+
+  let ranged = 0;
+  let melee = 0;
+
+  if (normalizedRange > 0) {
+    ranged = weaponCostInternal(quality, normalizedRange, attacks, ap, traitList, unitTraits, false);
+  }
+  if (normalizedRange === 0 || (normalizedRange > 0 && hasAssault)) {
+    melee = weaponCostInternal(quality, 0, attacks, ap, traitList, unitTraits, false);
+  }
+
+  const safeRanged = Number.isFinite(ranged) ? Math.max(0, ranged) : 0;
+  const safeMelee = Number.isFinite(melee) ? Math.max(0, melee) : 0;
+  return {
+    ranged: Math.round(safeRanged * 100) / 100,
+    melee: Math.round(safeMelee * 100) / 100,
+    total: Math.round((safeRanged + safeMelee) * 100) / 100,
+  };
+}
+
 function buildWeaponCostMap(
   options,
   unitQuality,
@@ -1233,7 +1257,8 @@ function buildWeaponCostMap(
     const attacks = option.attacks ?? option.display_attacks ?? 0;
     const ap = option.ap ?? 0;
     const traits = splitTraits(option.traits);
-    const cost = weaponCostInternal(quality, option.range, attacks, ap, traits, unitTraits, true);
+    const components = weaponCostComponentsInternal(quality, option.range, attacks, ap, traits, unitTraits);
+    const cost = components.total;
     if (Number.isFinite(cost)) {
       const rounded = Math.max(0, Math.round(cost * 100) / 100);
       result.set(weaponId, rounded);

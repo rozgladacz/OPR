@@ -1111,6 +1111,60 @@ def _weapon_cost(
     return cost
 
 
+def weapon_cost_components(
+    weapon: models.Weapon,
+    unit_quality: int = 4,
+    unit_flags: dict | Sequence[str] | None = None,
+) -> dict[str, float]:
+    if isinstance(unit_flags, dict):
+        unit_traits = flags_to_ability_list(unit_flags)
+    elif unit_flags is None:
+        unit_traits = []
+    else:
+        unit_traits = list(unit_flags)
+
+    range_value = normalize_range_value(weapon.effective_range)
+    traits = split_traits(weapon.effective_tags)
+    attacks_value = weapon.effective_attacks
+    ap_value = weapon.effective_ap
+
+    ranged_cost = 0.0
+    melee_cost = 0.0
+    assault = any(
+        normalize_name(trait) in {"szturmowy", "szturmowa", "assault"}
+        for trait in traits
+    )
+
+    if range_value > 0:
+        ranged_cost = _weapon_cost(
+            unit_quality,
+            range_value,
+            attacks_value,
+            ap_value,
+            traits,
+            unit_traits,
+            allow_assault_extra=False,
+        )
+    if range_value == 0 or (range_value > 0 and assault):
+        melee_cost = _weapon_cost(
+            unit_quality,
+            0,
+            attacks_value,
+            ap_value,
+            traits,
+            unit_traits,
+            allow_assault_extra=False,
+        )
+
+    ranged = max(float(ranged_cost or 0.0), 0.0)
+    melee = max(float(melee_cost or 0.0), 0.0)
+    return {
+        "melee": round(melee, 2),
+        "ranged": round(ranged, 2),
+        "total": round(melee + ranged, 2),
+    }
+
+
 def weapon_cost(
     weapon: models.Weapon,
     unit_quality: int = 4,
@@ -1130,24 +1184,12 @@ def weapon_cost(
         cached = getattr(weapon, "effective_cached_cost", None)
         if isinstance(cached, (int, float)) and math.isfinite(cached):
             return round(max(float(cached), 0.0), 2)
-
-    range_value = normalize_range_value(weapon.effective_range)
-    traits = split_traits(weapon.effective_tags)
-    attacks_value = weapon.effective_attacks
-    cost: float | None = None
-    cost = _weapon_cost(
-        unit_quality,
-        range_value,
-        attacks_value,
-        weapon.effective_ap,
-        traits,
-        unit_traits,
+    components = weapon_cost_components(
+        weapon,
+        unit_quality=unit_quality,
+        unit_flags=unit_traits,
     )
-
-    if cost is None:
-        cost = 0.0
-    cost = max(cost, 0.0)
-    return round(cost, 2)
+    return round(max(float(components.get("total", 0.0)), 0.0), 2)
   
 def unit_default_weapons(unit: models.Unit | None) -> list[models.Weapon]:
     if unit is None:

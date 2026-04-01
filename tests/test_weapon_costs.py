@@ -230,3 +230,17 @@ def test_porazenie_increases_only_melee_weapon_cost() -> None:
 
     assert melee_porazenie_cost == pytest.approx(melee_base_cost * 1.1, rel=1e-3, abs=0.02)
     assert ranged_porazenie_cost == pytest.approx(ranged_base_cost, rel=1e-3, abs=0.02)
+
+
+def test_weapon_cost_components_total_matches_legacy_total_without_classification() -> None:
+    weapon = _weapon('24"', attacks=2, ap=1, tags="Assault, Deadly(2)")
+    legacy_total = costs.weapon_cost(weapon, unit_quality=4, unit_flags=[])
+    components = costs.weapon_cost_components(weapon, unit_quality=4, unit_flags=[])
+
+    assert components["melee"] > 0
+    assert components["ranged"] > 0
+    assert components["total"] == pytest.approx(legacy_total, abs=0.01)
+    assert round(components["melee"] + components["ranged"], 2) == pytest.approx(
+        legacy_total,
+        abs=0.01,
+    )
