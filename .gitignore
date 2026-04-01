@@ -5,6 +5,12 @@ data/
 *.sqlite3
 *.bak
 
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
 # Keep documentation assets in version control
 !app/static/docs/
 !app/static/docs/**
