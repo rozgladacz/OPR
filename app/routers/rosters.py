@@ -2453,6 +2453,7 @@ def _classification_from_totals(
     warrior: float,
     shooter: float,
     available_slugs: set[str] | None = None,
+    preferred_slug: str | None = None,
 ) -> dict[str, Any] | None:
     warrior = max(float(warrior or 0.0), 0.0)
     shooter = max(float(shooter or 0.0), 0.0)
@@ -2460,12 +2461,13 @@ def _classification_from_totals(
         return None
 
     pool = {slug for slug in available_slugs or set() if slug in {"wojownik", "strzelec"}}
-    preferred: str | None = None
-    if warrior > shooter:
-        preferred = "wojownik"
-    elif shooter > warrior:
-        preferred = "strzelec"
-    elif not pool:
+    preferred: str | None = preferred_slug if preferred_slug in {"wojownik", "strzelec"} else None
+    if preferred is None:
+        if warrior > shooter:
+            preferred = "wojownik"
+        elif shooter > warrior:
+            preferred = "strzelec"
+    if preferred is None and not pool:
         # Without any explicit role traits on the unit we can't resolve a tie
         # between the two role totals in a deterministic way.
         return None
@@ -2522,13 +2524,20 @@ def _roster_unit_classification(
     if isinstance(totals, Mapping):
         totals_map = totals
     else:
-        quote = _internal_roster_unit_quote(roster_unit, loadout)
-        totals_map = {
-            "wojownik": float(quote.get("warrior_total") or 0.0),
-            "strzelec": float(quote.get("shooter_total") or 0.0),
-        }
+        normalized_loadout = costs.normalize_roster_unit_loadout(
+            getattr(roster_unit, "unit", None),
+            loadout,
+        )
+        totals_map = costs.roster_unit_role_totals(roster_unit, normalized_loadout)
     warrior_total = float(totals_map.get("wojownik") or 0.0)
     shooter_total = float(totals_map.get("strzelec") or 0.0)
+    melee_bucket = float(totals_map.get("classification_melee") or 0.0)
+    ranged_bucket = float(totals_map.get("classification_ranged") or 0.0)
+    preferred_slug: str | None = None
+    if melee_bucket > ranged_bucket:
+        preferred_slug = "wojownik"
+    elif ranged_bucket > melee_bucket:
+        preferred_slug = "strzelec"
     available_slugs: set[str] = set()
     unit = getattr(roster_unit, "unit", None)
     if unit is not None:
@@ -2537,7 +2546,12 @@ def _roster_unit_classification(
         available_slugs = {
             costs.ability_identifier(trait) for trait in traits
         }
-    return _classification_from_totals(warrior_total, shooter_total, available_slugs)
+    return _classification_from_totals(
+        warrior_total,
+        shooter_total,
+        available_slugs,
+        preferred_slug=preferred_slug,
+    )
 
 
 def _loadout_weapon_details(

@@ -1242,6 +1242,67 @@ function buildWeaponCostMap(
   return result;
 }
 
+function buildWeaponComponentMap(
+  options,
+  unitQuality,
+  baseFlags,
+  passiveItems,
+  passiveState,
+  classification,
+) {
+  const result = new Map();
+  const weaponFlags = buildWeaponFlags(baseFlags, passiveItems, passiveState);
+  if (classification && typeof classification === 'object' && classification.slug) {
+    const slugText = String(classification.slug).trim();
+    if (slugText) {
+      const normalizedSlug = passiveIdentifier(slugText);
+      let hasMatchingKey = false;
+      Object.keys(weaponFlags).forEach((key) => {
+        const ident = passiveIdentifier(key);
+        if (CLASSIFICATION_SLUGS.has(ident)) {
+          if (ident === normalizedSlug) {
+            hasMatchingKey = true;
+            weaponFlags[key] = true;
+          } else {
+            delete weaponFlags[key];
+          }
+        }
+      });
+      if (!hasMatchingKey) {
+        const key = normalizedSlug || slugText.toLowerCase();
+        weaponFlags[key] = true;
+      }
+    }
+  }
+  const unitTraits = [...new Set(flagsToAbilityList(weaponFlags))];
+  const quality = Number.isFinite(Number(unitQuality)) ? Number(unitQuality) : 4;
+  (Array.isArray(options) ? options : []).forEach((option) => {
+    if (!option || option.id === undefined || option.id === null) {
+      return;
+    }
+    const weaponId = Number(option.id);
+    if (!Number.isFinite(weaponId)) {
+      return;
+    }
+    const attacks = option.attacks ?? option.display_attacks ?? 0;
+    const ap = option.ap ?? 0;
+    const traits = splitTraits(option.traits);
+    const normalizedRange = normalizeRangeValue(option.range);
+    const rawCost = weaponCostInternal(quality, normalizedRange, attacks, ap, traits, unitTraits, false);
+    let melee = normalizedRange === 0 ? rawCost : 0;
+    let ranged = normalizedRange === 0 ? 0 : rawCost;
+    const isAssault = traits.some((trait) => ['szturmowy', 'szturmowa', 'assault'].includes(normalizeName(trait)));
+    if (isAssault && normalizedRange !== 0) {
+      melee += weaponCostInternal(quality, 0, attacks, ap, traits, unitTraits, false);
+    }
+    result.set(weaponId, {
+      melee: Math.max(0, Math.round(melee * 100) / 100),
+      ranged: Math.max(0, Math.round(ranged * 100) / 100),
+    });
+  });
+  return result;
+}
+
 function initNumberPicker(root) {
   const selectEl = root.querySelector('.number-picker-select');
   const customInput = root.querySelector('.number-picker-custom');
@@ -5524,37 +5585,62 @@ function initRosterEditor() {
       passive: costs.passive instanceof Map ? costs.passive : new Map(),
       passiveEntries: costs.passiveEntries instanceof Map ? costs.passiveEntries : new Map(),
     };
-    const evaluateRole = (slug) => {
-      const classification = { slug };
-      const clone = cloneLoadoutState(loadoutState);
-      if (clone) {
-        clone.mode = 'total';
-      }
-      applyClassificationToState(clone, classification);
-      const passiveMap = clone && clone.passive instanceof Map ? clone.passive : new Map();
-      const weaponMap = buildWeaponCostMap(
-        weapons,
-        quality,
-        baseFlags,
-        passiveItems,
-        passiveMap,
-        classification,
-      );
-      const total = computeTotalCost(
-        baseCostPerModel,
-        count,
-        weapons,
-        clone,
-        safeAbilityCosts,
-        passiveItems,
-        weaponMap,
-      );
-      return { total, weaponMap };
-    };
+    const clone = cloneLoadoutState(loadoutState);
+    if (clone) {
+      clone.mode = 'total';
+    }
+    const passiveMap = clone && clone.passive instanceof Map ? clone.passive : new Map();
+    const neutralWeaponMap = buildWeaponCostMap(
+      weapons,
+      quality,
+      baseFlags,
+      passiveItems,
+      passiveMap,
+      null,
+    );
+    const weaponComponents = buildWeaponComponentMap(
+      weapons,
+      quality,
+      baseFlags,
+      passiveItems,
+      passiveMap,
+      null,
+    );
+    let melee = 0;
+    let ranged = 0;
+    if (clone && clone.weapons instanceof Map) {
+      clone.weapons.forEach((storedCount, weaponId) => {
+        const countValue = Math.max(Number(storedCount) || 0, 0);
+        if (countValue <= 0) {
+          return;
+        }
+        const parts = weaponComponents.get(Number(weaponId));
+        if (!parts) {
+          return;
+        }
+        melee += (Number(parts.melee) || 0) * countValue;
+        ranged += (Number(parts.ranged) || 0) * countValue;
+      });
+    }
+    const neutralTotal = computeTotalCost(
+      baseCostPerModel,
+      count,
+      weapons,
+      clone,
+      safeAbilityCosts,
+      passiveItems,
+      neutralWeaponMap,
+    );
+    const weaponNeutralTotal = melee + ranged;
+    const commonTotal = neutralTotal - weaponNeutralTotal;
+    const warriorTotal = commonTotal + melee + (ranged * 0.5);
+    const shooterTotal = commonTotal + ranged + (melee * 0.5);
     return {
       available,
-      warrior: available.has('wojownik') ? evaluateRole('wojownik') : null,
-      shooter: available.has('strzelec') ? evaluateRole('strzelec') : null,
+      warrior: available.has('wojownik') ? { total: warriorTotal, weaponMap: neutralWeaponMap } : null,
+      shooter: available.has('strzelec') ? { total: shooterTotal, weaponMap: neutralWeaponMap } : null,
+      melee,
+      ranged,
     };
   }
 
@@ -5584,11 +5670,20 @@ function initRosterEditor() {
       (primaryContext && primaryContext.currentClassification)
       || (partnerContext && partnerContext.currentClassification)
       || null;
+    let preferredSlug = null;
+    const meleeTotal = (primaryTotals.melee || 0) + (partnerTotals ? partnerTotals.melee || 0 : 0);
+    const rangedTotal = (primaryTotals.ranged || 0) + (partnerTotals ? partnerTotals.ranged || 0 : 0);
+    if (meleeTotal > rangedTotal) {
+      preferredSlug = 'wojownik';
+    } else if (rangedTotal > meleeTotal) {
+      preferredSlug = 'strzelec';
+    }
     const classification = createClassificationPayload(
       warriorTotal,
       shooterTotal,
       available,
       previousClassification,
+      preferredSlug,
     );
     let weaponMap = null;
     if (classification && classification.slug) {
@@ -6707,6 +6802,7 @@ function createClassificationPayload(
   shooterTotal,
   availableSlugs,
   previousClassification = null,
+  preferredSlug = null,
 ) {
   const warrior = Math.max(Number(warriorTotal) || 0, 0);
   const shooter = Math.max(Number(shooterTotal) || 0, 0);
@@ -6729,7 +6825,10 @@ function createClassificationPayload(
   }
   const previousSlug = resolvePreviousClassificationSlug(previousClassification);
   let slug = null;
-  if (warrior > shooter) {
+  const normalizedPreferred = abilityIdentifier(preferredSlug || '');
+  if (normalizedPreferred && CLASSIFICATION_SLUGS.has(normalizedPreferred)) {
+    slug = normalizedPreferred;
+  } else if (warrior > shooter) {
     slug = 'wojownik';
   } else if (shooter > warrior) {
     slug = 'strzelec';
