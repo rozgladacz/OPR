@@ -120,6 +120,21 @@ _apply_ruleset_overrides()
 ROLE_SLUGS = {"wojownik", "strzelec"}
 
 
+def _roster_unit_classification(
+    melee_total: float,
+    ranged_total: float,
+    *,
+    fallback: str = "wojownik",
+) -> str:
+    melee_value = max(float(melee_total or 0.0), 0.0)
+    ranged_value = max(float(ranged_total or 0.0), 0.0)
+    if melee_value > ranged_value:
+        return "wojownik"
+    if ranged_value > melee_value:
+        return "strzelec"
+    return "wojownik" if fallback == "wojownik" else "strzelec"
+
+
 @dataclass
 class PassiveState:
     payload: list[dict[str, Any]]
@@ -1506,7 +1521,8 @@ def calculate_roster_unit_quote(
             "loadout": empty_loadout,
         }
 
-    normalized_loadout = normalize_roster_unit_loadout(unit, loadout)
+    raw_loadout = loadout if isinstance(loadout, dict) else {}
+    normalized_loadout = normalize_roster_unit_loadout(unit, raw_loadout)
     unit_count = normalize_roster_unit_count(count, default=0)
     if unit_count <= 0:
         return {
@@ -1526,30 +1542,11 @@ def calculate_roster_unit_quote(
         }
 
     roster_unit = SimpleNamespace(unit=unit, count=unit_count, extra_weapons_json=None)
-    totals = roster_unit_role_totals(roster_unit, normalized_loadout)
-    warrior_total = float(totals.get("wojownik") or 0.0)
-    shooter_total = float(totals.get("strzelec") or 0.0)
-    selected_role_slug = "strzelec" if shooter_total >= warrior_total else "wojownik"
-    selected_total_raw = shooter_total if selected_role_slug == "strzelec" else warrior_total
-    selected_total = round(selected_total_raw, 2)
-
     base_traits = _strip_role_traits(
         compute_passive_state(unit, normalized_loadout).traits
     )
-    selected_traits = _with_role_trait(base_traits, selected_role_slug)
     mode_total = normalized_loadout.get("mode") == "total"
     model_count = unit_count
-
-    base_component = round(
-        base_model_cost(
-            unit.quality,
-            unit.defense,
-            unit.toughness,
-            selected_traits,
-        )
-        * model_count,
-        2,
-    )
 
     weapon_by_id: dict[int, Any] = {}
     for link in getattr(unit, "weapon_links", []) or []:
@@ -1562,6 +1559,71 @@ def calculate_roster_unit_quote(
     default_weapon = getattr(unit, "default_weapon", None)
     if default_weapon_id is not None and default_weapon is not None:
         weapon_by_id[int(default_weapon_id)] = default_weapon
+
+    melee_bucket = 0.0
+    ranged_bucket = 0.0
+    raw_weapons = normalized_loadout.get("weapons")
+    if isinstance(raw_weapons, dict):
+        for raw_key, raw_count in raw_weapons.items():
+            key_str = str(raw_key).strip()
+            if not key_str:
+                continue
+            base_id = key_str.split(":", 1)[0]
+            try:
+                weapon_id = int(base_id)
+            except (TypeError, ValueError):
+                continue
+            try:
+                stored_count = max(int(raw_count), 0)
+            except (TypeError, ValueError):
+                stored_count = 0
+            if stored_count <= 0:
+                continue
+            selected_count = stored_count if mode_total else stored_count * model_count
+            if selected_count <= 0:
+                continue
+            weapon = weapon_by_id.get(weapon_id)
+            if weapon is None:
+                continue
+            components = weapon_cost_components(weapon, unit.quality, base_traits)
+            melee_bucket += float(components.get("melee") or 0.0) * selected_count
+            ranged_bucket += float(components.get("ranged") or 0.0) * selected_count
+
+    previous_classification_slug: str | None = None
+    raw_selected_role = raw_loadout.get("selected_role")
+    if isinstance(raw_selected_role, str):
+        ident = ability_identifier(raw_selected_role)
+        if ident in ROLE_SLUGS:
+            previous_classification_slug = ident
+    raw_classification = raw_loadout.get("classification")
+    if previous_classification_slug is None and isinstance(raw_classification, dict):
+        raw_classification_slug = raw_classification.get("slug")
+        if isinstance(raw_classification_slug, str):
+            ident = ability_identifier(raw_classification_slug)
+            if ident in ROLE_SLUGS:
+                previous_classification_slug = ident
+    selected_role_slug = _roster_unit_classification(
+        melee_bucket,
+        ranged_bucket,
+        fallback=previous_classification_slug or "wojownik",
+    )
+    totals = roster_unit_role_totals(roster_unit, normalized_loadout)
+    warrior_total = float(totals.get("wojownik") or 0.0)
+    shooter_total = float(totals.get("strzelec") or 0.0)
+    selected_total_raw = shooter_total if selected_role_slug == "strzelec" else warrior_total
+    selected_total = round(selected_total_raw, 2)
+    selected_traits = _with_role_trait(base_traits, selected_role_slug)
+
+    base_component = round(
+        base_model_cost(
+            unit.quality,
+            unit.defense,
+            unit.toughness,
+            selected_traits,
+        )
+        * model_count,
+        2,
+    )
 
     ability_link_by_id: dict[int, Any] = {}
     for link in getattr(unit, "abilities", []) or []:
@@ -1731,8 +1793,8 @@ def roster_unit_role_totals(
         multiplier = ability_multiplier if ability else model_count
         return safe_value * multiplier
 
-    def _weapon_cost_map(current_traits: Sequence[str]) -> dict[int, float]:
-        results: dict[int, float] = {}
+    def _weapon_components_map(current_traits: Sequence[str]) -> dict[int, dict[str, float]]:
+        results: dict[int, dict[str, float]] = {}
         links = getattr(unit, "weapon_links", None) or []
         for link in links:
             weapon = link.weapon
@@ -1740,7 +1802,7 @@ def roster_unit_role_totals(
                 continue
             if link.weapon_id in results:
                 continue
-            results[link.weapon_id] = weapon_cost(
+            results[link.weapon_id] = weapon_cost_components(
                 weapon,
                 unit.quality,
                 current_traits,
@@ -1748,12 +1810,31 @@ def roster_unit_role_totals(
         if unit.default_weapon and unit.default_weapon_id is not None:
             weapon_id = unit.default_weapon_id
             if weapon_id not in results:
-                results[weapon_id] = weapon_cost(
+                results[weapon_id] = weapon_cost_components(
                     unit.default_weapon,
                     unit.quality,
                     current_traits,
                 )
         return results
+
+    def _aggregate_weapon_buckets(
+        components_map: Mapping[int, Mapping[str, float]],
+    ) -> dict[str, float]:
+        melee_total = 0.0
+        ranged_total = 0.0
+        for weapon_id, stored_count in weapons_counts.items():
+            components = components_map.get(weapon_id)
+            if components is None:
+                continue
+            selected_count = _to_total(stored_count)
+            if selected_count <= 0:
+                continue
+            melee_total += float(components.get("melee") or 0.0) * selected_count
+            ranged_total += float(components.get("ranged") or 0.0) * selected_count
+        return {
+            "melee": round(melee_total, 2),
+            "ranged": round(ranged_total, 2),
+        }
 
     def _passive_entries(current_traits: Sequence[str]) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
@@ -1817,7 +1898,7 @@ def roster_unit_role_totals(
                 active_total += cost_value
         return ability_map, passive_total, active_total
 
-    def _compute_total(current_traits: Sequence[str]) -> float:
+    def _compute_total(current_traits: Sequence[str], selected_role: str) -> float:
         ability_map, passive_total, _ = _ability_cost_map(current_traits)
         base_value = base_model_cost(
             unit.quality,
@@ -1827,16 +1908,18 @@ def roster_unit_role_totals(
         )
         base_per_model = base_value
         passive_entries = _passive_entries(current_traits)
-        weapon_costs = _weapon_cost_map(current_traits)
+        weapon_components = _weapon_components_map(current_traits)
+        weapon_buckets = _aggregate_weapon_buckets(weapon_components)
 
         total = base_per_model * model_count
         if passive_total:
             total += passive_total * (1 if total_mode else ability_multiplier)
-        for weapon_id, stored_count in weapons_counts.items():
-            cost_value = weapon_costs.get(weapon_id)
-            if cost_value is None:
-                continue
-            total += cost_value * _to_total(stored_count)
+        weapon_total = weapon_buckets["melee"] + weapon_buckets["ranged"]
+        if selected_role == "wojownik":
+            weapon_total -= weapon_buckets["ranged"] * 0.5
+        elif selected_role == "strzelec":
+            weapon_total -= weapon_buckets["melee"] * 0.5
+        total += weapon_total
         for ability_id, stored_count in {**active_counts, **aura_counts}.items():
             cost_value = ability_map.get(ability_id)
             if cost_value is None:
@@ -1964,8 +2047,10 @@ def roster_unit_role_totals(
             total += passive_diff
         return round(total, 2)
 
-    warrior_total = _compute_total(_with_role_trait(base_traits, "wojownik"))
-    shooter_total = _compute_total(_with_role_trait(base_traits, "strzelec"))
+    warrior_traits = _with_role_trait(base_traits, "wojownik")
+    shooter_traits = _with_role_trait(base_traits, "strzelec")
+    warrior_total = _compute_total(warrior_traits, "wojownik")
+    shooter_total = _compute_total(shooter_traits, "strzelec")
     return {"wojownik": warrior_total, "strzelec": shooter_total}
 
 
