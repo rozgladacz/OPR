@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from app.services import costs
+from tests.node_runtime import resolve_node_binary
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -50,7 +51,7 @@ def _build_sandbox_script(body: str) -> str:
 
 def _run_node(script: str) -> dict[str, object]:
     result = subprocess.run(
-        ["node", "-e", script],
+        [resolve_node_binary(), "-e", script],
         check=True,
         capture_output=True,
         text=True,
