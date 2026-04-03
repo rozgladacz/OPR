@@ -2452,52 +2452,22 @@ def _loadout_display_summary(
 def _classification_from_totals(
     warrior: float,
     shooter: float,
-    available_slugs: set[str] | None = None,
+    fallback: str = "wojownik",
 ) -> dict[str, Any] | None:
     warrior = max(float(warrior or 0.0), 0.0)
     shooter = max(float(shooter or 0.0), 0.0)
     if warrior <= 0 and shooter <= 0:
         return None
 
-    pool = {slug for slug in available_slugs or set() if slug in {"wojownik", "strzelec"}}
-    preferred: str | None = None
+    fallback_slug = costs.ability_identifier(fallback)
+    if fallback_slug not in costs.ROLE_SLUGS:
+        fallback_slug = "wojownik"
     if warrior > shooter:
-        preferred = "wojownik"
+        slug = "wojownik"
     elif shooter > warrior:
-        preferred = "strzelec"
-    elif not pool:
-        # Without any explicit role traits on the unit we can't resolve a tie
-        # between the two role totals in a deterministic way.
-        return None
-
-    slug: str | None = None
-    if pool:
-        if preferred and preferred in pool:
-            slug = preferred
-        elif len(pool) == 1:
-            slug = next(iter(pool))
-        elif preferred and preferred not in pool:
-            slug = next(iter(pool - {preferred}), None)
-        elif preferred is None:
-          
-            slug = (
-                "wojownik"
-                if "wojownik" in pool
-                else ("strzelec" if "strzelec" in pool else next(iter(pool), None))
-            )
+        slug = "strzelec"
     else:
-        slug = preferred
-
-    if slug is None and pool:
-        if "strzelec" in pool:
-            slug = "strzelec"
-        elif "wojownik" in pool:
-            slug = "wojownik"
-        else:
-            slug = next(iter(pool), None)
-
-    if not slug:
-        return None
+        slug = "wojownik" if fallback_slug == "wojownik" else "strzelec"
 
     selected_label = "Wojownik" if slug == "wojownik" else "Strzelec"
     warrior_points = round(warrior, 2)
@@ -2510,6 +2480,45 @@ def _classification_from_totals(
         "shooter_cost": shooter_points,
         "display": display,
     }
+
+
+def _classification_fallback_slug(loadout: dict[str, Any] | None) -> str:
+    if not isinstance(loadout, dict):
+        return "wojownik"
+
+    candidates: list[str] = []
+    selected_role = loadout.get("selected_role")
+    if isinstance(selected_role, str):
+        candidates.append(selected_role)
+
+    raw_classification = loadout.get("classification")
+    if isinstance(raw_classification, Mapping):
+        raw_slug = raw_classification.get("slug")
+        if isinstance(raw_slug, str):
+            candidates.append(raw_slug)
+
+    passive_section = loadout.get("passive")
+    if isinstance(passive_section, Mapping):
+        for key, raw_value in passive_section.items():
+            try:
+                count_value = int(raw_value)
+            except (TypeError, ValueError):
+                try:
+                    count_value = int(float(raw_value))
+                except (TypeError, ValueError):
+                    count_value = 1 if raw_value else 0
+            if count_value <= 0:
+                continue
+            identifier = costs.ability_identifier(str(key))
+            if identifier in costs.ROLE_SLUGS:
+                candidates.append(str(key))
+                break
+
+    for candidate in candidates:
+        identifier = costs.ability_identifier(candidate)
+        if identifier in costs.ROLE_SLUGS:
+            return identifier
+    return "wojownik"
 
 
 def _roster_unit_classification(
@@ -2529,15 +2538,14 @@ def _roster_unit_classification(
         }
     warrior_total = float(totals_map.get("wojownik") or 0.0)
     shooter_total = float(totals_map.get("strzelec") or 0.0)
-    available_slugs: set[str] = set()
-    unit = getattr(roster_unit, "unit", None)
-    if unit is not None:
-        flags = _unit_army_flags(unit)
-        traits = costs.flags_to_ability_list(flags)
-        available_slugs = {
-            costs.ability_identifier(trait) for trait in traits
-        }
-    return _classification_from_totals(warrior_total, shooter_total, available_slugs)
+    fallback_slug = _classification_fallback_slug(
+        loadout if isinstance(loadout, dict) else None
+    )
+    return _classification_from_totals(
+        warrior_total,
+        shooter_total,
+        fallback=fallback_slug,
+    )
 
 
 def _loadout_weapon_details(

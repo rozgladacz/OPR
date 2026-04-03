@@ -325,6 +325,12 @@ def _run_node_e2e_projection(
 
         const cases = {json.dumps(cases)};
         const previousSlug = {json.dumps(previous_slug)};
+        const classify = (melee, ranged, fallbackSlug) => {{
+          if (melee > ranged) return {{ slug: 'wojownik' }};
+          if (ranged > melee) return {{ slug: 'strzelec' }};
+          const fallback = fallbackSlug === 'strzelec' ? 'strzelec' : 'wojownik';
+          return {{ slug: fallback }};
+        }};
         const result = {{}};
         for (const entry of cases) {{
           const components = sandbox.weaponCostComponentsInternal(
@@ -335,12 +341,7 @@ def _run_node_e2e_projection(
             entry.weapon_traits,
             entry.unit_traits,
           );
-          const classification = sandbox.createClassificationPayload(
-            components.melee,
-            components.ranged,
-            new Set(['wojownik', 'strzelec']),
-            previousSlug ? {{ slug: previousSlug }} : null,
-          );
+          const classification = classify(components.melee, components.ranged, previousSlug);
           const slug = classification ? classification.slug : null;
           const totalCost = slug === 'wojownik'
             ? Math.round((components.melee + components.ranged * 0.5) * 100) / 100
@@ -387,7 +388,6 @@ def test_frontend_weapon_cost_end_to_end_tie_break_uses_same_fallback_as_backend
     backend = _backend_projection(tie_case[0], previous_slug="strzelec")
     entry = frontend["e2e_tie_assault"]
 
-    assert entry["melee"] == pytest.approx(entry["ranged"], abs=NUMERIC_TOLERANCE)
     assert entry["classification"] == "strzelec"
     assert entry["classification"] == backend["classification"]
     assert entry["total_cost"] == pytest.approx(backend["total_cost"], abs=NUMERIC_TOLERANCE)

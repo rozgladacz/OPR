@@ -149,3 +149,5 @@ Opcje:
 - Wskazanie konkretnego interpretera Python: `powershell -ExecutionPolicy Bypass -File .\scripts\setup-tests.ps1 -PythonExe "C:\sciezka\do\python.exe"`
 - Testy frontendowe (`node -e`) sa wspierane automatycznie: skrypt ustawia `NODE_BINARY` i gdy `node` nie jest w PATH, pobiera lokalnie Node.js LTS do `.tools/node`.
 - Wskazanie konkretnego `node.exe`: `powershell -ExecutionPolicy Bypass -File .\scripts\setup-tests.ps1 -NodeExe "C:\sciezka\do\node.exe"`
+- Dedykowany uruchamiacz dla wskazanego watku testowego (3 pliki frontend/node): `powershell -ExecutionPolicy Bypass -File .\scripts\run-node-parity-tests.ps1`
+- Skrypt `run-node-parity-tests.ps1` sam wykrywa uszkodzone `.venv` (np. blad z niedostepnym `WindowsApps\...\python.exe`) i automatycznie uruchamia rebootstrap.

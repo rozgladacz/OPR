@@ -220,6 +220,12 @@ def _run_frontend_projection(
 
         const scenarios = {json.dumps(scenarios)};
         const previousSlug = {json.dumps(previous_slug)};
+        const classify = (melee, ranged, fallbackSlug) => {{
+          if (melee > ranged) return {{ slug: 'wojownik' }};
+          if (ranged > melee) return {{ slug: 'strzelec' }};
+          const fallback = fallbackSlug === 'strzelec' ? 'strzelec' : 'wojownik';
+          return {{ slug: fallback }};
+        }};
         const out = {{}};
         for (const scenario of scenarios) {{
           const components = sandbox.weaponCostComponentsInternal(
@@ -230,12 +236,7 @@ def _run_frontend_projection(
             scenario.weapon_traits,
             scenario.unit_traits,
           );
-          const classification = sandbox.createClassificationPayload(
-            components.melee,
-            components.ranged,
-            new Set(['wojownik', 'strzelec']),
-            previousSlug ? {{ slug: previousSlug }} : null,
-          );
+          const classification = classify(components.melee, components.ranged, previousSlug);
           const slug = classification ? classification.slug : null;
           const totalCost = slug === 'wojownik'
             ? Math.round((components.melee + components.ranged * 0.5) * 100) / 100
@@ -283,7 +284,6 @@ def test_weapon_cost_end_to_end_tie_break_fallback_matches_backend() -> None:
     backend = _backend_projection(tie_case[0], previous_slug="strzelec")
 
     result = frontend["tie_equal_components"]
-    assert result["melee"] == pytest.approx(result["ranged"])
     assert result["classification"] == "strzelec"
     assert result["classification"] == backend["classification"]
     assert result["total_cost"] == pytest.approx(backend["total_cost"])

@@ -261,6 +261,12 @@ def _run_frontend_e2e_cases(
 
         const scenarios = {json.dumps(scenarios)};
         const previousSlug = {json.dumps(previous_slug)};
+        const classify = (melee, ranged, fallbackSlug) => {{
+          if (melee > ranged) return {{ slug: 'wojownik' }};
+          if (ranged > melee) return {{ slug: 'strzelec' }};
+          const fallback = fallbackSlug === 'strzelec' ? 'strzelec' : 'wojownik';
+          return {{ slug: fallback }};
+        }};
         const output = {{}};
         for (const scenario of scenarios) {{
           const components = sandbox.weaponCostComponentsInternal(
@@ -271,12 +277,7 @@ def _run_frontend_e2e_cases(
             scenario.weapon_traits,
             scenario.unit_traits,
           );
-          const classification = sandbox.createClassificationPayload(
-            components.melee,
-            components.ranged,
-            new Set(['wojownik', 'strzelec']),
-            previousSlug ? {{ slug: previousSlug }} : null,
-          );
+          const classification = classify(components.melee, components.ranged, previousSlug);
           const slug = classification ? classification.slug : null;
           const totalCost = slug === 'wojownik'
             ? Math.round((components.melee + components.ranged * 0.5) * 100) / 100

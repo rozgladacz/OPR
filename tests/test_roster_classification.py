@@ -53,8 +53,15 @@ def test_apply_classification_keeps_single_role_entry() -> None:
     assert passive_section[key] == 1
 
 
-def test_classification_respects_available_slugs() -> None:
-    result = rosters._classification_from_totals(12, 12, {"strzelec"})
+def test_classification_tie_uses_default_warrior_fallback() -> None:
+    result = rosters._classification_from_totals(12, 12)
+
+    assert result is not None
+    assert result["slug"] == "wojownik"
+
+
+def test_classification_tie_respects_explicit_fallback() -> None:
+    result = rosters._classification_from_totals(12, 12, fallback="strzelec")
 
     assert result is not None
     assert result["slug"] == "strzelec"

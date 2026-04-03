@@ -5643,12 +5643,8 @@ function initRosterEditor() {
         melee: Math.round(weaponBuckets.melee * 100) / 100,
         ranged: Math.round(weaponBuckets.ranged * 100) / 100,
       },
-      warrior: available.has('wojownik')
-        ? { total: Math.round(warriorTotal * 100) / 100, weaponMap: buildRoleWeaponMap('wojownik') }
-        : null,
-      shooter: available.has('strzelec')
-        ? { total: Math.round(shooterTotal * 100) / 100, weaponMap: buildRoleWeaponMap('strzelec') }
-        : null,
+      warrior: { total: Math.round(warriorTotal * 100) / 100, weaponMap: buildRoleWeaponMap('wojownik') },
+      shooter: { total: Math.round(shooterTotal * 100) / 100, weaponMap: buildRoleWeaponMap('strzelec') },
     };
   }
 
@@ -6819,20 +6815,6 @@ function createClassificationPayload(
   if (warrior <= 0 && shooter <= 0) {
     return null;
   }
-  const pool = new Set();
-  if (availableSlugs instanceof Set) {
-    availableSlugs.forEach((slug) => {
-      if (CLASSIFICATION_SLUGS.has(slug)) {
-        pool.add(slug);
-      }
-    });
-  } else if (Array.isArray(availableSlugs)) {
-    availableSlugs.forEach((slug) => {
-      if (CLASSIFICATION_SLUGS.has(slug)) {
-        pool.add(slug);
-      }
-    });
-  }
   const previousSlug = resolvePreviousClassificationSlug(previousClassification);
   let slug = null;
   if (warrior > shooter) {
@@ -6844,13 +6826,6 @@ function createClassificationPayload(
   }
   if (!CLASSIFICATION_SLUGS.has(slug)) {
     slug = 'wojownik';
-  }
-  if (pool.size && !pool.has(slug)) {
-    slug = pool.has('wojownik')
-      ? 'wojownik'
-      : pool.has('strzelec')
-        ? 'strzelec'
-        : pool.values().next().value || slug;
   }
   if (!slug) {
     return null;
