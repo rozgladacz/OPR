@@ -1,11 +1,14 @@
 
-.PHONY: dev test seed
+.PHONY: dev test
 
 dev:
-	uvicorn app.app:app --reload --host 0.0.0.0 --port 8000
+	python -m uvicorn app.main:app --reload
 
 test:
+<<<<<<< HEAD
 	pytest -q
 
-seed:
-	python -m app.seed
+
+=======
+	pytest -q
+>>>>>>> Klasyfikacja

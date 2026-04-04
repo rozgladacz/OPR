@@ -1,0 +1,2446 @@
+........FFFFFFFFFFF.....Fs..FF...........sss                             [100%]
+================================== FAILURES ===================================
+_ test_create_classification_payload_tie_prefers_previous_classification_over_strzelec_fallback _
+
+    def test_create_classification_payload_tie_prefers_previous_classification_over_strzelec_fallback() -> None:
+        script_body = """
+            const source = code;
+            function extractFunction(name, endMarker) {
+              const start = source.indexOf(`function ${name}(`);
+              if (start === -1) {
+                throw new Error(`Cannot find function ${name}`);
+              }
+              const end = source.indexOf(endMarker, start);
+              if (end === -1) {
+                throw new Error(`Cannot find end marker for ${name}`);
+              }
+              return source.slice(start, end);
+            }
+            const resolvePreviousSource = extractFunction('resolvePreviousClassificationSlug', '\\n\\nfunction createClassificationPayload');
+            const createSource = extractFunction('createClassificationPayload', '\\n\\nfunction renderEditors');
+            const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
+            const abilityIdentifier = (value) => String(value || '').trim().toLowerCase();
+            eval(resolvePreviousSource);
+            eval(createSource);
+    
+            const available = new Set(['wojownik', 'strzelec']);
+            const tiedWarrior = 42;
+            const tiedShooter = 42;
+    
+            const fromWarrior = createClassificationPayload(
+              tiedWarrior,
+              tiedShooter,
+              available,
+              { slug: 'wojownik' },
+            );
+            const fromShooter = createClassificationPayload(
+              tiedWarrior,
+              tiedShooter,
+              available,
+              { slug: 'strzelec' },
+            );
+            const withoutPrevious = createClassificationPayload(
+              tiedWarrior,
+              tiedShooter,
+              available,
+              null,
+            );
+    
+            console.log(JSON.stringify({
+              fromWarrior: fromWarrior ? fromWarrior.slug : null,
+              fromShooter: fromShooter ? fromShooter.slug : null,
+              withoutPrevious: withoutPrevious ? withoutPrevious.slug : null,
+            }));
+        """
+    
+        script = _build_sandbox_script(script_body)
+>       result = _run_node(script)
+
+tests\test_frontend_loadout_state.py:267: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_frontend_loadout_state.py:53: in _run_node
+    result = subprocess.run(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs =...fromShooter ? fromShooter.slug : null,\n  withoutPrevious: withoutPrevious ? withoutPrevious.slug : null,\n}));\n\n'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR...>
+stdout = ''
+stderr = '[eval]:31\n    throw new Error(`Cannot find end marker for ${name}`);\n    ^\n\nError: Cannot find end marker for res...alTypeScript (node:internal/process/execution:295:3)\n    at node:internal/main/eval_string:71:3\n\nNode.js v24.14.1\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs = require(\'fs\');\nconst vm = require(\'vm\');\nconst path = "D:\\\\OneDrive - KBJ S.A\\\\Dokumenty\\\\GitHub\\\\OPR\\\\app\\\\static\\\\js\\\\app.js";\nconst code = fs.readFileSync(path, \'utf8\');\nconst sandbox = {\n  console,\n  Map,\n  Set,\n  JSON,\n  window: {\n    setTimeout: setTimeout,\n    clearTimeout: clearTimeout,\n  },\n  document: {\n    addEventListener: () => {},\n  },\n};\nsandbox.window.window = sandbox.window;\nvm.createContext(sandbox);\nvm.runInContext(code, sandbox);\n\nconst source = code;\nfunction extractFunction(name, endMarker) {\n  const start = source.indexOf(`function ${name}(`);\n  if (start === -1) {\n    throw new Error(`Cannot find function ${name}`);\n  }\n  const end = source.indexOf(endMarker, start);\n  if (end === -1) {\n    throw new Error(`Cannot find end marker for ${name}`);\n  }\n  return source.slice(start, end);\n}\nconst resolvePreviousSource = extractFunction(\'resolvePreviousClassificationSlug\', \'\\n\\nfunction createClassificationPayload\');\nconst createSource = extractFunction(\'createClassificationPayload\', \'\\n\\nfunction renderEditors\');\nconst CLASSIFICATION_SLUGS = new Set([\'wojownik\', \'strzelec\']);\nconst abilityIdentifier = (value) => String(value || \'\').trim().toLowerCase();\neval(resolvePreviousSource);\neval(createSource);\n\nconst available = new Set([\'wojownik\', \'strzelec\']);\nconst tiedWarrior = 42;\nconst tiedShooter = 42;\n\nconst fromWarrior = createClassificationPayload(\n  tiedWarrior,\n  tiedShooter,\n  available,\n  { slug: \'wojownik\' },\n);\nconst fromShooter = createClassificationPayload(\n  tiedWarrior,\n  tiedShooter,\n  available,\n  { slug: \'strzelec\' },\n);\nconst withoutPrevious = createClassificationPayload(\n  tiedWarrior,\n  tiedShooter,\n  available,\n  null,\n);\n\nconsole.log(JSON.stringify({\n  fromWarrior: fromWarrior ? fromWarrior.slug : null,\n  fromShooter: fromShooter ? fromShooter.slug : null,\n  withoutPrevious: withoutPrevious ? withoutPrevious.slug : null,\n}));\n\n']' returned non-zero exit status 1.
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\subprocess.py:577: CalledProcessError
+_______ test_create_classification_payload_ignores_available_slug_pool ________
+
+    def test_create_classification_payload_ignores_available_slug_pool() -> None:
+        script_body = """
+            const source = code;
+            function extractFunction(name, endMarker) {
+              const start = source.indexOf(`function ${name}(`);
+              if (start === -1) {
+                throw new Error(`Cannot find function ${name}`);
+              }
+              const end = source.indexOf(endMarker, start);
+              if (end === -1) {
+                throw new Error(`Cannot find end marker for ${name}`);
+              }
+              return source.slice(start, end);
+            }
+            const resolvePreviousSource = extractFunction('resolvePreviousClassificationSlug', '\\n\\nfunction createClassificationPayload');
+            const createSource = extractFunction('createClassificationPayload', '\\n\\nfunction renderEditors');
+            const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
+            const abilityIdentifier = (value) => String(value || '').trim().toLowerCase();
+            eval(resolvePreviousSource);
+            eval(createSource);
+    
+            const forcedPool = new Set(['wojownik']);
+            const result = createClassificationPayload(
+              10,
+              18,
+              forcedPool,
+              { slug: 'wojownik' },
+            );
+    
+            console.log(JSON.stringify({
+              slug: result ? result.slug : null,
+            }));
+        """
+    
+        script = _build_sandbox_script(script_body)
+>       result = _run_node(script)
+
+tests\test_frontend_loadout_state.py:309: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_frontend_loadout_state.py:53: in _run_node
+    result = subprocess.run(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs =...ool,\n  { slug: \'wojownik\' },\n);\n\nconsole.log(JSON.stringify({\n  slug: result ? result.slug : null,\n}));\n\n'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR...>
+stdout = ''
+stderr = '[eval]:31\n    throw new Error(`Cannot find end marker for ${name}`);\n    ^\n\nError: Cannot find end marker for res...alTypeScript (node:internal/process/execution:295:3)\n    at node:internal/main/eval_string:71:3\n\nNode.js v24.14.1\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs = require(\'fs\');\nconst vm = require(\'vm\');\nconst path = "D:\\\\OneDrive - KBJ S.A\\\\Dokumenty\\\\GitHub\\\\OPR\\\\app\\\\static\\\\js\\\\app.js";\nconst code = fs.readFileSync(path, \'utf8\');\nconst sandbox = {\n  console,\n  Map,\n  Set,\n  JSON,\n  window: {\n    setTimeout: setTimeout,\n    clearTimeout: clearTimeout,\n  },\n  document: {\n    addEventListener: () => {},\n  },\n};\nsandbox.window.window = sandbox.window;\nvm.createContext(sandbox);\nvm.runInContext(code, sandbox);\n\nconst source = code;\nfunction extractFunction(name, endMarker) {\n  const start = source.indexOf(`function ${name}(`);\n  if (start === -1) {\n    throw new Error(`Cannot find function ${name}`);\n  }\n  const end = source.indexOf(endMarker, start);\n  if (end === -1) {\n    throw new Error(`Cannot find end marker for ${name}`);\n  }\n  return source.slice(start, end);\n}\nconst resolvePreviousSource = extractFunction(\'resolvePreviousClassificationSlug\', \'\\n\\nfunction createClassificationPayload\');\nconst createSource = extractFunction(\'createClassificationPayload\', \'\\n\\nfunction renderEditors\');\nconst CLASSIFICATION_SLUGS = new Set([\'wojownik\', \'strzelec\']);\nconst abilityIdentifier = (value) => String(value || \'\').trim().toLowerCase();\neval(resolvePreviousSource);\neval(createSource);\n\nconst forcedPool = new Set([\'wojownik\']);\nconst result = createClassificationPayload(\n  10,\n  18,\n  forcedPool,\n  { slug: \'wojownik\' },\n);\n\nconsole.log(JSON.stringify({\n  slug: result ? result.slug : null,\n}));\n\n']' returned non-zero exit status 1.
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\subprocess.py:577: CalledProcessError
+_ test_handle_state_change_refreshes_roster_total_immediately_without_server_update _
+
+    def test_handle_state_change_refreshes_roster_total_immediately_without_server_update() -> None:
+        script_body = """
+            const source = code;
+            function extractFunction(name, endMarker) {
+              const start = source.indexOf(`function ${name}(`);
+              if (start === -1) {
+                throw new Error(`Cannot find function ${name}`);
+              }
+              const end = source.indexOf(endMarker, start);
+              if (end === -1) {
+                throw new Error(`Cannot find end marker for ${name}`);
+              }
+              return source.slice(start, end);
+            }
+    
+            const refreshSource = extractFunction('refreshRosterCostBadges', '\\n\\n  function applyClassificationToState');
+            const handleSource = extractFunction('handleStateChange', '\\n\\nfunction availableClassificationSlugs');
+    
+            const state = {
+              totals: [],
+              updateCostDisplaysCalls: 0,
+              computeCalls: [],
+              applyServerUpdateCalls: 0,
+            };
+    
+            const makeBadge = () => ({ textContent: '' });
+            const createItem = (id) => {
+              const badge = makeBadge();
+              const attrs = new Map([
+                ['data-roster-unit-id', id],
+                ['data-unit-cost', '0'],
+                ['data-unit-count', '1'],
+                ['data-loadout', '{}'],
+                ['data-unit-classification', 'null'],
+              ]);
+              return {
+                _badge: badge,
+                _attrs: attrs,
+                getAttribute(name) { return attrs.get(name) || ''; },
+                setAttribute(name, value) { attrs.set(name, String(value)); },
+                querySelector(selector) {
+                  if (selector === '[data-roster-unit-cost]') {
+                    return badge;
+                  }
+                  return null;
+                },
+                closest() {
+                  return { __id: id };
+                },
+              };
+            };
+    
+            const primaryItem = createItem('u1');
+            const partnerItem = createItem('u2');
+            const rosterItems = [primaryItem, partnerItem];
+            const listElement = {
+              querySelectorAll(selector) {
+                if (selector === '[data-roster-item]') {
+                  return rosterItems;
+                }
+                return [];
+              },
+              querySelector(selector) {
+                const match = /data-roster-unit-id="([^"]+)"/.exec(selector);
+                if (!match) {
+                  return null;
+                }
+                return rosterItems.find((item) => item.getAttribute('data-roster-unit-id') === match[1]) || null;
+              },
+            };
+    
+            let rosterListEl = listElement;
+            const ensureRosterList = () => listElement;
+            let refreshRosterCostBadgesInProgress = false;
+            let pendingRefreshOptions = null;
+            let pendingRefreshCycleToken = null;
+            let lastRefreshRosterCostCycleToken = null;
+            const buildClassificationContextFromItem = (item) => ({
+              id: item.getAttribute('data-roster-unit-id'),
+              count: Number(item.getAttribute('data-unit-count') || '1'),
+              loadoutState: JSON.parse(item.getAttribute('data-loadout') || '{}'),
+              currentClassification: JSON.parse(item.getAttribute('data-unit-classification') || 'null'),
+            });
+            const getPartnerId = (unitId) => (unitId === 'u1' ? 'u2' : unitId === 'u2' ? 'u1' : '');
+            const computeRosterItemCost = (context, partnerContext = null) => {
+              state.computeCalls.push({
+                unitId: context.id,
+                count: context.count,
+                edited: Boolean(context.loadoutState && context.loadoutState.edited),
+                classification: context.currentClassification ? context.currentClassification.slug : null,
+                partnerId: partnerContext ? partnerContext.id : null,
+                partnerClassification: partnerContext && partnerContext.currentClassification
+                  ? partnerContext.currentClassification.slug
+                  : null,
+              });
+              const base = context.id === 'u1' ? 10 : 20;
+              const ownClassificationBonus = context.currentClassification && context.currentClassification.slug === 'strzelec' ? 1000 : 0;
+              const partnerClassificationBonus = partnerContext && partnerContext.currentClassification && partnerContext.currentClassification.slug === 'strzelec' ? 10000 : 0;
+              const editedBonus = context.loadoutState && context.loadoutState.edited ? 100 : 0;
+              return { total: base + context.count + editedBonus + ownClassificationBonus + partnerClassificationBonus };
+            };
+            const formatPoints = (value) => String(value);
+            const updateTotalSummary = (value) => state.totals.push(value);
+    
+            eval(refreshSource);
+    
+            let loadoutState = { mode: 'total', passive: new Map() };
+            const currentWeapons = [];
+            const currentPassives = [];
+            const currentBaseFlags = {};
+            const abilityCostMap = new Map();
+            const baseCostPerModel = 0;
+            let currentCount = 5;
+            const currentQuality = '';
+            let currentClassification = null;
+            let activeItem = primaryItem;
+            const loadoutInput = { value: '{"before":1}' };
+            const renderEditors = () => {};
+            const serializeLoadoutState = () => '{"edited":true}';
+            const updateCostDisplays = () => {
+              state.updateCostDisplaysCalls += 1;
+              primaryItem.setAttribute('data-unit-cost', '120');
+              primaryItem.querySelector('[data-roster-unit-cost]').textContent = '120 pkt';
+              return 120;
+            };
+            const getEntryElementFromItem = (item) => ({ __id: item.getAttribute('data-roster-unit-id') });
+            const getUnitIdFromEntry = (entry) => entry.__id;
+            const estimateCombinedClassification = () => ({ classification: { slug: 'strzelec' }, weaponMap: new Map() });
+            const applyClassificationToState = () => {};
+            const invalidateCachedAttribute = () => {};
+            const updateItemClassification = (item, classification) => {
+              item.setAttribute('data-unit-classification', JSON.stringify(classification ?? null));
+            };
+            let ignoreNextSave = false;
+            let autoSaveEnabled = false;
+            const setSaveStatus = () => {};
+            const scheduleSave = () => {};
+    
+            eval(handleSource);
+    
+            // Symulacja lokalnej zmiany stanu oddzia³u (bez applyServerUpdate).
+            currentCount = 6;
+            loadoutInput.value = '{"edited":true}';
+            handleStateChange();
+    
+            console.log(JSON.stringify({
+              updateCostDisplaysCalls: state.updateCostDisplaysCalls,
+              latestTotal: state.totals[state.totals.length - 1],
+              unitBadge: primaryItem.querySelector('[data-roster-unit-cost]').textContent,
+              unitCostAttr: primaryItem.getAttribute('data-unit-cost'),
+              computeCalls: state.computeCalls,
+              applyServerUpdateCalls: state.applyServerUpdateCalls,
+            }));
+        """
+    
+        script = _build_sandbox_script(script_body)
+>       result = _run_node(script)
+
+tests\test_frontend_loadout_state.py:470: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_frontend_loadout_state.py:53: in _run_node
+    result = subprocess.run(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs =...it-cost\'),\n  computeCalls: state.computeCalls,\n  applyServerUpdateCalls: state.applyServerUpdateCalls,\n}));\n\n'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR...>
+stdout = ''
+stderr = '[eval]:31\n    throw new Error(`Cannot find end marker for ${name}`);\n    ^\n\nError: Cannot find end marker for ref...alTypeScript (node:internal/process/execution:295:3)\n    at node:internal/main/eval_string:71:3\n\nNode.js v24.14.1\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs = require(\'fs\');\nconst vm = require(\'vm\');\nconst path = "D:\\\\OneDrive - KBJ S.A\\\\Dokumenty\\\\GitHub\\\\OPR\\\\app\\\\static\\\\js\\\\app.js";\nconst code = fs.readFileSync(path, \'utf8\');\nconst sandbox = {\n  console,\n  Map,\n  Set,\n  JSON,\n  window: {\n    setTimeout: setTimeout,\n    clearTimeout: clearTimeout,\n  },\n  document: {\n    addEventListener: () => {},\n  },\n};\nsandbox.window.window = sandbox.window;\nvm.createContext(sandbox);\nvm.runInContext(code, sandbox);\n\nconst source = code;\nfunction extractFunction(name, endMarker) {\n  const start = source.indexOf(`function ${name}(`);\n  if (start === -1) {\n    throw new Error(`Cannot find function ${name}`);\n  }\n  const end = source.indexOf(endMarker, start);\n  if (end === -1) {\n    throw new Error(`Cannot find end marker for ${name}`);\n  }\n  return source.slice(start, end);\n}\n\nconst refreshSource = extractFunction(\'refreshRosterCostBadges\', \'\\n\\n  function applyClassificationToState\');\nconst handleSource = extractFunction(\'handleStateChange\', \'\\n\\nfunction availableClassificationSlugs\');\n\nconst state = {\n  totals: [],\n  updateCostDisplaysCalls: 0,\n  computeCalls: [],\n  applyServerUpdateCalls: 0,\n};\n\nconst makeBadge = () => ({ textContent: \'\' });\nconst createItem = (id) => {\n  const badge = makeBadge();\n  const attrs = new Map([\n    [\'data-roster-unit-id\', id],\n    [\'data-unit-cost\', \'0\'],\n    [\'data-unit-count\', \'1\'],\n    [\'data-loadout\', \'{}\'],\n    [\'data-unit-classification\', \'null\'],\n  ]);\n  return {\n    _badge: badge,\n    _attrs: attrs,\n    getAttribute(name) { return attrs.get(name) || \'\'; },\n    setAttribute(name, value) { attrs.set(name, String(value)); },\n    querySelector(selector) {\n      if (selector === \'[data-roster-unit-cost]\') {\n        return badge;\n      }\n      return null;\n    },\n    closest() {\n      return { __id: id };\n    },\n  };\n};\n\nconst primaryItem = createItem(\'u1\');\nconst partnerItem = createItem(\'u2\');\nconst rosterItems = [primaryItem, partnerItem];\nconst listElement = {\n  querySelectorAll(selector) {\n    if (selector === \'[data-roster-item]\') {\n      return rosterItems;\n    }\n    return [];\n  },\n  querySelector(selector) {\n    const match = /data-roster-unit-id="([^"]+)"/.exec(selector);\n    if (!match) {\n      return null;\n    }\n    return rosterItems.find((item) => item.getAttribute(\'data-roster-unit-id\') === match[1]) || null;\n  },\n};\n\nlet rosterListEl = listElement;\nconst ensureRosterList = () => listElement;\nlet refreshRosterCostBadgesInProgress = false;\nlet pendingRefreshOptions = null;\nlet pendingRefreshCycleToken = null;\nlet lastRefreshRosterCostCycleToken = null;\nconst buildClassificationContextFromItem = (item) => ({\n  id: item.getAttribute(\'data-roster-unit-id\'),\n  count: Number(item.getAttribute(\'data-unit-count\') || \'1\'),\n  loadoutState: JSON.parse(item.getAttribute(\'data-loadout\') || \'{}\'),\n  currentClassification: JSON.parse(item.getAttribute(\'data-unit-classification\') || \'null\'),\n});\nconst getPartnerId = (unitId) => (unitId === \'u1\' ? \'u2\' : unitId === \'u2\' ? \'u1\' : \'\');\nconst computeRosterItemCost = (context, partnerContext = null) => {\n  state.computeCalls.push({\n    unitId: context.id,\n    count: context.count,\n    edited: Boolean(context.loadoutState && context.loadoutState.edited),\n    classification: context.currentClassification ? context.currentClassification.slug : null,\n    partnerId: partnerContext ? partnerContext.id : null,\n    partnerClassification: partnerContext && partnerContext.currentClassification\n      ? partnerContext.currentClassification.slug\n      : null,\n  });\n  const base = context.id === \'u1\' ? 10 : 20;\n  const ownClassificationBonus = context.currentClassification && context.currentClassification.slug === \'strzelec\' ? 1000 : 0;\n  const partnerClassificationBonus = partnerContext && partnerContext.currentClassification && partnerContext.currentClassification.slug === \'strzelec\' ? 10000 : 0;\n  const editedBonus = context.loadoutState && context.loadoutState.edited ? 100 : 0;\n  return { total: base + context.count + editedBonus + ownClassificationBonus + partnerClassificationBonus };\n};\nconst formatPoints = (value) => String(value);\nconst updateTotalSummary = (value) => state.totals.push(value);\n\neval(refreshSource);\n\nlet loadoutState = { mode: \'total\', passive: new Map() };\nconst currentWeapons = [];\nconst currentPassives = [];\nconst currentBaseFlags = {};\nconst abilityCostMap = new Map();\nconst baseCostPerModel = 0;\nlet currentCount = 5;\nconst currentQuality = \'\';\nlet currentClassification = null;\nlet activeItem = primaryItem;\nconst loadoutInput = { value: \'{"before":1}\' };\nconst renderEditors = () => {};\nconst serializeLoadoutState = () => \'{"edited":true}\';\nconst updateCostDisplays = () => {\n  state.updateCostDisplaysCalls += 1;\n  primaryItem.setAttribute(\'data-unit-cost\', \'120\');\n  primaryItem.querySelector(\'[data-roster-unit-cost]\').textContent = \'120 pkt\';\n  return 120;\n};\nconst getEntryElementFromItem = (item) => ({ __id: item.getAttribute(\'data-roster-unit-id\') });\nconst getUnitIdFromEntry = (entry) => entry.__id;\nconst estimateCombinedClassification = () => ({ classification: { slug: \'strzelec\' }, weaponMap: new Map() });\nconst applyClassificationToState = () => {};\nconst invalidateCachedAttribute = () => {};\nconst updateItemClassification = (item, classification) => {\n  item.setAttribute(\'data-unit-classification\', JSON.stringify(classification ?? null));\n};\nlet ignoreNextSave = false;\nlet autoSaveEnabled = false;\nconst setSaveStatus = () => {};\nconst scheduleSave = () => {};\n\neval(handleSource);\n\n// Symulacja lokalnej zmiany stanu oddzia³u (bez applyServerUpdate).\ncurrentCount = 6;\nloadoutInput.value = \'{"edited":true}\';\nhandleStateChange();\n\nconsole.log(JSON.stringify({\n  updateCostDisplaysCalls: state.updateCostDisplaysCalls,\n  latestTotal: state.totals[state.totals.length - 1],\n  unitBadge: primaryItem.querySelector(\'[data-roster-unit-cost]\').textContent,\n  unitCostAttr: primaryItem.getAttribute(\'data-unit-cost\'),\n  computeCalls: state.computeCalls,\n  applyServerUpdateCalls: state.applyServerUpdateCalls,\n}));\n\n']' returned non-zero exit status 1.
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\subprocess.py:577: CalledProcessError
+_ test_update_cost_displays_keeps_panel_and_unit_cost_in_sync_after_passive_toggle _
+
+    def test_update_cost_displays_keeps_panel_and_unit_cost_in_sync_after_passive_toggle() -> None:
+        script_body = """
+            const source = code;
+            function extractFunction(name, endMarker) {
+              const start = source.indexOf(`function ${name}(`);
+              if (start === -1) {
+                throw new Error(`Cannot find function ${name}`);
+              }
+              const end = source.indexOf(endMarker, start);
+              if (end === -1) {
+                throw new Error(`Cannot find end marker for ${name}`);
+              }
+              return source.slice(start, end);
+            }
+    
+            const activeCostSource = extractFunction('computeActiveItemCost', '\\n\\n  function updateCostDisplays');
+            const updateCostSource = extractFunction('updateCostDisplays', '\\n\\n  function computeRosterItemCost');
+            const computeSource = extractFunction('computeRosterItemCost', '\\n\\n  function refreshRosterCostBadges');
+    
+            const itemAttrs = new Map([
+              ['data-roster-unit-id', 'u1'],
+              ['data-unit-cost', '0'],
+              ['data-unit-count', '1'],
+              ['data-loadout', '{}'],
+              ['data-unit-classification', JSON.stringify({ slug: 'wojownik' })],
+            ]);
+            const badge = { textContent: '' };
+            const activeItem = {
+              getAttribute(name) { return itemAttrs.get(name) || ''; },
+              setAttribute(name, value) { itemAttrs.set(name, String(value)); },
+              querySelector(selector) {
+                if (selector === '[data-roster-unit-cost]') {
+                  return badge;
+                }
+                return null;
+              },
+            };
+            const partnerItem = {
+              getAttribute(name) {
+                if (name === 'data-roster-unit-id') return 'u2';
+                if (name === 'data-unit-count') return '1';
+                if (name === 'data-loadout') return '{}';
+                if (name === 'data-unit-classification') return JSON.stringify({ slug: 'strzelec' });
+                return '';
+              },
+            };
+            const listElement = {
+              querySelector(selector) {
+                const match = /data-roster-unit-id="([^"]+)"/.exec(selector);
+                if (!match) {
+                  return null;
+                }
+                return match[1] === 'u2' ? partnerItem : null;
+              },
+            };
+    
+            let currentClassification = { slug: 'wojownik' };
+            const loadoutState = { passive: new Map([['wojownik', 1]]) };
+            const currentWeapons = [];
+            const currentPassives = [];
+            const currentBaseFlags = {};
+            const abilityCostMap = new Map();
+            const baseCostPerModel = 0;
+            const currentCount = 1;
+            const currentQuality = '';
+            const currentWeaponCostMap = new Map();
+            const getEntryElementFromItem = () => ({ __id: 'u1' });
+            const getUnitIdFromEntry = (entry) => entry.__id;
+            const getPartnerId = () => 'u2';
+            const rosterListEl = listElement;
+            const ensureRosterList = () => listElement;
+            const buildClassificationContextFromItem = (item) => ({
+              id: item.getAttribute('data-roster-unit-id'),
+              count: Number(item.getAttribute('data-unit-count') || '1'),
+              loadoutState: { passive: new Map() },
+              currentClassification: JSON.parse(item.getAttribute('data-unit-classification') || 'null'),
+            });
+            const estimateCombinedClassification = (context, partnerContext) => {
+              if (partnerContext && partnerContext.currentClassification) {
+                return { classification: partnerContext.currentClassification, weaponMap: new Map() };
+              }
+              return { classification: context.currentClassification, weaponMap: new Map() };
+            };
+            const cloneLoadoutState = (state) => ({
+              passive: new Map(state.passive || []),
+              active: new Map(),
+              aura: new Map(),
+              passiveLabels: new Map(),
+              activeLabels: new Map(),
+              auraLabels: new Map(),
+            });
+            const applyClassificationToState = (state, classification) => {
+              state.passive = new Map([[classification.slug, 1]]);
+            };
+            const buildWeaponCostMap = () => new Map();
+            const computeTotalCost = (_baseCost, _count, _weapons, _state, _abilityCosts, _passiveItems, _weaponMap) => {
+              return _state.passive.has('strzelec') ? 88 : 11;
+            };
+            const formatPoints = (value) => String(value);
+            const costValueEl = { textContent: '' };
+            const costBadgeEl = { classList: { toggle: () => {} } };
+    
+            eval(computeSource);
+            eval(activeCostSource);
+            eval(updateCostSource);
+    
+            // Symulacja prze³¹czenia pasywki na klasyfikacjê "strzelec".
+            currentClassification = { slug: 'strzelec' };
+            const total = updateCostDisplays();
+    
+            console.log(JSON.stringify({
+              total,
+              panelCost: costValueEl.textContent,
+              badgeCost: badge.textContent,
+              dataUnitCost: activeItem.getAttribute('data-unit-cost'),
+            }));
+        """
+    
+        script = _build_sandbox_script(script_body)
+>       result = _run_node(script)
+
+tests\test_frontend_loadout_state.py:614: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_frontend_loadout_state.py:53: in _run_node
+    result = subprocess.run(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs =...xtContent,\n  badgeCost: badge.textContent,\n  dataUnitCost: activeItem.getAttribute(\'data-unit-cost\'),\n}));\n\n'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR...>
+stdout = ''
+stderr = '[eval]:27\n    throw new Error(`Cannot find function ${name}`);\n    ^\n\nError: Cannot find function computeActiveIt...alTypeScript (node:internal/process/execution:295:3)\n    at node:internal/main/eval_string:71:3\n\nNode.js v24.14.1\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs = require(\'fs\');\nconst vm = require(\'vm\');\nconst path = "D:\\\\OneDrive - KBJ S.A\\\\Dokumenty\\\\GitHub\\\\OPR\\\\app\\\\static\\\\js\\\\app.js";\nconst code = fs.readFileSync(path, \'utf8\');\nconst sandbox = {\n  console,\n  Map,\n  Set,\n  JSON,\n  window: {\n    setTimeout: setTimeout,\n    clearTimeout: clearTimeout,\n  },\n  document: {\n    addEventListener: () => {},\n  },\n};\nsandbox.window.window = sandbox.window;\nvm.createContext(sandbox);\nvm.runInContext(code, sandbox);\n\nconst source = code;\nfunction extractFunction(name, endMarker) {\n  const start = source.indexOf(`function ${name}(`);\n  if (start === -1) {\n    throw new Error(`Cannot find function ${name}`);\n  }\n  const end = source.indexOf(endMarker, start);\n  if (end === -1) {\n    throw new Error(`Cannot find end marker for ${name}`);\n  }\n  return source.slice(start, end);\n}\n\nconst activeCostSource = extractFunction(\'computeActiveItemCost\', \'\\n\\n  function updateCostDisplays\');\nconst updateCostSource = extractFunction(\'updateCostDisplays\', \'\\n\\n  function computeRosterItemCost\');\nconst computeSource = extractFunction(\'computeRosterItemCost\', \'\\n\\n  function refreshRosterCostBadges\');\n\nconst itemAttrs = new Map([\n  [\'data-roster-unit-id\', \'u1\'],\n  [\'data-unit-cost\', \'0\'],\n  [\'data-unit-count\', \'1\'],\n  [\'data-loadout\', \'{}\'],\n  [\'data-unit-classification\', JSON.stringify({ slug: \'wojownik\' })],\n]);\nconst badge = { textContent: \'\' };\nconst activeItem = {\n  getAttribute(name) { return itemAttrs.get(name) || \'\'; },\n  setAttribute(name, value) { itemAttrs.set(name, String(value)); },\n  querySelector(selector) {\n    if (selector === \'[data-roster-unit-cost]\') {\n      return badge;\n    }\n    return null;\n  },\n};\nconst partnerItem = {\n  getAttribute(name) {\n    if (name === \'data-roster-unit-id\') return \'u2\';\n    if (name === \'data-unit-count\') return \'1\';\n    if (name === \'data-loadout\') return \'{}\';\n    if (name === \'data-unit-classification\') return JSON.stringify({ slug: \'strzelec\' });\n    return \'\';\n  },\n};\nconst listElement = {\n  querySelector(selector) {\n    const match = /data-roster-unit-id="([^"]+)"/.exec(selector);\n    if (!match) {\n      return null;\n    }\n    return match[1] === \'u2\' ? partnerItem : null;\n  },\n};\n\nlet currentClassification = { slug: \'wojownik\' };\nconst loadoutState = { passive: new Map([[\'wojownik\', 1]]) };\nconst currentWeapons = [];\nconst currentPassives = [];\nconst currentBaseFlags = {};\nconst abilityCostMap = new Map();\nconst baseCostPerModel = 0;\nconst currentCount = 1;\nconst currentQuality = \'\';\nconst currentWeaponCostMap = new Map();\nconst getEntryElementFromItem = () => ({ __id: \'u1\' });\nconst getUnitIdFromEntry = (entry) => entry.__id;\nconst getPartnerId = () => \'u2\';\nconst rosterListEl = listElement;\nconst ensureRosterList = () => listElement;\nconst buildClassificationContextFromItem = (item) => ({\n  id: item.getAttribute(\'data-roster-unit-id\'),\n  count: Number(item.getAttribute(\'data-unit-count\') || \'1\'),\n  loadoutState: { passive: new Map() },\n  currentClassification: JSON.parse(item.getAttribute(\'data-unit-classification\') || \'null\'),\n});\nconst estimateCombinedClassification = (context, partnerContext) => {\n  if (partnerContext && partnerContext.currentClassification) {\n    return { classification: partnerContext.currentClassification, weaponMap: new Map() };\n  }\n  return { classification: context.currentClassification, weaponMap: new Map() };\n};\nconst cloneLoadoutState = (state) => ({\n  passive: new Map(state.passive || []),\n  active: new Map(),\n  aura: new Map(),\n  passiveLabels: new Map(),\n  activeLabels: new Map(),\n  auraLabels: new Map(),\n});\nconst applyClassificationToState = (state, classification) => {\n  state.passive = new Map([[classification.slug, 1]]);\n};\nconst buildWeaponCostMap = () => new Map();\nconst computeTotalCost = (_baseCost, _count, _weapons, _state, _abilityCosts, _passiveItems, _weaponMap) => {\n  return _state.passive.has(\'strzelec\') ? 88 : 11;\n};\nconst formatPoints = (value) => String(value);\nconst costValueEl = { textContent: \'\' };\nconst costBadgeEl = { classList: { toggle: () => {} } };\n\neval(computeSource);\neval(activeCostSource);\neval(updateCostSource);\n\n// Symulacja prze³¹czenia pasywki na klasyfikacjê "strzelec".\ncurrentClassification = { slug: \'strzelec\' };\nconst total = updateCostDisplays();\n\nconsole.log(JSON.stringify({\n  total,\n  panelCost: costValueEl.textContent,\n  badgeCost: badge.textContent,\n  dataUnitCost: activeItem.getAttribute(\'data-unit-cost\'),\n}));\n\n']' returned non-zero exit status 1.
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\subprocess.py:577: CalledProcessError
+_ test_single_unit_command_ability_keeps_unit_cost_and_roster_total_in_sync_after_full_refresh_cycle _
+
+    def test_single_unit_command_ability_keeps_unit_cost_and_roster_total_in_sync_after_full_refresh_cycle() -> None:
+        script_body = """
+            const source = code;
+            function extractFunction(name, endMarker) {
+              const start = source.indexOf(`function ${name}(`);
+              if (start === -1) {
+                throw new Error(`Cannot find function ${name}`);
+              }
+              const end = source.indexOf(endMarker, start);
+              if (end === -1) {
+                throw new Error(`Cannot find end marker for ${name}`);
+              }
+              return source.slice(start, end);
+            }
+    
+            const prepareContextSource = extractFunction('prepareCostContext', '\\n\\n  function hydrateLoadoutStateForItem');
+            const updateCostSource = extractFunction('updateCostDisplays', '\\n\\n  function computeRosterItemTotal');
+            const computeTotalSource = extractFunction('computeRosterItemTotal', '\\n\\n  function computeRosterItemCost');
+            const computeSource = extractFunction('computeRosterItemCost', '\\n\\n  function refreshRosterCostBadges');
+            const refreshSource = extractFunction('refreshRosterCostBadges', '\\n\\n  function applyClassificationToState');
+    
+            const attrs = new Map([
+              ['data-roster-unit-id', 'u1'],
+              ['data-unit-cost', '0'],
+              ['data-unit-count', '1'],
+              ['data-loadout', '{}'],
+              ['data-unit-classification', 'null'],
+            ]);
+            const badge = { textContent: '' };
+            const item = {
+              getAttribute(name) { return attrs.get(name) || ''; },
+              setAttribute(name, value) { attrs.set(name, String(value)); },
+              querySelector(selector) {
+                if (selector === '[data-roster-unit-cost]') {
+                  return badge;
+                }
+                return null;
+              },
+            };
+    
+            const listElement = {
+              querySelectorAll(selector) {
+                if (selector === '[data-roster-item]') {
+                  return [item];
+                }
+                return [];
+              },
+              querySelector(selector) {
+                const match = /data-roster-unit-id="([^"]+)"/.exec(selector);
+                if (!match) {
+                  return null;
+                }
+                return match[1] === 'u1' ? item : null;
+              },
+            };
+    
+            const cloneLoadoutState = (state) => ({ ...state, mode: state.mode || 'total' });
+            const normalizeLoadoutStateTotals = (state) => { state.mode = 'total'; };
+            const estimateCombinedClassification = (context) => ({ classification: context.currentClassification, weaponMap: new Map() });
+            const applyClassificationToState = () => {};
+            const buildWeaponCostMap = () => new Map();
+            const computeTotalCost = (_baseCost, _count, _weapons, _state, abilityCosts) => (
+              abilityCosts && abilityCosts.active instanceof Map && abilityCosts.active.get('rozkaz') ? 35 : 20
+            );
+            const formatPoints = (value) => String(value);
+            const getPartnerId = () => '';
+            const buildClassificationContextFromItem = () => ({
+              loadoutState: { mode: 'total' },
+              abilityCosts: { active: new Map([['rozkaz', 15]]) },
+              currentClassification: null,
+              count: 1,
+              weapons: [],
+              passiveItems: [],
+              baseFlags: {},
+              baseCostPerModel: 20,
+              quality: 4,
+            });
+            const updateTotalSummaryCalls = [];
+            const updateTotalSummary = (value) => updateTotalSummaryCalls.push(value);
+            let rosterListEl = listElement;
+            const ensureRosterList = () => listElement;
+            let refreshRosterCostBadgesInProgress = false;
+            let pendingRefreshOptions = null;
+            let pendingRefreshCycleToken = null;
+            let lastRefreshRosterCostCycleToken = null;
+            let preserveServerTotalUntilRefreshCycle = 0;
+            let rosterRefreshCycleCounter = 0;
+    
+            const costValueEl = { textContent: '' };
+            const costBadgeEl = { classList: { toggle: () => {} } };
+            let activeItem = item;
+            const loadoutState = { mode: 'total' };
+            const currentWeapons = [];
+            const currentPassives = [];
+            const currentBaseFlags = {};
+            const abilityCostMap = { active: new Map([['rozkaz', 15]]), passive: new Map() };
+            const baseCostPerModel = 20;
+            const currentCount = 1;
+            const currentQuality = 4;
+            const currentWeaponCostMap = new Map();
+            const currentClassification = null;
+    
+            eval(prepareContextSource);
+            eval(computeTotalSource);
+            eval(computeSource);
+            eval(updateCostSource);
+            eval(refreshSource);
+    
+            // Lokalny cykl: dodanie aktywnej zdolnoœci rozkazowej.
+            updateCostDisplays();
+            refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, 'cycle-command');
+    
+            console.log(JSON.stringify({
+              dataUnitCost: item.getAttribute('data-unit-cost'),
+              unitBadge: badge.textContent,
+              rosterTotal: updateTotalSummaryCalls[updateTotalSummaryCalls.length - 1],
+              panelCost: costValueEl.textContent,
+            }));
+        """
+    
+        script = _build_sandbox_script(script_body)
+>       result = _run_node(script)
+
+tests\test_frontend_loadout_state.py:743: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_frontend_loadout_state.py:53: in _run_node
+    result = subprocess.run(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs =...otal: updateTotalSummaryCalls[updateTotalSummaryCalls.length - 1],\n  panelCost: costValueEl.textContent,\n}));\n\n'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR...>
+stdout = ''
+stderr = '[eval]:31\n    throw new Error(`Cannot find end marker for ${name}`);\n    ^\n\nError: Cannot find end marker for pre...alTypeScript (node:internal/process/execution:295:3)\n    at node:internal/main/eval_string:71:3\n\nNode.js v24.14.1\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs = require(\'fs\');\nconst vm = require(\'vm\');\nconst path = "D:\\\\OneDrive - KBJ S.A\\\\Dokumenty\\\\GitHub\\\\OPR\\\\app\\\\static\\\\js\\\\app.js";\nconst code = fs.readFileSync(path, \'utf8\');\nconst sandbox = {\n  console,\n  Map,\n  Set,\n  JSON,\n  window: {\n    setTimeout: setTimeout,\n    clearTimeout: clearTimeout,\n  },\n  document: {\n    addEventListener: () => {},\n  },\n};\nsandbox.window.window = sandbox.window;\nvm.createContext(sandbox);\nvm.runInContext(code, sandbox);\n\nconst source = code;\nfunction extractFunction(name, endMarker) {\n  const start = source.indexOf(`function ${name}(`);\n  if (start === -1) {\n    throw new Error(`Cannot find function ${name}`);\n  }\n  const end = source.indexOf(endMarker, start);\n  if (end === -1) {\n    throw new Error(`Cannot find end marker for ${name}`);\n  }\n  return source.slice(start, end);\n}\n\nconst prepareContextSource = extractFunction(\'prepareCostContext\', \'\\n\\n  function hydrateLoadoutStateForItem\');\nconst updateCostSource = extractFunction(\'updateCostDisplays\', \'\\n\\n  function computeRosterItemTotal\');\nconst computeTotalSource = extractFunction(\'computeRosterItemTotal\', \'\\n\\n  function computeRosterItemCost\');\nconst computeSource = extractFunction(\'computeRosterItemCost\', \'\\n\\n  function refreshRosterCostBadges\');\nconst refreshSource = extractFunction(\'refreshRosterCostBadges\', \'\\n\\n  function applyClassificationToState\');\n\nconst attrs = new Map([\n  [\'data-roster-unit-id\', \'u1\'],\n  [\'data-unit-cost\', \'0\'],\n  [\'data-unit-count\', \'1\'],\n  [\'data-loadout\', \'{}\'],\n  [\'data-unit-classification\', \'null\'],\n]);\nconst badge = { textContent: \'\' };\nconst item = {\n  getAttribute(name) { return attrs.get(name) || \'\'; },\n  setAttribute(name, value) { attrs.set(name, String(value)); },\n  querySelector(selector) {\n    if (selector === \'[data-roster-unit-cost]\') {\n      return badge;\n    }\n    return null;\n  },\n};\n\nconst listElement = {\n  querySelectorAll(selector) {\n    if (selector === \'[data-roster-item]\') {\n      return [item];\n    }\n    return [];\n  },\n  querySelector(selector) {\n    const match = /data-roster-unit-id="([^"]+)"/.exec(selector);\n    if (!match) {\n      return null;\n    }\n    return match[1] === \'u1\' ? item : null;\n  },\n};\n\nconst cloneLoadoutState = (state) => ({ ...state, mode: state.mode || \'total\' });\nconst normalizeLoadoutStateTotals = (state) => { state.mode = \'total\'; };\nconst estimateCombinedClassification = (context) => ({ classification: context.currentClassification, weaponMap: new Map() });\nconst applyClassificationToState = () => {};\nconst buildWeaponCostMap = () => new Map();\nconst computeTotalCost = (_baseCost, _count, _weapons, _state, abilityCosts) => (\n  abilityCosts && abilityCosts.active instanceof Map && abilityCosts.active.get(\'rozkaz\') ? 35 : 20\n);\nconst formatPoints = (value) => String(value);\nconst getPartnerId = () => \'\';\nconst buildClassificationContextFromItem = () => ({\n  loadoutState: { mode: \'total\' },\n  abilityCosts: { active: new Map([[\'rozkaz\', 15]]) },\n  currentClassification: null,\n  count: 1,\n  weapons: [],\n  passiveItems: [],\n  baseFlags: {},\n  baseCostPerModel: 20,\n  quality: 4,\n});\nconst updateTotalSummaryCalls = [];\nconst updateTotalSummary = (value) => updateTotalSummaryCalls.push(value);\nlet rosterListEl = listElement;\nconst ensureRosterList = () => listElement;\nlet refreshRosterCostBadgesInProgress = false;\nlet pendingRefreshOptions = null;\nlet pendingRefreshCycleToken = null;\nlet lastRefreshRosterCostCycleToken = null;\nlet preserveServerTotalUntilRefreshCycle = 0;\nlet rosterRefreshCycleCounter = 0;\n\nconst costValueEl = { textContent: \'\' };\nconst costBadgeEl = { classList: { toggle: () => {} } };\nlet activeItem = item;\nconst loadoutState = { mode: \'total\' };\nconst currentWeapons = [];\nconst currentPassives = [];\nconst currentBaseFlags = {};\nconst abilityCostMap = { active: new Map([[\'rozkaz\', 15]]), passive: new Map() };\nconst baseCostPerModel = 20;\nconst currentCount = 1;\nconst currentQuality = 4;\nconst currentWeaponCostMap = new Map();\nconst currentClassification = null;\n\neval(prepareContextSource);\neval(computeTotalSource);\neval(computeSource);\neval(updateCostSource);\neval(refreshSource);\n\n// Lokalny cykl: dodanie aktywnej zdolnoœci rozkazowej.\nupdateCostDisplays();\nrefreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, \'cycle-command\');\n\nconsole.log(JSON.stringify({\n  dataUnitCost: item.getAttribute(\'data-unit-cost\'),\n  unitBadge: badge.textContent,\n  rosterTotal: updateTotalSummaryCalls[updateTotalSummaryCalls.length - 1],\n  panelCost: costValueEl.textContent,\n}));\n\n']' returned non-zero exit status 1.
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\subprocess.py:577: CalledProcessError
+_ test_single_item_roster_keeps_unit_cost_equal_to_roster_total_after_each_ui_change _
+
+    def test_single_item_roster_keeps_unit_cost_equal_to_roster_total_after_each_ui_change() -> None:
+        script_body = """
+            const source = code;
+            function extractFunction(name, endMarker) {
+              const start = source.indexOf(`function ${name}(`);
+              if (start === -1) {
+                throw new Error(`Cannot find function ${name}`);
+              }
+              const end = source.indexOf(endMarker, start);
+              if (end === -1) {
+                throw new Error(`Cannot find end marker for ${name}`);
+              }
+              return source.slice(start, end);
+            }
+    
+            const prepareContextSource = extractFunction('prepareCostContext', '\\n\\n  function hydrateLoadoutStateForItem');
+            const updateCostSource = extractFunction('updateCostDisplays', '\\n\\n  function computeRosterItemTotal');
+            const computeTotalSource = extractFunction('computeRosterItemTotal', '\\n\\n  function computeRosterItemCost');
+            const computeSource = extractFunction('computeRosterItemCost', '\\n\\n  function refreshRosterCostBadges');
+            const refreshSource = extractFunction('refreshRosterCostBadges', '\\n\\n  function applyClassificationToState');
+    
+            const attrs = new Map([
+              ['data-roster-unit-id', 'u1'],
+              ['data-unit-cost', '0'],
+              ['data-unit-count', '1'],
+              ['data-loadout', '{}'],
+              ['data-unit-classification', 'null'],
+            ]);
+            const badge = { textContent: '' };
+            const item = {
+              getAttribute(name) { return attrs.get(name) || ''; },
+              setAttribute(name, value) { attrs.set(name, String(value)); },
+              querySelector(selector) {
+                if (selector === '[data-roster-unit-cost]') {
+                  return badge;
+                }
+                return null;
+              },
+            };
+    
+            const listElement = {
+              querySelectorAll(selector) {
+                if (selector === '[data-roster-item]') {
+                  return [item];
+                }
+                return [];
+              },
+              querySelector(selector) {
+                const match = /data-roster-unit-id="([^"]+)"/.exec(selector);
+                if (!match) {
+                  return null;
+                }
+                return match[1] === 'u1' ? item : null;
+              },
+            };
+    
+            const cloneLoadoutState = (state) => ({ ...state, mode: state.mode || 'total' });
+            const normalizeLoadoutStateTotals = (state) => { state.mode = 'total'; };
+            const estimateCombinedClassification = (context) => ({ classification: context.currentClassification, weaponMap: new Map() });
+            const applyClassificationToState = () => {};
+            const buildWeaponCostMap = () => new Map();
+            let dynamicCost = 20;
+            const computeTotalCost = () => dynamicCost;
+            const formatPoints = (value) => String(value);
+            const getPartnerId = () => '';
+            const buildClassificationContextFromItem = () => ({
+              loadoutState: { mode: 'total' },
+              abilityCosts: { active: new Map(), passive: new Map() },
+              currentClassification: null,
+              count: 1,
+              weapons: [],
+              passiveItems: [],
+              baseFlags: {},
+              baseCostPerModel: 0,
+              quality: 4,
+            });
+            const totalCalls = [];
+            const updateTotalSummary = (value) => totalCalls.push(value);
+            let rosterListEl = listElement;
+            const ensureRosterList = () => listElement;
+            let refreshRosterCostBadgesInProgress = false;
+            let pendingRefreshOptions = null;
+            let pendingRefreshCycleToken = null;
+            let lastRefreshRosterCostCycleToken = null;
+            let preserveServerTotalUntilRefreshCycle = 0;
+            let rosterRefreshCycleCounter = 0;
+    
+            const costValueEl = { textContent: '' };
+            const costBadgeEl = { classList: { toggle: () => {} } };
+            let activeItem = item;
+            const loadoutState = { mode: 'total' };
+            const currentWeapons = [];
+            const currentPassives = [];
+            const currentBaseFlags = {};
+            const abilityCostMap = { active: new Map(), passive: new Map() };
+            const baseCostPerModel = 0;
+            const currentCount = 1;
+            const currentQuality = 4;
+            const currentWeaponCostMap = new Map();
+            const currentClassification = null;
+    
+            eval(prepareContextSource);
+            eval(computeTotalSource);
+            eval(computeSource);
+            eval(updateCostSource);
+            eval(refreshSource);
+    
+            const checkpoints = [];
+            const step = (label, nextCost) => {
+              dynamicCost = nextCost;
+              updateCostDisplays();
+              refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, `cycle-${label}`);
+              checkpoints.push({
+                label,
+                unitCost: Number(item.getAttribute('data-unit-cost')),
+                rosterTotal: totalCalls[totalCalls.length - 1],
+                panelCost: Number(costValueEl.textContent || '0'),
+              });
+            };
+    
+            step('initial', 20);
+            step('active-added', 35);
+            step('active-removed', 20);
+    
+            console.log(JSON.stringify({ checkpoints }));
+        """
+    
+        script = _build_sandbox_script(script_body)
+>       result = _run_node(script)
+
+tests\test_frontend_loadout_state.py:879: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_frontend_loadout_state.py:53: in _run_node
+    result = subprocess.run(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs =...);\nstep(\'active-added\', 35);\nstep(\'active-removed\', 20);\n\nconsole.log(JSON.stringify({ checkpoints }));\n\n'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR...>
+stdout = ''
+stderr = '[eval]:31\n    throw new Error(`Cannot find end marker for ${name}`);\n    ^\n\nError: Cannot find end marker for pre...alTypeScript (node:internal/process/execution:295:3)\n    at node:internal/main/eval_string:71:3\n\nNode.js v24.14.1\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs = require(\'fs\');\nconst vm = require(\'vm\');\nconst path = "D:\\\\OneDrive - KBJ S.A\\\\Dokumenty\\\\GitHub\\\\OPR\\\\app\\\\static\\\\js\\\\app.js";\nconst code = fs.readFileSync(path, \'utf8\');\nconst sandbox = {\n  console,\n  Map,\n  Set,\n  JSON,\n  window: {\n    setTimeout: setTimeout,\n    clearTimeout: clearTimeout,\n  },\n  document: {\n    addEventListener: () => {},\n  },\n};\nsandbox.window.window = sandbox.window;\nvm.createContext(sandbox);\nvm.runInContext(code, sandbox);\n\nconst source = code;\nfunction extractFunction(name, endMarker) {\n  const start = source.indexOf(`function ${name}(`);\n  if (start === -1) {\n    throw new Error(`Cannot find function ${name}`);\n  }\n  const end = source.indexOf(endMarker, start);\n  if (end === -1) {\n    throw new Error(`Cannot find end marker for ${name}`);\n  }\n  return source.slice(start, end);\n}\n\nconst prepareContextSource = extractFunction(\'prepareCostContext\', \'\\n\\n  function hydrateLoadoutStateForItem\');\nconst updateCostSource = extractFunction(\'updateCostDisplays\', \'\\n\\n  function computeRosterItemTotal\');\nconst computeTotalSource = extractFunction(\'computeRosterItemTotal\', \'\\n\\n  function computeRosterItemCost\');\nconst computeSource = extractFunction(\'computeRosterItemCost\', \'\\n\\n  function refreshRosterCostBadges\');\nconst refreshSource = extractFunction(\'refreshRosterCostBadges\', \'\\n\\n  function applyClassificationToState\');\n\nconst attrs = new Map([\n  [\'data-roster-unit-id\', \'u1\'],\n  [\'data-unit-cost\', \'0\'],\n  [\'data-unit-count\', \'1\'],\n  [\'data-loadout\', \'{}\'],\n  [\'data-unit-classification\', \'null\'],\n]);\nconst badge = { textContent: \'\' };\nconst item = {\n  getAttribute(name) { return attrs.get(name) || \'\'; },\n  setAttribute(name, value) { attrs.set(name, String(value)); },\n  querySelector(selector) {\n    if (selector === \'[data-roster-unit-cost]\') {\n      return badge;\n    }\n    return null;\n  },\n};\n\nconst listElement = {\n  querySelectorAll(selector) {\n    if (selector === \'[data-roster-item]\') {\n      return [item];\n    }\n    return [];\n  },\n  querySelector(selector) {\n    const match = /data-roster-unit-id="([^"]+)"/.exec(selector);\n    if (!match) {\n      return null;\n    }\n    return match[1] === \'u1\' ? item : null;\n  },\n};\n\nconst cloneLoadoutState = (state) => ({ ...state, mode: state.mode || \'total\' });\nconst normalizeLoadoutStateTotals = (state) => { state.mode = \'total\'; };\nconst estimateCombinedClassification = (context) => ({ classification: context.currentClassification, weaponMap: new Map() });\nconst applyClassificationToState = () => {};\nconst buildWeaponCostMap = () => new Map();\nlet dynamicCost = 20;\nconst computeTotalCost = () => dynamicCost;\nconst formatPoints = (value) => String(value);\nconst getPartnerId = () => \'\';\nconst buildClassificationContextFromItem = () => ({\n  loadoutState: { mode: \'total\' },\n  abilityCosts: { active: new Map(), passive: new Map() },\n  currentClassification: null,\n  count: 1,\n  weapons: [],\n  passiveItems: [],\n  baseFlags: {},\n  baseCostPerModel: 0,\n  quality: 4,\n});\nconst totalCalls = [];\nconst updateTotalSummary = (value) => totalCalls.push(value);\nlet rosterListEl = listElement;\nconst ensureRosterList = () => listElement;\nlet refreshRosterCostBadgesInProgress = false;\nlet pendingRefreshOptions = null;\nlet pendingRefreshCycleToken = null;\nlet lastRefreshRosterCostCycleToken = null;\nlet preserveServerTotalUntilRefreshCycle = 0;\nlet rosterRefreshCycleCounter = 0;\n\nconst costValueEl = { textContent: \'\' };\nconst costBadgeEl = { classList: { toggle: () => {} } };\nlet activeItem = item;\nconst loadoutState = { mode: \'total\' };\nconst currentWeapons = [];\nconst currentPassives = [];\nconst currentBaseFlags = {};\nconst abilityCostMap = { active: new Map(), passive: new Map() };\nconst baseCostPerModel = 0;\nconst currentCount = 1;\nconst currentQuality = 4;\nconst currentWeaponCostMap = new Map();\nconst currentClassification = null;\n\neval(prepareContextSource);\neval(computeTotalSource);\neval(computeSource);\neval(updateCostSource);\neval(refreshSource);\n\nconst checkpoints = [];\nconst step = (label, nextCost) => {\n  dynamicCost = nextCost;\n  updateCostDisplays();\n  refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, `cycle-${label}`);\n  checkpoints.push({\n    label,\n    unitCost: Number(item.getAttribute(\'data-unit-cost\')),\n    rosterTotal: totalCalls[totalCalls.length - 1],\n    panelCost: Number(costValueEl.textContent || \'0\'),\n  });\n};\n\nstep(\'initial\', 20);\nstep(\'active-added\', 35);\nstep(\'active-removed\', 20);\n\nconsole.log(JSON.stringify({ checkpoints }));\n\n']' returned non-zero exit status 1.
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\subprocess.py:577: CalledProcessError
+_ test_apply_server_update_prefers_backend_cached_cost_without_immediate_frontend_recompute _
+
+    def test_apply_server_update_prefers_backend_cached_cost_without_immediate_frontend_recompute() -> None:
+        script_body = """
+            const source = code;
+            function extractFunction(name, endMarker) {
+              const start = source.indexOf(`function ${name}(`);
+              if (start === -1) {
+                throw new Error(`Cannot find function ${name}`);
+              }
+              const end = source.indexOf(endMarker, start);
+              if (end === -1) {
+                throw new Error(`Cannot find end marker for ${name}`);
+              }
+              return source.slice(start, end);
+            }
+    
+            const applyServerUpdateSource = extractFunction('applyServerUpdate', '\\n\\n  function updateCostDisplays');
+            const refreshSource = extractFunction('refreshRosterCostBadges', '\\n\\n  function applyClassificationToState');
+    
+            const state = {
+              recomputeCalls: 0,
+              totals: [],
+            };
+    
+            const makeItem = (id, initialCost) => {
+              const attrs = new Map([
+                ['data-roster-unit-id', id],
+                ['data-unit-name', 'Unit'],
+                ['data-unit-cost', String(initialCost)],
+                ['data-selected-passives', '[]'],
+                ['data-selected-actives', '[]'],
+                ['data-selected-auras', '[]'],
+              ]);
+              const badge = { textContent: `${initialCost} pkt` };
+              const loadout = { textContent: '' };
+              return {
+                _attrs: attrs,
+                getAttribute(name) { return attrs.get(name) || ''; },
+                setAttribute(name, value) { attrs.set(name, String(value)); },
+                querySelector(selector) {
+                  if (selector === '[data-roster-unit-cost]') {
+                    return badge;
+                  }
+                  if (selector === '[data-roster-unit-loadout]') {
+                    return loadout;
+                  }
+                  if (selector === '[data-roster-unit-title]') {
+                    return null;
+                  }
+                  return null;
+                },
+                badge,
+              };
+            };
+    
+            const item = makeItem('u1', 120);
+            const rosterItems = [item];
+            const listElement = {
+              querySelectorAll(selector) {
+                if (selector === '[data-roster-item]') {
+                  return rosterItems;
+                }
+                return [];
+              },
+              querySelector(selector) {
+                const match = /data-roster-unit-id="([^"]+)"/.exec(selector);
+                if (!match) {
+                  return null;
+                }
+                return rosterItems.find((entry) => entry.getAttribute('data-roster-unit-id') === match[1]) || null;
+              },
+            };
+    
+            let activeItem = null;
+            const root = listElement;
+            let rosterListEl = listElement;
+            const ensureRosterList = () => listElement;
+            let refreshRosterCostBadgesInProgress = false;
+            let pendingRefreshOptions = null;
+            let pendingRefreshCycleToken = null;
+            let lastRefreshRosterCostCycleToken = null;
+            const resolveUnitCacheId = (targetItem) => targetItem.getAttribute('data-roster-unit-id');
+            const rosterUnitDatasetRepo = new Map();
+            const rosterUnitDatasetCache = new Map();
+            const UNIT_DATASET_ATTRIBUTE_MAP = new Map([['data-unit-default-summary', 'default_summary']]);
+            const UNIT_DATASET_KEYS = ['default_summary'];
+            const getParsedList = () => [];
+            const updateUnitDataset = () => {};
+            const updateListCustomName = () => {};
+            const invalidateCachedAttribute = () => {};
+            const setItemListAttribute = () => {};
+            const formatPoints = (value) => String(value);
+            const getUnitDatasetValue = () => '-';
+            const updateItemClassification = () => {};
+            const updateItemAbilityBadges = () => {};
+            const syncEditorFromItem = () => {};
+            const writeLockPairDataset = () => {};
+            const applyLockPairsFromServer = () => {};
+            const updateTotalSummary = (value) => state.totals.push(value);
+            const buildClassificationContextFromItem = () => ({});
+            const getPartnerId = () => '';
+            const computeRosterItemCost = () => {
+              state.recomputeCalls += 1;
+              return { total: 9999 };
+            };
+    
+            eval(refreshSource);
+            eval(applyServerUpdateSource);
+    
+            applyServerUpdate({
+              units: [{ id: 'u1', cached_cost: 450 }],
+              total_cost: 450,
+            });
+    
+            console.log(JSON.stringify({
+              recomputeCalls: state.recomputeCalls,
+              unitCostAttr: item.getAttribute('data-unit-cost'),
+              unitBadge: item.badge.textContent,
+              latestTotal: state.totals[state.totals.length - 1],
+            }));
+        """
+    
+        script = _build_sandbox_script(script_body)
+>       result = _run_node(script)
+
+tests\test_frontend_loadout_state.py:1010: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_frontend_loadout_state.py:53: in _run_node
+    result = subprocess.run(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs =...nit-cost\'),\n  unitBadge: item.badge.textContent,\n  latestTotal: state.totals[state.totals.length - 1],\n}));\n\n'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR...>
+stdout = ''
+stderr = '[eval]:31\n    throw new Error(`Cannot find end marker for ${name}`);\n    ^\n\nError: Cannot find end marker for app...alTypeScript (node:internal/process/execution:295:3)\n    at node:internal/main/eval_string:71:3\n\nNode.js v24.14.1\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs = require(\'fs\');\nconst vm = require(\'vm\');\nconst path = "D:\\\\OneDrive - KBJ S.A\\\\Dokumenty\\\\GitHub\\\\OPR\\\\app\\\\static\\\\js\\\\app.js";\nconst code = fs.readFileSync(path, \'utf8\');\nconst sandbox = {\n  console,\n  Map,\n  Set,\n  JSON,\n  window: {\n    setTimeout: setTimeout,\n    clearTimeout: clearTimeout,\n  },\n  document: {\n    addEventListener: () => {},\n  },\n};\nsandbox.window.window = sandbox.window;\nvm.createContext(sandbox);\nvm.runInContext(code, sandbox);\n\nconst source = code;\nfunction extractFunction(name, endMarker) {\n  const start = source.indexOf(`function ${name}(`);\n  if (start === -1) {\n    throw new Error(`Cannot find function ${name}`);\n  }\n  const end = source.indexOf(endMarker, start);\n  if (end === -1) {\n    throw new Error(`Cannot find end marker for ${name}`);\n  }\n  return source.slice(start, end);\n}\n\nconst applyServerUpdateSource = extractFunction(\'applyServerUpdate\', \'\\n\\n  function updateCostDisplays\');\nconst refreshSource = extractFunction(\'refreshRosterCostBadges\', \'\\n\\n  function applyClassificationToState\');\n\nconst state = {\n  recomputeCalls: 0,\n  totals: [],\n};\n\nconst makeItem = (id, initialCost) => {\n  const attrs = new Map([\n    [\'data-roster-unit-id\', id],\n    [\'data-unit-name\', \'Unit\'],\n    [\'data-unit-cost\', String(initialCost)],\n    [\'data-selected-passives\', \'[]\'],\n    [\'data-selected-actives\', \'[]\'],\n    [\'data-selected-auras\', \'[]\'],\n  ]);\n  const badge = { textContent: `${initialCost} pkt` };\n  const loadout = { textContent: \'\' };\n  return {\n    _attrs: attrs,\n    getAttribute(name) { return attrs.get(name) || \'\'; },\n    setAttribute(name, value) { attrs.set(name, String(value)); },\n    querySelector(selector) {\n      if (selector === \'[data-roster-unit-cost]\') {\n        return badge;\n      }\n      if (selector === \'[data-roster-unit-loadout]\') {\n        return loadout;\n      }\n      if (selector === \'[data-roster-unit-title]\') {\n        return null;\n      }\n      return null;\n    },\n    badge,\n  };\n};\n\nconst item = makeItem(\'u1\', 120);\nconst rosterItems = [item];\nconst listElement = {\n  querySelectorAll(selector) {\n    if (selector === \'[data-roster-item]\') {\n      return rosterItems;\n    }\n    return [];\n  },\n  querySelector(selector) {\n    const match = /data-roster-unit-id="([^"]+)"/.exec(selector);\n    if (!match) {\n      return null;\n    }\n    return rosterItems.find((entry) => entry.getAttribute(\'data-roster-unit-id\') === match[1]) || null;\n  },\n};\n\nlet activeItem = null;\nconst root = listElement;\nlet rosterListEl = listElement;\nconst ensureRosterList = () => listElement;\nlet refreshRosterCostBadgesInProgress = false;\nlet pendingRefreshOptions = null;\nlet pendingRefreshCycleToken = null;\nlet lastRefreshRosterCostCycleToken = null;\nconst resolveUnitCacheId = (targetItem) => targetItem.getAttribute(\'data-roster-unit-id\');\nconst rosterUnitDatasetRepo = new Map();\nconst rosterUnitDatasetCache = new Map();\nconst UNIT_DATASET_ATTRIBUTE_MAP = new Map([[\'data-unit-default-summary\', \'default_summary\']]);\nconst UNIT_DATASET_KEYS = [\'default_summary\'];\nconst getParsedList = () => [];\nconst updateUnitDataset = () => {};\nconst updateListCustomName = () => {};\nconst invalidateCachedAttribute = () => {};\nconst setItemListAttribute = () => {};\nconst formatPoints = (value) => String(value);\nconst getUnitDatasetValue = () => \'-\';\nconst updateItemClassification = () => {};\nconst updateItemAbilityBadges = () => {};\nconst syncEditorFromItem = () => {};\nconst writeLockPairDataset = () => {};\nconst applyLockPairsFromServer = () => {};\nconst updateTotalSummary = (value) => state.totals.push(value);\nconst buildClassificationContextFromItem = () => ({});\nconst getPartnerId = () => \'\';\nconst computeRosterItemCost = () => {\n  state.recomputeCalls += 1;\n  return { total: 9999 };\n};\n\neval(refreshSource);\neval(applyServerUpdateSource);\n\napplyServerUpdate({\n  units: [{ id: \'u1\', cached_cost: 450 }],\n  total_cost: 450,\n});\n\nconsole.log(JSON.stringify({\n  recomputeCalls: state.recomputeCalls,\n  unitCostAttr: item.getAttribute(\'data-unit-cost\'),\n  unitBadge: item.badge.textContent,\n  latestTotal: state.totals[state.totals.length - 1],\n}));\n\n']' returned non-zero exit status 1.
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\subprocess.py:577: CalledProcessError
+_ test_apply_server_update_keeps_server_total_and_badges_stable_without_local_edit _
+
+    def test_apply_server_update_keeps_server_total_and_badges_stable_without_local_edit() -> None:
+        script_body = """
+            const source = code;
+            function extractFunction(name, endMarker) {
+              const start = source.indexOf(`function ${name}(`);
+              if (start === -1) {
+                throw new Error(`Cannot find function ${name}`);
+              }
+              const end = source.indexOf(endMarker, start);
+              if (end === -1) {
+                throw new Error(`Cannot find end marker for ${name}`);
+              }
+              return source.slice(start, end);
+            }
+    
+            const applyServerUpdateSource = extractFunction('applyServerUpdate', '\\n\\n  function updateCostDisplays');
+            const refreshSource = extractFunction('refreshRosterCostBadges', '\\n\\n  function applyClassificationToState');
+    
+            const state = {
+              recomputeCalls: 0,
+              totals: [],
+            };
+    
+            const makeItem = (id, initialCost) => {
+              const attrs = new Map([
+                ['data-roster-unit-id', id],
+                ['data-unit-name', 'Unit'],
+                ['data-unit-cost', String(initialCost)],
+                ['data-selected-passives', '[]'],
+                ['data-selected-actives', '[]'],
+                ['data-selected-auras', '[]'],
+              ]);
+              const badge = { textContent: `${initialCost} pkt` };
+              const loadout = { textContent: '' };
+              return {
+                _attrs: attrs,
+                getAttribute(name) { return attrs.get(name) || ''; },
+                setAttribute(name, value) { attrs.set(name, String(value)); },
+                querySelector(selector) {
+                  if (selector === '[data-roster-unit-cost]') {
+                    return badge;
+                  }
+                  if (selector === '[data-roster-unit-loadout]') {
+                    return loadout;
+                  }
+                  if (selector === '[data-roster-unit-title]') {
+                    return null;
+                  }
+                  return null;
+                },
+                badge,
+              };
+            };
+    
+            const firstItem = makeItem('u1', 111);
+            const secondItem = makeItem('u2', 222);
+            const rosterItems = [firstItem, secondItem];
+            const listElement = {
+              querySelectorAll(selector) {
+                if (selector === '[data-roster-item]') {
+                  return rosterItems;
+                }
+                return [];
+              },
+              querySelector(selector) {
+                const match = /data-roster-unit-id="([^"]+)"/.exec(selector);
+                if (!match) {
+                  return null;
+                }
+                return rosterItems.find((entry) => entry.getAttribute('data-roster-unit-id') === match[1]) || null;
+              },
+            };
+    
+            let activeItem = null;
+            const root = listElement;
+            let rosterListEl = listElement;
+            const ensureRosterList = () => listElement;
+            let refreshRosterCostBadgesInProgress = false;
+            let pendingRefreshOptions = null;
+            let pendingRefreshCycleToken = null;
+            let lastRefreshRosterCostCycleToken = null;
+            const resolveUnitCacheId = (targetItem) => targetItem.getAttribute('data-roster-unit-id');
+            const rosterUnitDatasetRepo = new Map();
+            const rosterUnitDatasetCache = new Map();
+            const UNIT_DATASET_ATTRIBUTE_MAP = new Map([['data-unit-default-summary', 'default_summary']]);
+            const UNIT_DATASET_KEYS = ['default_summary'];
+            const getParsedList = () => [];
+            const updateUnitDataset = () => {};
+            const updateListCustomName = () => {};
+            const invalidateCachedAttribute = () => {};
+            const setItemListAttribute = () => {};
+            const formatPoints = (value) => String(value);
+            const getUnitDatasetValue = () => '-';
+            const updateItemClassification = () => {};
+            const updateItemAbilityBadges = () => {};
+            const syncEditorFromItem = () => {};
+            const writeLockPairDataset = () => {};
+            const applyLockPairsFromServer = () => {};
+            const updateTotalSummary = (value) => state.totals.push(value);
+            const buildClassificationContextFromItem = () => ({});
+            const getPartnerId = () => '';
+            const computeRosterItemCost = () => {
+              state.recomputeCalls += 1;
+              return { total: 9999 };
+            };
+    
+            eval(refreshSource);
+            eval(applyServerUpdateSource);
+    
+            applyServerUpdate({
+              units: [
+                { id: 'u1', cached_cost: 777.7 },
+                { id: 'u2', cached_cost: 765.85 },
+              ],
+              total_cost: 1543.55,
+            });
+    
+            console.log(JSON.stringify({
+              recomputeCalls: state.recomputeCalls,
+              totals: state.totals,
+              firstBadge: firstItem.badge.textContent,
+              secondBadge: secondItem.badge.textContent,
+              firstCost: firstItem.getAttribute('data-unit-cost'),
+              secondCost: secondItem.getAttribute('data-unit-cost'),
+            }));
+        """
+    
+        script = _build_sandbox_script(script_body)
+>       result = _run_node(script)
+
+tests\test_frontend_loadout_state.py:1146: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_frontend_loadout_state.py:53: in _run_node
+    result = subprocess.run(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs =...: firstItem.getAttribute(\'data-unit-cost\'),\n  secondCost: secondItem.getAttribute(\'data-unit-cost\'),\n}));\n\n'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR...>
+stdout = ''
+stderr = '[eval]:31\n    throw new Error(`Cannot find end marker for ${name}`);\n    ^\n\nError: Cannot find end marker for app...alTypeScript (node:internal/process/execution:295:3)\n    at node:internal/main/eval_string:71:3\n\nNode.js v24.14.1\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs = require(\'fs\');\nconst vm = require(\'vm\');\nconst path = "D:\\\\OneDrive - KBJ S.A\\\\Dokumenty\\\\GitHub\\\\OPR\\\\app\\\\static\\\\js\\\\app.js";\nconst code = fs.readFileSync(path, \'utf8\');\nconst sandbox = {\n  console,\n  Map,\n  Set,\n  JSON,\n  window: {\n    setTimeout: setTimeout,\n    clearTimeout: clearTimeout,\n  },\n  document: {\n    addEventListener: () => {},\n  },\n};\nsandbox.window.window = sandbox.window;\nvm.createContext(sandbox);\nvm.runInContext(code, sandbox);\n\nconst source = code;\nfunction extractFunction(name, endMarker) {\n  const start = source.indexOf(`function ${name}(`);\n  if (start === -1) {\n    throw new Error(`Cannot find function ${name}`);\n  }\n  const end = source.indexOf(endMarker, start);\n  if (end === -1) {\n    throw new Error(`Cannot find end marker for ${name}`);\n  }\n  return source.slice(start, end);\n}\n\nconst applyServerUpdateSource = extractFunction(\'applyServerUpdate\', \'\\n\\n  function updateCostDisplays\');\nconst refreshSource = extractFunction(\'refreshRosterCostBadges\', \'\\n\\n  function applyClassificationToState\');\n\nconst state = {\n  recomputeCalls: 0,\n  totals: [],\n};\n\nconst makeItem = (id, initialCost) => {\n  const attrs = new Map([\n    [\'data-roster-unit-id\', id],\n    [\'data-unit-name\', \'Unit\'],\n    [\'data-unit-cost\', String(initialCost)],\n    [\'data-selected-passives\', \'[]\'],\n    [\'data-selected-actives\', \'[]\'],\n    [\'data-selected-auras\', \'[]\'],\n  ]);\n  const badge = { textContent: `${initialCost} pkt` };\n  const loadout = { textContent: \'\' };\n  return {\n    _attrs: attrs,\n    getAttribute(name) { return attrs.get(name) || \'\'; },\n    setAttribute(name, value) { attrs.set(name, String(value)); },\n    querySelector(selector) {\n      if (selector === \'[data-roster-unit-cost]\') {\n        return badge;\n      }\n      if (selector === \'[data-roster-unit-loadout]\') {\n        return loadout;\n      }\n      if (selector === \'[data-roster-unit-title]\') {\n        return null;\n      }\n      return null;\n    },\n    badge,\n  };\n};\n\nconst firstItem = makeItem(\'u1\', 111);\nconst secondItem = makeItem(\'u2\', 222);\nconst rosterItems = [firstItem, secondItem];\nconst listElement = {\n  querySelectorAll(selector) {\n    if (selector === \'[data-roster-item]\') {\n      return rosterItems;\n    }\n    return [];\n  },\n  querySelector(selector) {\n    const match = /data-roster-unit-id="([^"]+)"/.exec(selector);\n    if (!match) {\n      return null;\n    }\n    return rosterItems.find((entry) => entry.getAttribute(\'data-roster-unit-id\') === match[1]) || null;\n  },\n};\n\nlet activeItem = null;\nconst root = listElement;\nlet rosterListEl = listElement;\nconst ensureRosterList = () => listElement;\nlet refreshRosterCostBadgesInProgress = false;\nlet pendingRefreshOptions = null;\nlet pendingRefreshCycleToken = null;\nlet lastRefreshRosterCostCycleToken = null;\nconst resolveUnitCacheId = (targetItem) => targetItem.getAttribute(\'data-roster-unit-id\');\nconst rosterUnitDatasetRepo = new Map();\nconst rosterUnitDatasetCache = new Map();\nconst UNIT_DATASET_ATTRIBUTE_MAP = new Map([[\'data-unit-default-summary\', \'default_summary\']]);\nconst UNIT_DATASET_KEYS = [\'default_summary\'];\nconst getParsedList = () => [];\nconst updateUnitDataset = () => {};\nconst updateListCustomName = () => {};\nconst invalidateCachedAttribute = () => {};\nconst setItemListAttribute = () => {};\nconst formatPoints = (value) => String(value);\nconst getUnitDatasetValue = () => \'-\';\nconst updateItemClassification = () => {};\nconst updateItemAbilityBadges = () => {};\nconst syncEditorFromItem = () => {};\nconst writeLockPairDataset = () => {};\nconst applyLockPairsFromServer = () => {};\nconst updateTotalSummary = (value) => state.totals.push(value);\nconst buildClassificationContextFromItem = () => ({});\nconst getPartnerId = () => \'\';\nconst computeRosterItemCost = () => {\n  state.recomputeCalls += 1;\n  return { total: 9999 };\n};\n\neval(refreshSource);\neval(applyServerUpdateSource);\n\napplyServerUpdate({\n  units: [\n    { id: \'u1\', cached_cost: 777.7 },\n    { id: \'u2\', cached_cost: 765.85 },\n  ],\n  total_cost: 1543.55,\n});\n\nconsole.log(JSON.stringify({\n  recomputeCalls: state.recomputeCalls,\n  totals: state.totals,\n  firstBadge: firstItem.badge.textContent,\n  secondBadge: secondItem.badge.textContent,\n  firstCost: firstItem.getAttribute(\'data-unit-cost\'),\n  secondCost: secondItem.getAttribute(\'data-unit-cost\'),\n}));\n\n']' returned non-zero exit status 1.
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\subprocess.py:577: CalledProcessError
+_ test_refresh_roster_cost_badges_applies_latest_pending_call_when_refresh_is_reentered _
+
+    def test_refresh_roster_cost_badges_applies_latest_pending_call_when_refresh_is_reentered() -> None:
+        script_body = """
+            const source = code;
+            function extractFunction(name, endMarker) {
+              const start = source.indexOf(`function ${name}(`);
+              if (start === -1) {
+                throw new Error(`Cannot find function ${name}`);
+              }
+              const end = source.indexOf(endMarker, start);
+              if (end === -1) {
+                throw new Error(`Cannot find end marker for ${name}`);
+              }
+              return source.slice(start, end);
+            }
+    
+            const refreshSource = extractFunction('refreshRosterCostBadges', '\\n\\n  function applyClassificationToState');
+    
+            const state = {
+              totals: [],
+              phases: [],
+            };
+    
+            const makeItem = (id, initialCount) => {
+              const attrs = new Map([
+                ['data-roster-unit-id', id],
+                ['data-unit-cost', '0'],
+                ['data-unit-count', String(initialCount)],
+                ['data-loadout', '{}'],
+                ['data-unit-classification', 'null'],
+              ]);
+              const badge = { textContent: '' };
+              return {
+                getAttribute(name) { return attrs.get(name) || ''; },
+                setAttribute(name, value) { attrs.set(name, String(value)); },
+                querySelector(selector) {
+                  if (selector === '[data-roster-unit-cost]') {
+                    return badge;
+                  }
+                  return null;
+                },
+                badge,
+              };
+            };
+    
+            const item = makeItem('u1', 1);
+            const rosterItems = [item];
+            const listElement = {
+              querySelectorAll(selector) {
+                if (selector === '[data-roster-item]') {
+                  return rosterItems;
+                }
+                return [];
+              },
+              querySelector(selector) {
+                const match = /data-roster-unit-id="([^"]+)"/.exec(selector);
+                if (!match) {
+                  return null;
+                }
+                return rosterItems.find((entry) => entry.getAttribute('data-roster-unit-id') === match[1]) || null;
+              },
+            };
+    
+            let rosterListEl = listElement;
+            const ensureRosterList = () => listElement;
+            let refreshRosterCostBadgesInProgress = false;
+            let pendingRefreshOptions = null;
+            let pendingRefreshCycleToken = null;
+            let lastRefreshRosterCostCycleToken = null;
+            const getPartnerId = () => '';
+            const formatPoints = (value) => String(value);
+            const updateTotalSummary = (value) => state.totals.push(value);
+            const buildClassificationContextFromItem = (targetItem) => ({
+              id: targetItem.getAttribute('data-roster-unit-id'),
+              count: Number(targetItem.getAttribute('data-unit-count') || '0'),
+            });
+    
+            let cycleTriggered = false;
+            const computeRosterItemCost = (context) => {
+              state.phases.push(`compute-${context.count}`);
+              if (!cycleTriggered) {
+                cycleTriggered = true;
+                item.setAttribute('data-unit-count', '2');
+                refreshRosterCostBadges({ totalOverride: 222, recomputeItems: true }, 'cycle-2');
+              }
+              return { total: context.count * 111 };
+            };
+    
+            eval(refreshSource);
+            refreshRosterCostBadges({ totalOverride: 111, recomputeItems: true }, 'cycle-1');
+    
+            console.log(JSON.stringify({
+              totals: state.totals,
+              finalBadge: item.badge.textContent,
+              finalUnitCost: item.getAttribute('data-unit-cost'),
+              phases: state.phases,
+              lastRefreshRosterCostCycleToken,
+            }));
+        """
+    
+        script = _build_sandbox_script(script_body)
+>       result = _run_node(script)
+
+tests\test_frontend_loadout_state.py:1256: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_frontend_loadout_state.py:53: in _run_node
+    result = subprocess.run(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs =...Cost: item.getAttribute(\'data-unit-cost\'),\n  phases: state.phases,\n  lastRefreshRosterCostCycleToken,\n}));\n\n'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR...>
+stdout = ''
+stderr = '[eval]:31\n    throw new Error(`Cannot find end marker for ${name}`);\n    ^\n\nError: Cannot find end marker for ref...alTypeScript (node:internal/process/execution:295:3)\n    at node:internal/main/eval_string:71:3\n\nNode.js v24.14.1\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs = require(\'fs\');\nconst vm = require(\'vm\');\nconst path = "D:\\\\OneDrive - KBJ S.A\\\\Dokumenty\\\\GitHub\\\\OPR\\\\app\\\\static\\\\js\\\\app.js";\nconst code = fs.readFileSync(path, \'utf8\');\nconst sandbox = {\n  console,\n  Map,\n  Set,\n  JSON,\n  window: {\n    setTimeout: setTimeout,\n    clearTimeout: clearTimeout,\n  },\n  document: {\n    addEventListener: () => {},\n  },\n};\nsandbox.window.window = sandbox.window;\nvm.createContext(sandbox);\nvm.runInContext(code, sandbox);\n\nconst source = code;\nfunction extractFunction(name, endMarker) {\n  const start = source.indexOf(`function ${name}(`);\n  if (start === -1) {\n    throw new Error(`Cannot find function ${name}`);\n  }\n  const end = source.indexOf(endMarker, start);\n  if (end === -1) {\n    throw new Error(`Cannot find end marker for ${name}`);\n  }\n  return source.slice(start, end);\n}\n\nconst refreshSource = extractFunction(\'refreshRosterCostBadges\', \'\\n\\n  function applyClassificationToState\');\n\nconst state = {\n  totals: [],\n  phases: [],\n};\n\nconst makeItem = (id, initialCount) => {\n  const attrs = new Map([\n    [\'data-roster-unit-id\', id],\n    [\'data-unit-cost\', \'0\'],\n    [\'data-unit-count\', String(initialCount)],\n    [\'data-loadout\', \'{}\'],\n    [\'data-unit-classification\', \'null\'],\n  ]);\n  const badge = { textContent: \'\' };\n  return {\n    getAttribute(name) { return attrs.get(name) || \'\'; },\n    setAttribute(name, value) { attrs.set(name, String(value)); },\n    querySelector(selector) {\n      if (selector === \'[data-roster-unit-cost]\') {\n        return badge;\n      }\n      return null;\n    },\n    badge,\n  };\n};\n\nconst item = makeItem(\'u1\', 1);\nconst rosterItems = [item];\nconst listElement = {\n  querySelectorAll(selector) {\n    if (selector === \'[data-roster-item]\') {\n      return rosterItems;\n    }\n    return [];\n  },\n  querySelector(selector) {\n    const match = /data-roster-unit-id="([^"]+)"/.exec(selector);\n    if (!match) {\n      return null;\n    }\n    return rosterItems.find((entry) => entry.getAttribute(\'data-roster-unit-id\') === match[1]) || null;\n  },\n};\n\nlet rosterListEl = listElement;\nconst ensureRosterList = () => listElement;\nlet refreshRosterCostBadgesInProgress = false;\nlet pendingRefreshOptions = null;\nlet pendingRefreshCycleToken = null;\nlet lastRefreshRosterCostCycleToken = null;\nconst getPartnerId = () => \'\';\nconst formatPoints = (value) => String(value);\nconst updateTotalSummary = (value) => state.totals.push(value);\nconst buildClassificationContextFromItem = (targetItem) => ({\n  id: targetItem.getAttribute(\'data-roster-unit-id\'),\n  count: Number(targetItem.getAttribute(\'data-unit-count\') || \'0\'),\n});\n\nlet cycleTriggered = false;\nconst computeRosterItemCost = (context) => {\n  state.phases.push(`compute-${context.count}`);\n  if (!cycleTriggered) {\n    cycleTriggered = true;\n    item.setAttribute(\'data-unit-count\', \'2\');\n    refreshRosterCostBadges({ totalOverride: 222, recomputeItems: true }, \'cycle-2\');\n  }\n  return { total: context.count * 111 };\n};\n\neval(refreshSource);\nrefreshRosterCostBadges({ totalOverride: 111, recomputeItems: true }, \'cycle-1\');\n\nconsole.log(JSON.stringify({\n  totals: state.totals,\n  finalBadge: item.badge.textContent,\n  finalUnitCost: item.getAttribute(\'data-unit-cost\'),\n  phases: state.phases,\n  lastRefreshRosterCostCycleToken,\n}));\n\n']' returned non-zero exit status 1.
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\subprocess.py:577: CalledProcessError
+_ test_autosave_add_then_remove_active_restores_initial_total_after_stale_server_refresh _
+
+    def test_autosave_add_then_remove_active_restores_initial_total_after_stale_server_refresh() -> None:
+        script_body = """
+            const source = code;
+            function extractFunction(name, endMarker) {
+              const start = source.indexOf(`function ${name}(`);
+              if (start === -1) {
+                throw new Error(`Cannot find function ${name}`);
+              }
+              const end = source.indexOf(endMarker, start);
+              if (end === -1) {
+                throw new Error(`Cannot find end marker for ${name}`);
+              }
+              return source.slice(start, end);
+            }
+    
+            const refreshSource = extractFunction('refreshRosterCostBadges', '\\n\\n  function applyClassificationToState');
+            const handleSource = extractFunction('handleStateChange', '\\n\\nfunction availableClassificationSlugs');
+            const applyServerUpdateSource = extractFunction('applyServerUpdate', '\\n\\n  function updateCostDisplays');
+    
+            const state = { totals: [], scheduledVersions: [] };
+            const initialTotal = 100;
+    
+            const attrs = new Map([
+              ['data-roster-unit-id', 'u1'],
+              ['data-unit-name', 'Unit'],
+              ['data-unit-cost', String(initialTotal)],
+              ['data-unit-count', '1'],
+              ['data-selected-passives', '[]'],
+              ['data-selected-actives', '[]'],
+              ['data-selected-auras', '[]'],
+              ['data-loadout', '{}'],
+              ['data-unit-classification', 'null'],
+            ]);
+            const badge = { textContent: `${initialTotal} pkt` };
+            const item = {
+              getAttribute(name) { return attrs.get(name) || ''; },
+              setAttribute(name, value) { attrs.set(name, String(value)); },
+              querySelector(selector) {
+                if (selector === '[data-roster-unit-cost]') return badge;
+                if (selector === '[data-roster-unit-loadout]') return { textContent: '' };
+                if (selector === '[data-roster-unit-title]') return null;
+                return null;
+              },
+            };
+    
+            const rosterItems = [item];
+            const listElement = {
+              querySelectorAll(selector) {
+                if (selector === '[data-roster-item]') return rosterItems;
+                return [];
+              },
+              querySelector(selector) {
+                const match = /data-roster-unit-id="([^"]+)"/.exec(selector);
+                if (!match) return null;
+                return rosterItems.find((entry) => entry.getAttribute('data-roster-unit-id') === match[1]) || null;
+              },
+            };
+    
+            const root = listElement;
+            let rosterListEl = listElement;
+            const ensureRosterList = () => listElement;
+            let refreshRosterCostBadgesInProgress = false;
+            let pendingRefreshOptions = null;
+            let pendingRefreshCycleToken = null;
+            let lastRefreshRosterCostCycleToken = null;
+            let refreshCycleVersion = 0;
+            let latestAppliedRefreshVersion = 0;
+            let latestAuthoritativeRefreshVersion = 0;
+            let rosterRefreshCycleCounter = 0;
+            let latestEditVersion = 0;
+            const latestRequestVersion = 0;
+            const nextRefreshVersion = (seedVersion = null) => {
+              const seed = Number(seedVersion);
+              const next = Number.isFinite(seed)
+                ? Math.max(seed, latestEditVersion, refreshCycleVersion + 1)
+                : Math.max(latestEditVersion, refreshCycleVersion + 1);
+              refreshCycleVersion = next;
+              return next;
+            };
+            const applyRefreshPriority = (cycleToken) => {
+              const decision = resolveRosterRefreshPriority(
+                { latestAppliedVersion: latestAppliedRefreshVersion, latestAuthoritativeVersion: latestAuthoritativeRefreshVersion },
+                cycleToken,
+              );
+              latestAppliedRefreshVersion = decision.state.latestAppliedVersion;
+              latestAuthoritativeRefreshVersion = decision.state.latestAuthoritativeVersion;
+              return decision;
+            };
+    
+            const formatPoints = (value) => String(value);
+            const updateTotalSummary = (value) => state.totals.push(value);
+            const resolveUnitCacheId = (targetItem) => targetItem.getAttribute('data-roster-unit-id');
+            const rosterUnitDatasetRepo = new Map();
+            const rosterUnitDatasetCache = new Map();
+            const UNIT_DATASET_ATTRIBUTE_MAP = new Map([['data-unit-default-summary', 'default_summary']]);
+            const UNIT_DATASET_KEYS = ['default_summary'];
+            const getParsedList = () => [];
+            const updateUnitDataset = () => {};
+            const updateListCustomName = () => {};
+            const invalidateCachedAttribute = () => {};
+            const setItemListAttribute = () => {};
+            const getUnitDatasetValue = () => '-';
+            const updateItemClassification = () => {};
+            const updateItemAbilityBadges = () => {};
+            const syncEditorFromItem = () => {};
+            const writeLockPairDataset = () => {};
+            const applyLockPairsFromServer = () => {};
+            const buildClassificationContextFromItem = (targetItem) => ({
+              id: targetItem.getAttribute('data-roster-unit-id'),
+              count: 1,
+              loadoutState: JSON.parse(targetItem.getAttribute('data-loadout') || '{}'),
+              currentClassification: null,
+              weapons: [],
+              passiveItems: [],
+              baseFlags: {},
+              abilityCosts: { active: new Map(), passive: new Map() },
+              baseCostPerModel: 0,
+              quality: 4,
+            });
+            const getPartnerId = () => '';
+            const computeRosterItemTotal = (context) => ({ total: context.loadoutState.activeCommand ? 110 : 100 });
+    
+            let loadoutState = { mode: 'total', activeCommand: false, passive: new Map() };
+            const currentWeapons = [];
+            const currentPassives = [];
+            const currentBaseFlags = {};
+            const abilityCostMap = { active: new Map(), passive: new Map() };
+            const baseCostPerModel = 0;
+            let currentCount = 1;
+            const currentQuality = 4;
+            let currentClassification = null;
+            let activeItem = item;
+            const loadoutInput = { value: '{}' };
+            const renderEditors = () => {};
+            const serializeLoadoutState = (statePayload) => JSON.stringify(statePayload || {});
+            const updateCostDisplays = () => {
+              const value = loadoutState.activeCommand ? 110 : 100;
+              item.setAttribute('data-unit-cost', String(value));
+              item.querySelector('[data-roster-unit-cost]').textContent = `${value} pkt`;
+              return value;
+            };
+            const getEntryElementFromItem = (targetItem) => ({ __id: targetItem.getAttribute('data-roster-unit-id') });
+            const getUnitIdFromEntry = (entry) => entry.__id;
+            const estimateCombinedClassification = () => ({ classification: null, weaponMap: new Map() });
+            const applyClassificationToState = () => {};
+            let ignoreNextSave = false;
+            let autoSaveEnabled = true;
+            const setSaveStatus = () => {};
+            const scheduleSave = (version) => state.scheduledVersions.push(version);
+    
+            eval(refreshSource);
+            eval(handleSource);
+            eval(applyServerUpdateSource);
+    
+            // 1) Dodanie aktywnej zdolnoœci + autosave.
+            loadoutState.activeCommand = true;
+            handleStateChange();
+            const autosaveVersion = state.scheduledVersions[state.scheduledVersions.length - 1];
+            applyServerUpdate(
+              { units: [{ id: 'u1', cached_cost: 110 }], total_cost: 110 },
+              { version: autosaveVersion, authoritative: true, dedupeKey: `server:${autosaveVersion}` },
+            );
+    
+            // 2) Usuniêcie aktywnej zdolnoœci.
+            loadoutState.activeCommand = false;
+            handleStateChange();
+    
+            // 3) SpóŸniona odpowiedŸ serwera z poprzedniej rewizji nie mo¿e nadpisaæ totala.
+            applyServerUpdate(
+              { units: [{ id: 'u1', cached_cost: 110 }], total_cost: 110 },
+              { version: autosaveVersion, authoritative: true, dedupeKey: `server:${autosaveVersion}` },
+            );
+    
+            console.log(JSON.stringify({
+              totals: state.totals,
+              finalTotal: state.totals[state.totals.length - 1],
+              initialTotal,
+              lastRefreshRosterCostCycleToken,
+            }));
+        """
+    
+        script = _build_sandbox_script(script_body)
+>       result = _run_node(script)
+
+tests\test_frontend_loadout_state.py:1447: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_frontend_loadout_state.py:53: in _run_node
+    result = subprocess.run(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs =...  finalTotal: state.totals[state.totals.length - 1],\n  initialTotal,\n  lastRefreshRosterCostCycleToken,\n}));\n\n'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR...>
+stdout = ''
+stderr = '[eval]:31\n    throw new Error(`Cannot find end marker for ${name}`);\n    ^\n\nError: Cannot find end marker for ref...alTypeScript (node:internal/process/execution:295:3)\n    at node:internal/main/eval_string:71:3\n\nNode.js v24.14.1\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs = require(\'fs\');\nconst vm = require(\'vm\');\nconst path = "D:\\\\OneDrive - KBJ S.A\\\\Dokumenty\\\\GitHub\\\\OPR\\\\app\\\\static\\\\js\\\\app.js";\nconst code = fs.readFileSync(path, \'utf8\');\nconst sandbox = {\n  console,\n  Map,\n  Set,\n  JSON,\n  window: {\n    setTimeout: setTimeout,\n    clearTimeout: clearTimeout,\n  },\n  document: {\n    addEventListener: () => {},\n  },\n};\nsandbox.window.window = sandbox.window;\nvm.createContext(sandbox);\nvm.runInContext(code, sandbox);\n\nconst source = code;\nfunction extractFunction(name, endMarker) {\n  const start = source.indexOf(`function ${name}(`);\n  if (start === -1) {\n    throw new Error(`Cannot find function ${name}`);\n  }\n  const end = source.indexOf(endMarker, start);\n  if (end === -1) {\n    throw new Error(`Cannot find end marker for ${name}`);\n  }\n  return source.slice(start, end);\n}\n\nconst refreshSource = extractFunction(\'refreshRosterCostBadges\', \'\\n\\n  function applyClassificationToState\');\nconst handleSource = extractFunction(\'handleStateChange\', \'\\n\\nfunction availableClassificationSlugs\');\nconst applyServerUpdateSource = extractFunction(\'applyServerUpdate\', \'\\n\\n  function updateCostDisplays\');\n\nconst state = { totals: [], scheduledVersions: [] };\nconst initialTotal = 100;\n\nconst attrs = new Map([\n  [\'data-roster-unit-id\', \'u1\'],\n  [\'data-unit-name\', \'Unit\'],\n  [\'data-unit-cost\', String(initialTotal)],\n  [\'data-unit-count\', \'1\'],\n  [\'data-selected-passives\', \'[]\'],\n  [\'data-selected-actives\', \'[]\'],\n  [\'data-selected-auras\', \'[]\'],\n  [\'data-loadout\', \'{}\'],\n  [\'data-unit-classification\', \'null\'],\n]);\nconst badge = { textContent: `${initialTotal} pkt` };\nconst item = {\n  getAttribute(name) { return attrs.get(name) || \'\'; },\n  setAttribute(name, value) { attrs.set(name, String(value)); },\n  querySelector(selector) {\n    if (selector === \'[data-roster-unit-cost]\') return badge;\n    if (selector === \'[data-roster-unit-loadout]\') return { textContent: \'\' };\n    if (selector === \'[data-roster-unit-title]\') return null;\n    return null;\n  },\n};\n\nconst rosterItems = [item];\nconst listElement = {\n  querySelectorAll(selector) {\n    if (selector === \'[data-roster-item]\') return rosterItems;\n    return [];\n  },\n  querySelector(selector) {\n    const match = /data-roster-unit-id="([^"]+)"/.exec(selector);\n    if (!match) return null;\n    return rosterItems.find((entry) => entry.getAttribute(\'data-roster-unit-id\') === match[1]) || null;\n  },\n};\n\nconst root = listElement;\nlet rosterListEl = listElement;\nconst ensureRosterList = () => listElement;\nlet refreshRosterCostBadgesInProgress = false;\nlet pendingRefreshOptions = null;\nlet pendingRefreshCycleToken = null;\nlet lastRefreshRosterCostCycleToken = null;\nlet refreshCycleVersion = 0;\nlet latestAppliedRefreshVersion = 0;\nlet latestAuthoritativeRefreshVersion = 0;\nlet rosterRefreshCycleCounter = 0;\nlet latestEditVersion = 0;\nconst latestRequestVersion = 0;\nconst nextRefreshVersion = (seedVersion = null) => {\n  const seed = Number(seedVersion);\n  const next = Number.isFinite(seed)\n    ? Math.max(seed, latestEditVersion, refreshCycleVersion + 1)\n    : Math.max(latestEditVersion, refreshCycleVersion + 1);\n  refreshCycleVersion = next;\n  return next;\n};\nconst applyRefreshPriority = (cycleToken) => {\n  const decision = resolveRosterRefreshPriority(\n    { latestAppliedVersion: latestAppliedRefreshVersion, latestAuthoritativeVersion: latestAuthoritativeRefreshVersion },\n    cycleToken,\n  );\n  latestAppliedRefreshVersion = decision.state.latestAppliedVersion;\n  latestAuthoritativeRefreshVersion = decision.state.latestAuthoritativeVersion;\n  return decision;\n};\n\nconst formatPoints = (value) => String(value);\nconst updateTotalSummary = (value) => state.totals.push(value);\nconst resolveUnitCacheId = (targetItem) => targetItem.getAttribute(\'data-roster-unit-id\');\nconst rosterUnitDatasetRepo = new Map();\nconst rosterUnitDatasetCache = new Map();\nconst UNIT_DATASET_ATTRIBUTE_MAP = new Map([[\'data-unit-default-summary\', \'default_summary\']]);\nconst UNIT_DATASET_KEYS = [\'default_summary\'];\nconst getParsedList = () => [];\nconst updateUnitDataset = () => {};\nconst updateListCustomName = () => {};\nconst invalidateCachedAttribute = () => {};\nconst setItemListAttribute = () => {};\nconst getUnitDatasetValue = () => \'-\';\nconst updateItemClassification = () => {};\nconst updateItemAbilityBadges = () => {};\nconst syncEditorFromItem = () => {};\nconst writeLockPairDataset = () => {};\nconst applyLockPairsFromServer = () => {};\nconst buildClassificationContextFromItem = (targetItem) => ({\n  id: targetItem.getAttribute(\'data-roster-unit-id\'),\n  count: 1,\n  loadoutState: JSON.parse(targetItem.getAttribute(\'data-loadout\') || \'{}\'),\n  currentClassification: null,\n  weapons: [],\n  passiveItems: [],\n  baseFlags: {},\n  abilityCosts: { active: new Map(), passive: new Map() },\n  baseCostPerModel: 0,\n  quality: 4,\n});\nconst getPartnerId = () => \'\';\nconst computeRosterItemTotal = (context) => ({ total: context.loadoutState.activeCommand ? 110 : 100 });\n\nlet loadoutState = { mode: \'total\', activeCommand: false, passive: new Map() };\nconst currentWeapons = [];\nconst currentPassives = [];\nconst currentBaseFlags = {};\nconst abilityCostMap = { active: new Map(), passive: new Map() };\nconst baseCostPerModel = 0;\nlet currentCount = 1;\nconst currentQuality = 4;\nlet currentClassification = null;\nlet activeItem = item;\nconst loadoutInput = { value: \'{}\' };\nconst renderEditors = () => {};\nconst serializeLoadoutState = (statePayload) => JSON.stringify(statePayload || {});\nconst updateCostDisplays = () => {\n  const value = loadoutState.activeCommand ? 110 : 100;\n  item.setAttribute(\'data-unit-cost\', String(value));\n  item.querySelector(\'[data-roster-unit-cost]\').textContent = `${value} pkt`;\n  return value;\n};\nconst getEntryElementFromItem = (targetItem) => ({ __id: targetItem.getAttribute(\'data-roster-unit-id\') });\nconst getUnitIdFromEntry = (entry) => entry.__id;\nconst estimateCombinedClassification = () => ({ classification: null, weaponMap: new Map() });\nconst applyClassificationToState = () => {};\nlet ignoreNextSave = false;\nlet autoSaveEnabled = true;\nconst setSaveStatus = () => {};\nconst scheduleSave = (version) => state.scheduledVersions.push(version);\n\neval(refreshSource);\neval(handleSource);\neval(applyServerUpdateSource);\n\n// 1) Dodanie aktywnej zdolnoœci + autosave.\nloadoutState.activeCommand = true;\nhandleStateChange();\nconst autosaveVersion = state.scheduledVersions[state.scheduledVersions.length - 1];\napplyServerUpdate(\n  { units: [{ id: \'u1\', cached_cost: 110 }], total_cost: 110 },\n  { version: autosaveVersion, authoritative: true, dedupeKey: `server:${autosaveVersion}` },\n);\n\n// 2) Usuniêcie aktywnej zdolnoœci.\nloadoutState.activeCommand = false;\nhandleStateChange();\n\n// 3) SpóŸniona odpowiedŸ serwera z poprzedniej rewizji nie mo¿e nadpisaæ totala.\napplyServerUpdate(\n  { units: [{ id: \'u1\', cached_cost: 110 }], total_cost: 110 },\n  { version: autosaveVersion, authoritative: true, dedupeKey: `server:${autosaveVersion}` },\n);\n\nconsole.log(JSON.stringify({\n  totals: state.totals,\n  finalTotal: state.totals[state.totals.length - 1],\n  initialTotal,\n  lastRefreshRosterCostCycleToken,\n}));\n\n']' returned non-zero exit status 1.
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\subprocess.py:577: CalledProcessError
+___ test_build_weapon_cost_map_applies_ambush_multiplier_for_ranged_weapon ____
+
+    def test_build_weapon_cost_map_applies_ambush_multiplier_for_ranged_weapon() -> None:
+        script_body = """
+            const weapon = {
+              id: 101,
+              range: 24,
+              attacks: 2,
+              ap: 1,
+              traits: '',
+            };
+    
+            const withoutAmbush = sandbox.buildWeaponCostMap(
+              [weapon],
+              4,
+              {},
+              [],
+              new Map(),
+              null,
+            ).get(weapon.id);
+    
+            const withAmbush = sandbox.buildWeaponCostMap(
+              [weapon],
+              4,
+              { 'Zasadzka?!': true },
+              [],
+              new Map(),
+              null,
+            ).get(weapon.id);
+    
+            console.log(JSON.stringify({
+              withoutAmbush,
+              withAmbush,
+              ratio: withAmbush / withoutAmbush,
+            }));
+        """
+    
+        script = _build_sandbox_script(script_body)
+        result = _run_node(script)
+    
+        assert result["withoutAmbush"] > 0
+>       assert result["withAmbush"] < result["withoutAmbush"]
+E       assert 18.55 < 18.55
+
+tests\test_frontend_loadout_state.py:1492: AssertionError
+_________ test_weapon_cost_internal_applies_overcharge_multiplier_1_4 _________
+
+    def test_weapon_cost_internal_applies_overcharge_multiplier_1_4() -> None:
+        script_body = """
+            const baseCost = sandbox.weaponCostInternal(4, 18, 2, 1, [], []);
+            const overchargeCost = sandbox.weaponCostInternal(4, 18, 2, 1, ['Overcharge'], []);
+            console.log(JSON.stringify({
+              baseCost,
+              overchargeCost,
+              ratio: overchargeCost / baseCost,
+            }));
+        """
+    
+        script = _build_sandbox_script(script_body)
+        result = _run_node(script)
+    
+        assert result["baseCost"] > 0
+        assert result["overchargeCost"] > result["baseCost"]
+>       assert result["ratio"] == 1.4
+E       assert 1.05 == 1.4
+
+tests\test_frontend_loadout_state.py:1749: AssertionError
+_ test_render_passive_editor_formats_okopany_delta_identically_with_rezerwa_toggle _
+
+    def test_render_passive_editor_formats_okopany_delta_identically_with_rezerwa_toggle() -> None:
+        script_body = """
+            class Element {
+              constructor(tag) {
+                this.tagName = String(tag || '').toUpperCase();
+                this.children = [];
+                this.className = '';
+                this.textContent = '';
+                this.title = '';
+                this.value = '';
+                this.type = '';
+                this.min = '';
+                this.max = '';
+                this.checked = false;
+                this.disabled = false;
+                this.parentNode = null;
+                this._listeners = new Map();
+                this._innerHTML = '';
+              }
+              appendChild(child) {
+                if (child && typeof child === 'object') {
+                  child.parentNode = this;
+                  this.children.push(child);
+                }
+                return child;
+              }
+              setAttribute(name, value) {
+                this[name] = String(value);
+              }
+              set innerHTML(value) {
+                this._innerHTML = String(value || '');
+                this.children = [];
+              }
+              get innerHTML() {
+                return this._innerHTML;
+              }
+              addEventListener(type, handler) {
+                this._listeners.set(type, handler);
+              }
+              querySelectorAllByClass(className) {
+                const wanted = String(className || '').trim();
+                const out = [];
+                const hasClass = (node, cls) => {
+                  const classes = String(node.className || '').split(/\\s+/).filter(Boolean);
+                  return classes.includes(cls);
+                };
+                const walk = (node) => {
+                  if (!node || !Array.isArray(node.children)) {
+                    return;
+                  }
+                  node.children.forEach((child) => {
+                    if (hasClass(child, wanted)) {
+                      out.push(child);
+                    }
+                    walk(child);
+                  });
+                };
+                walk(this);
+                return out;
+              }
+            }
+    
+            sandbox.document.createElement = (tag) => new Element(tag);
+            const extractCosts = (root) => root
+              .querySelectorAllByClass('roster-ability-cost')
+              .map((node) => node.textContent);
+    
+            const passiveItems = [{ slug: 'Okopany', label: 'Okopany', default_count: 0, cost: 10 }];
+            const passiveState = new Map([['Okopany', 1]]);
+            const onChange = () => {};
+    
+            let reserveEnabled = false;
+            const getDelta = () => (reserveEnabled ? 10.0001 : 9.9999);
+    
+            const withoutReserveContainer = new Element('div');
+            reserveEnabled = false;
+            sandbox.renderPassiveEditor(
+              withoutReserveContainer,
+              passiveItems,
+              passiveState,
+              10,
+              true,
+              onChange,
+              getDelta,
+            );
+            const withoutReserveCosts = extractCosts(withoutReserveContainer);
+    
+            const withReserveContainer = new Element('div');
+            reserveEnabled = true;
+            sandbox.renderPassiveEditor(
+              withReserveContainer,
+              passiveItems,
+              passiveState,
+              10,
+              true,
+              onChange,
+              getDelta,
+            );
+            const withReserveCosts = extractCosts(withReserveContainer);
+    
+            console.log(JSON.stringify({ withoutReserveCosts, withReserveCosts }));
+        """
+    
+        result = _run_node(_build_sandbox_script(script_body))
+    
+>       assert result["withoutReserveCosts"] == ["\u0394 +10 pkt"]
+E       AssertionError: assert [] == ['\u0394 +10 pkt']
+E         
+E         Right contains one more item: '\u0394 +10 pkt'
+E         Use -v to get more diff
+
+tests\test_frontend_loadout_state.py:2065: AssertionError
+_ test_refresh_roster_cost_badges_keeps_total_stable_when_part_of_batch_quote_fails _
+
+    def test_refresh_roster_cost_badges_keeps_total_stable_when_part_of_batch_quote_fails() -> None:
+        script_body = """
+            const source = code;
+            function extractFunction(name, endMarker) {
+              const start = source.indexOf(`function ${name}(`);
+              if (start === -1) {
+                throw new Error(`Cannot find function ${name}`);
+              }
+              const end = source.indexOf(endMarker, start);
+              if (end === -1) {
+                throw new Error(`Cannot find end marker for ${name}`);
+              }
+              return source.slice(start, end);
+            }
+    
+            const refreshSource = extractFunction('refreshRosterCostBadges', '\\n\\n  function applyClassificationToState');
+    
+            const makeItem = (id, baseCost) => {
+              const attrs = new Map([
+                ['data-roster-unit-id', id],
+                ['data-unit-cost', String(baseCost)],
+                ['data-unit-count', '1'],
+              ]);
+              const badge = { textContent: `${baseCost} pkt` };
+              return {
+                getAttribute(name) { return attrs.get(name) || ''; },
+                setAttribute(name, value) { attrs.set(name, String(value)); },
+                querySelector(selector) {
+                  if (selector === '[data-roster-unit-cost]') {
+                    return badge;
+                  }
+                  return null;
+                },
+                badge,
+              };
+            };
+    
+            const items = [makeItem('u1', 10), makeItem('u2', 20), makeItem('u3', 30)];
+            const listElement = {
+              querySelectorAll(selector) {
+                if (selector === '[data-roster-item]') {
+                  return items;
+                }
+                return [];
+              },
+            };
+    
+            const statusById = {};
+            const totals = [];
+            const quoteResults = new Map([
+              ['u1', { total: 11 }],
+              ['u2', new Error('HTTP 500')],
+              ['u3', { total: 31 }],
+            ]);
+    
+            const normalizeRosterRefreshCycleToken = (token, fallbackVersion = 0) => {
+              if (token && typeof token === 'object') {
+                return {
+                  dedupeKey: token.dedupeKey ? String(token.dedupeKey) : null,
+                  version: Number.isFinite(Number(token.version)) ? Number(token.version) : fallbackVersion,
+                  authoritative: token.authoritative === true,
+                };
+              }
+              return {
+                dedupeKey: token ? String(token) : null,
+                version: Number.isFinite(Number(fallbackVersion)) ? Number(fallbackVersion) : 0,
+                authoritative: false,
+              };
+            };
+            let priorityState = { latestAppliedVersion: 0, latestAuthoritativeVersion: 0 };
+            const applyRefreshPriority = (cycleToken) => {
+              const token = normalizeRosterRefreshCycleToken(cycleToken, priorityState.latestAppliedVersion || 0);
+              if (token.version < priorityState.latestAppliedVersion) {
+                return { apply: false, token, state: priorityState };
+              }
+              priorityState = {
+                latestAppliedVersion: Math.max(priorityState.latestAppliedVersion, token.version),
+                latestAuthoritativeVersion: token.authoritative
+                  ? Math.max(priorityState.latestAuthoritativeVersion, token.version)
+                  : priorityState.latestAuthoritativeVersion,
+              };
+              return { apply: true, token, state: priorityState };
+            };
+    
+            let refreshRosterCostBadgesInProgress = false;
+            let pendingRefreshOptions = null;
+            let pendingRefreshCycleToken = null;
+            let lastRefreshRosterCostCycleToken = null;
+            let preserveServerTotalUntilRefreshCycle = 0;
+            let rosterRefreshCycleCounter = 0;
+            let refreshVersion = 0;
+            const nextRefreshVersion = () => {
+              refreshVersion += 1;
+              return refreshVersion;
+            };
+            let rosterListEl = listElement;
+            const ensureRosterList = () => listElement;
+            const setRosterItemCostStatus = (item, status) => {
+              statusById[item.getAttribute('data-roster-unit-id')] = status;
+            };
+            const getLastKnownItemCost = (item) => Number(item.getAttribute('data-unit-cost'));
+            const hydrateLoadoutStateForItem = () => ({ mode: 'total' });
+            const getUnitDatasetList = () => [];
+            const serializeQuotePayloadFromState = () => ({ mode: 'total' });
+            const fetchRosterUnitQuote = (id) => {
+              const result = quoteResults.get(id);
+              if (result instanceof Error) {
+                return Promise.reject(result);
+              }
+              return Promise.resolve(result);
+            };
+            const formatPoints = (value) => String(value);
+            const updateTotalSummary = (value) => totals.push(value);
+    
+            eval(refreshSource);
+    
+            refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, { dedupeKey: 'cycle-1', version: 1, authoritative: false });
+    
+            setTimeout(() => {
+              refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, { dedupeKey: 'cycle-1', version: 1, authoritative: false });
+              setTimeout(() => {
+                console.log(JSON.stringify({
+                  costs: items.map((item) => Number(item.getAttribute('data-unit-cost'))),
+                  statuses: statusById,
+                  totals,
+                }));
+              }, 0);
+            }, 0);
+        """
+    
+>       result = _run_node(_build_sandbox_script(script_body))
+
+tests\test_frontend_loadout_state.py:2199: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_frontend_loadout_state.py:53: in _run_node
+    result = subprocess.run(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs =...tem.getAttribute(\'data-unit-cost\'))),\n      statuses: statusById,\n      totals,\n    }));\n  }, 0);\n}, 0);\n\n'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR...>
+stdout = ''
+stderr = '[eval]:31\n    throw new Error(`Cannot find end marker for ${name}`);\n    ^\n\nError: Cannot find end marker for ref...alTypeScript (node:internal/process/execution:295:3)\n    at node:internal/main/eval_string:71:3\n\nNode.js v24.14.1\n'
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['D:\\OneDrive - KBJ S.A\\Dokumenty\\GitHub\\OPR\\.tools\\node\\node-v24.14.1-win-x64\\node.exe', '-e', '\nconst fs = require(\'fs\');\nconst vm = require(\'vm\');\nconst path = "D:\\\\OneDrive - KBJ S.A\\\\Dokumenty\\\\GitHub\\\\OPR\\\\app\\\\static\\\\js\\\\app.js";\nconst code = fs.readFileSync(path, \'utf8\');\nconst sandbox = {\n  console,\n  Map,\n  Set,\n  JSON,\n  window: {\n    setTimeout: setTimeout,\n    clearTimeout: clearTimeout,\n  },\n  document: {\n    addEventListener: () => {},\n  },\n};\nsandbox.window.window = sandbox.window;\nvm.createContext(sandbox);\nvm.runInContext(code, sandbox);\n\nconst source = code;\nfunction extractFunction(name, endMarker) {\n  const start = source.indexOf(`function ${name}(`);\n  if (start === -1) {\n    throw new Error(`Cannot find function ${name}`);\n  }\n  const end = source.indexOf(endMarker, start);\n  if (end === -1) {\n    throw new Error(`Cannot find end marker for ${name}`);\n  }\n  return source.slice(start, end);\n}\n\nconst refreshSource = extractFunction(\'refreshRosterCostBadges\', \'\\n\\n  function applyClassificationToState\');\n\nconst makeItem = (id, baseCost) => {\n  const attrs = new Map([\n    [\'data-roster-unit-id\', id],\n    [\'data-unit-cost\', String(baseCost)],\n    [\'data-unit-count\', \'1\'],\n  ]);\n  const badge = { textContent: `${baseCost} pkt` };\n  return {\n    getAttribute(name) { return attrs.get(name) || \'\'; },\n    setAttribute(name, value) { attrs.set(name, String(value)); },\n    querySelector(selector) {\n      if (selector === \'[data-roster-unit-cost]\') {\n        return badge;\n      }\n      return null;\n    },\n    badge,\n  };\n};\n\nconst items = [makeItem(\'u1\', 10), makeItem(\'u2\', 20), makeItem(\'u3\', 30)];\nconst listElement = {\n  querySelectorAll(selector) {\n    if (selector === \'[data-roster-item]\') {\n      return items;\n    }\n    return [];\n  },\n};\n\nconst statusById = {};\nconst totals = [];\nconst quoteResults = new Map([\n  [\'u1\', { total: 11 }],\n  [\'u2\', new Error(\'HTTP 500\')],\n  [\'u3\', { total: 31 }],\n]);\n\nconst normalizeRosterRefreshCycleToken = (token, fallbackVersion = 0) => {\n  if (token && typeof token === \'object\') {\n    return {\n      dedupeKey: token.dedupeKey ? String(token.dedupeKey) : null,\n      version: Number.isFinite(Number(token.version)) ? Number(token.version) : fallbackVersion,\n      authoritative: token.authoritative === true,\n    };\n  }\n  return {\n    dedupeKey: token ? String(token) : null,\n    version: Number.isFinite(Number(fallbackVersion)) ? Number(fallbackVersion) : 0,\n    authoritative: false,\n  };\n};\nlet priorityState = { latestAppliedVersion: 0, latestAuthoritativeVersion: 0 };\nconst applyRefreshPriority = (cycleToken) => {\n  const token = normalizeRosterRefreshCycleToken(cycleToken, priorityState.latestAppliedVersion || 0);\n  if (token.version < priorityState.latestAppliedVersion) {\n    return { apply: false, token, state: priorityState };\n  }\n  priorityState = {\n    latestAppliedVersion: Math.max(priorityState.latestAppliedVersion, token.version),\n    latestAuthoritativeVersion: token.authoritative\n      ? Math.max(priorityState.latestAuthoritativeVersion, token.version)\n      : priorityState.latestAuthoritativeVersion,\n  };\n  return { apply: true, token, state: priorityState };\n};\n\nlet refreshRosterCostBadgesInProgress = false;\nlet pendingRefreshOptions = null;\nlet pendingRefreshCycleToken = null;\nlet lastRefreshRosterCostCycleToken = null;\nlet preserveServerTotalUntilRefreshCycle = 0;\nlet rosterRefreshCycleCounter = 0;\nlet refreshVersion = 0;\nconst nextRefreshVersion = () => {\n  refreshVersion += 1;\n  return refreshVersion;\n};\nlet rosterListEl = listElement;\nconst ensureRosterList = () => listElement;\nconst setRosterItemCostStatus = (item, status) => {\n  statusById[item.getAttribute(\'data-roster-unit-id\')] = status;\n};\nconst getLastKnownItemCost = (item) => Number(item.getAttribute(\'data-unit-cost\'));\nconst hydrateLoadoutStateForItem = () => ({ mode: \'total\' });\nconst getUnitDatasetList = () => [];\nconst serializeQuotePayloadFromState = () => ({ mode: \'total\' });\nconst fetchRosterUnitQuote = (id) => {\n  const result = quoteResults.get(id);\n  if (result instanceof Error) {\n    return Promise.reject(result);\n  }\n  return Promise.resolve(result);\n};\nconst formatPoints = (value) => String(value);\nconst updateTotalSummary = (value) => totals.push(value);\n\neval(refreshSource);\n\nrefreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, { dedupeKey: \'cycle-1\', version: 1, authoritative: false });\n\nsetTimeout(() => {\n  refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, { dedupeKey: \'cycle-1\', version: 1, authoritative: false });\n  setTimeout(() => {\n    console.log(JSON.stringify({\n      costs: items.map((item) => Number(item.getAttribute(\'data-unit-cost\'))),\n      statuses: statusById,\n      totals,\n    }));\n  }, 0);\n}, 0);\n\n']' returned non-zero exit status 1.
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\subprocess.py:577: CalledProcessError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\reportlab\lib\rl_safe_eval.py:11
+  D:\OneDrive - KBJ S.A\Dokumenty\GitHub\OPR\.venv\Lib\site-packages\reportlab\lib\rl_safe_eval.py:11: DeprecationWarning: ast.NameConstant is deprecated and will be removed in Python 3.14; use ast.Constant instead
+    haveNameConstant = hasattr(ast,'NameConstant')
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_frontend_loadout_state.py::test_create_classification_payload_tie_prefers_previous_classification_over_strzelec_fallback
+FAILED tests/test_frontend_loadout_state.py::test_create_classification_payload_ignores_available_slug_pool
+FAILED tests/test_frontend_loadout_state.py::test_handle_state_change_refreshes_roster_total_immediately_without_server_update
+FAILED tests/test_frontend_loadout_state.py::test_update_cost_displays_keeps_panel_and_unit_cost_in_sync_after_passive_toggle
+FAILED tests/test_frontend_loadout_state.py::test_single_unit_command_ability_keeps_unit_cost_and_roster_total_in_sync_after_full_refresh_cycle
+FAILED tests/test_frontend_loadout_state.py::test_single_item_roster_keeps_unit_cost_equal_to_roster_total_after_each_ui_change
+FAILED tests/test_frontend_loadout_state.py::test_apply_server_update_prefers_backend_cached_cost_without_immediate_frontend_recompute
+FAILED tests/test_frontend_loadout_state.py::test_apply_server_update_keeps_server_total_and_badges_stable_without_local_edit
+FAILED tests/test_frontend_loadout_state.py::test_refresh_roster_cost_badges_applies_latest_pending_call_when_refresh_is_reentered
+FAILED tests/test_frontend_loadout_state.py::test_autosave_add_then_remove_active_restores_initial_total_after_stale_server_refresh
+FAILED tests/test_frontend_loadout_state.py::test_build_weapon_cost_map_applies_ambush_multiplier_for_ranged_weapon
+FAILED tests/test_frontend_loadout_state.py::test_weapon_cost_internal_applies_overcharge_multiplier_1_4
+FAILED tests/test_frontend_loadout_state.py::test_render_passive_editor_formats_okopany_delta_identically_with_rezerwa_toggle
+FAILED tests/test_frontend_loadout_state.py::test_refresh_roster_cost_badges_keeps_total_stable_when_part_of_batch_quote_fails
+14 failed, 26 passed, 4 skipped, 1 warning in 15.83s

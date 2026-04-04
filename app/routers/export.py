@@ -203,9 +203,8 @@ def roster_print(
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
 
-    costs.update_cached_costs(roster.roster_units)
+    total_cost, _ = costs.recalculate_roster_costs(roster)
     roster_items = _export_roster_unit_entries(db, roster)
-    total_cost = sum(float(item.get("total_cost") or 0.0) for item in roster_items)
     total_cost_rounded = utils.round_points(total_cost)
     spell_entries = _army_spell_entries(roster, roster_items)
     army_rules = _army_rule_labels(getattr(roster, "army", None))
@@ -239,9 +238,8 @@ def roster_export_list(
         raise HTTPException(status_code=404)
     _ensure_roster_view_access(roster, current_user)
 
-    costs.update_cached_costs(roster.roster_units)
+    total_cost, _ = costs.recalculate_roster_costs(roster)
     entries = _export_roster_unit_entries(db, roster)
-    total_cost = sum(float(entry.get("total_cost") or 0.0) for entry in entries)
     total_cost_rounded = utils.round_points(total_cost)
 
     spell_entries = _army_spell_entries(roster, entries)
@@ -277,9 +275,8 @@ def roster_pdf(
     _ensure_roster_view_access(roster, current_user)
 
     generated_at = datetime.utcnow()
-    costs.update_cached_costs(roster.roster_units)
+    total_cost, _ = costs.recalculate_roster_costs(roster)
     roster_items = _export_roster_unit_entries(db, roster)
-    total_cost = sum(float(item.get("total_cost") or 0.0) for item in roster_items)
     total_cost_rounded = utils.round_points(total_cost)
     spell_entries = _army_spell_entries(roster, roster_items)
     army_rules = _army_rule_labels(getattr(roster, "army", None))

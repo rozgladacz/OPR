@@ -5,6 +5,16 @@ data/
 *.sqlite3
 *.bak
 
-# Keep documentation assets in version control
-!app/static/docs/
-!app/static/docs/**
+# Python
+__pycache__/
+app/routers/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+
+# Local tooling/bootstrap artifacts
+.tools/
+
+# Documentation
+app/static/docs/
