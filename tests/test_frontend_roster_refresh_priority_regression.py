@@ -5,6 +5,7 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+from tests.node_runtime import resolve_node_binary
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 APP_JS_PATH = ROOT_DIR / "app/static/js/app.js"
@@ -61,7 +62,7 @@ def test_roster_refresh_priority_prefers_newer_authoritative_updates() -> None:
         console.log(JSON.stringify({{ total, expectedTotal, history }}));
         """
     )
-    completed = subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
+    completed = subprocess.run([resolve_node_binary(), "-e", script], check=True, capture_output=True, text=True)
     payload = json.loads(completed.stdout)
 
     assert payload["expectedTotal"] == 41.0

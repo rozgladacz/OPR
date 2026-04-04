@@ -1,0 +1,8 @@
+...............sss                                                       [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\reportlab\lib\rl_safe_eval.py:11
+  D:\OneDrive - KBJ S.A\Dokumenty\GitHub\OPR\.venv\Lib\site-packages\reportlab\lib\rl_safe_eval.py:11: DeprecationWarning: ast.NameConstant is deprecated and will be removed in Python 3.14; use ast.Constant instead
+    haveNameConstant = hasattr(ast,'NameConstant')
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+15 passed, 3 skipped, 1 warning in 5.70s
