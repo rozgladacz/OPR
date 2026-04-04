@@ -7,6 +7,7 @@ data/
 
 # Python
 __pycache__/
+app/routers/__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
@@ -15,6 +16,5 @@ __pycache__/
 # Local tooling/bootstrap artifacts
 .tools/
 
-# Keep documentation assets in version control
-!app/static/docs/
-!app/static/docs/**
+# Documentation
+app/static/docs/
