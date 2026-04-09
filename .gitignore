@@ -1,4 +1,5 @@
 data/
+!app/data/
 *.db
 *.db-journal
 *.sqlite

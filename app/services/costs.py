@@ -1138,10 +1138,22 @@ def weapon_cost_components(
     else:
         unit_traits = list(unit_flags)
 
-    range_value = normalize_range_value(weapon.effective_range)
-    traits = split_traits(weapon.effective_tags)
-    attacks_value = weapon.effective_attacks
-    ap_value = weapon.effective_ap
+    range_value = normalize_range_value(
+        getattr(weapon, "effective_range", None) or getattr(weapon, "range", "")
+    )
+    traits = split_traits(
+        getattr(weapon, "effective_tags", None) or getattr(weapon, "tags", "")
+    )
+    attacks_value = (
+        getattr(weapon, "effective_attacks", None)
+        if getattr(weapon, "effective_attacks", None) is not None
+        else getattr(weapon, "attacks", 1.0)
+    )
+    ap_value = (
+        getattr(weapon, "effective_ap", None)
+        if getattr(weapon, "effective_ap", None) is not None
+        else getattr(weapon, "ap", 0)
+    )
 
     ranged_cost = 0.0
     melee_cost = 0.0
@@ -1542,23 +1554,6 @@ def calculate_roster_unit_quote(
         }
 
     roster_unit = SimpleNamespace(unit=unit, count=unit_count, extra_weapons_json=None)
-<<<<<<< HEAD
-    totals = roster_unit_role_totals(roster_unit, normalized_loadout)
-    warrior_total = float(totals.get("wojownik") or 0.0)
-    shooter_total = float(totals.get("strzelec") or 0.0)
-    melee_bucket = float(totals.get("classification_melee") or 0.0)
-    ranged_bucket = float(totals.get("classification_ranged") or 0.0)
-    if melee_bucket > ranged_bucket:
-        selected_role_slug = "wojownik"
-    elif ranged_bucket > melee_bucket:
-        selected_role_slug = "strzelec"
-    else:
-        selected_role_slug = "wojownik"
-    selected_total_raw = shooter_total if selected_role_slug == "strzelec" else warrior_total
-    selected_total = round(selected_total_raw, 2)
-
-=======
->>>>>>> Klasyfikacja
     base_traits = _strip_role_traits(
         compute_passive_state(unit, normalized_loadout).traits
     )
@@ -1810,57 +1805,8 @@ def roster_unit_role_totals(
         multiplier = ability_multiplier if ability else model_count
         return safe_value * multiplier
 
-<<<<<<< HEAD
-    def _weapon_cost_components_map(
-        current_traits: Sequence[str],
-    ) -> dict[int, dict[str, float]]:
-        results: dict[int, dict[str, float]] = {}
-
-        def _weapon_components(weapon: models.Weapon) -> dict[str, float]:
-            range_value = normalize_range_value(weapon.effective_range)
-            attacks = weapon.effective_attacks if weapon.effective_attacks is not None else 0
-            ap_value = weapon.effective_ap if weapon.effective_ap is not None else 0
-            traits = split_traits(weapon.effective_tags)
-            ranged_cost = 0.0
-            melee_cost = 0.0
-            base_cost = _weapon_cost(
-                unit.quality,
-                range_value,
-                attacks,
-                ap_value,
-                traits,
-                current_traits,
-                allow_assault_extra=False,
-            )
-            if range_value == 0:
-                melee_cost += base_cost
-            else:
-                ranged_cost += base_cost
-            has_assault = any(
-                normalize_name(trait) in {"szturmowy", "szturmowa", "assault"}
-                for trait in traits
-            )
-            if has_assault and range_value != 0:
-                melee_cost += _weapon_cost(
-                    unit.quality,
-                    0,
-                    attacks,
-                    ap_value,
-                    traits,
-                    current_traits,
-                    allow_assault_extra=False,
-                )
-            total_cost = melee_cost + ranged_cost
-            return {
-                "melee": round(melee_cost, 4),
-                "ranged": round(ranged_cost, 4),
-                "total": round(total_cost, 4),
-            }
-
-=======
     def _weapon_components_map(current_traits: Sequence[str]) -> dict[int, dict[str, float]]:
         results: dict[int, dict[str, float]] = {}
->>>>>>> Klasyfikacja
         links = getattr(unit, "weapon_links", None) or []
         for link in links:
             weapon = link.weapon
@@ -1868,13 +1814,6 @@ def roster_unit_role_totals(
                 continue
             if link.weapon_id in results:
                 continue
-<<<<<<< HEAD
-            results[link.weapon_id] = _weapon_components(weapon)
-        if unit.default_weapon and unit.default_weapon_id is not None:
-            weapon_id = unit.default_weapon_id
-            if weapon_id not in results:
-                results[weapon_id] = _weapon_components(unit.default_weapon)
-=======
             results[link.weapon_id] = weapon_cost_components(
                 weapon,
                 unit.quality,
@@ -1888,7 +1827,6 @@ def roster_unit_role_totals(
                     unit.quality,
                     current_traits,
                 )
->>>>>>> Klasyfikacja
         return results
 
     def _aggregate_weapon_buckets(
@@ -1972,13 +1910,7 @@ def roster_unit_role_totals(
                 active_total += cost_value
         return ability_map, passive_total, active_total
 
-<<<<<<< HEAD
-    def _compute_common_totals(
-        current_traits: Sequence[str],
-    ) -> tuple[float, dict[int, dict[str, float]], float, float]:
-=======
     def _compute_total(current_traits: Sequence[str], selected_role: str) -> float:
->>>>>>> Klasyfikacja
         ability_map, passive_total, _ = _ability_cost_map(current_traits)
         base_value = base_model_cost(
             unit.quality,
@@ -1988,18 +1920,11 @@ def roster_unit_role_totals(
         )
         base_per_model = base_value
         passive_entries = _passive_entries(current_traits)
-<<<<<<< HEAD
-        weapon_components = _weapon_cost_components_map(current_traits)
-=======
         weapon_components = _weapon_components_map(current_traits)
         weapon_buckets = _aggregate_weapon_buckets(weapon_components)
->>>>>>> Klasyfikacja
 
-        total_without_weapons = base_per_model * model_count
+        total = base_per_model * model_count
         if passive_total:
-<<<<<<< HEAD
-            total_without_weapons += passive_total * (1 if total_mode else ability_multiplier)
-=======
             total += passive_total * (1 if total_mode else ability_multiplier)
         weapon_total = weapon_buckets["melee"] + weapon_buckets["ranged"]
         if selected_role == "wojownik":
@@ -2007,12 +1932,11 @@ def roster_unit_role_totals(
         elif selected_role == "strzelec":
             weapon_total -= weapon_buckets["melee"] * 0.5
         total += weapon_total
->>>>>>> Klasyfikacja
         for ability_id, stored_count in {**active_counts, **aura_counts}.items():
             cost_value = ability_map.get(ability_id)
             if cost_value is None:
                 continue
-            total_without_weapons += cost_value * _to_total(stored_count, ability=True)
+            total += cost_value * _to_total(stored_count, ability=True)
 
         ability_id_to_ident: dict[int, str] = {}
         for link in getattr(unit, "abilities", []) or []:
@@ -2132,43 +2056,15 @@ def roster_unit_role_totals(
             )
             passive_diff += passive_entry_diff * passive_multiplier
         if passive_diff:
-            total_without_weapons += passive_diff
+            total += passive_diff
 
-<<<<<<< HEAD
-        melee_bucket = 0.0
-        ranged_bucket = 0.0
-        for weapon_id, stored_count in weapons_counts.items():
-            cost_parts = weapon_components.get(weapon_id)
-            if not cost_parts:
-                continue
-            selected_count = _to_total(stored_count)
-            if selected_count <= 0:
-                continue
-            melee_bucket += float(cost_parts.get("melee") or 0.0) * selected_count
-            ranged_bucket += float(cost_parts.get("ranged") or 0.0) * selected_count
-        return (
-            total_without_weapons,
-            weapon_components,
-            round(melee_bucket, 2),
-            round(ranged_bucket, 2),
-        )
+        return round(total, 2)
 
-    common_total, _, melee_bucket, ranged_bucket = _compute_common_totals(base_traits)
-    warrior_total = round(common_total + melee_bucket + (ranged_bucket * 0.5), 2)
-    shooter_total = round(common_total + ranged_bucket + (melee_bucket * 0.5), 2)
-    return {
-        "wojownik": warrior_total,
-        "strzelec": shooter_total,
-        "classification_melee": melee_bucket,
-        "classification_ranged": ranged_bucket,
-    }
-=======
     warrior_traits = _with_role_trait(base_traits, "wojownik")
     shooter_traits = _with_role_trait(base_traits, "strzelec")
     warrior_total = _compute_total(warrior_traits, "wojownik")
     shooter_total = _compute_total(shooter_traits, "strzelec")
     return {"wojownik": warrior_total, "strzelec": shooter_total}
->>>>>>> Klasyfikacja
 
 
 def roster_unit_cost(roster_unit: models.RosterUnit) -> float:

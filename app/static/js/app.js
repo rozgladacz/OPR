@@ -5615,40 +5615,6 @@ function initRosterEditor() {
       clone.mode = 'total';
     }
     const passiveMap = clone && clone.passive instanceof Map ? clone.passive : new Map();
-<<<<<<< HEAD
-    const neutralWeaponMap = buildWeaponCostMap(
-      weapons,
-      quality,
-      baseFlags,
-      passiveItems,
-      passiveMap,
-      null,
-    );
-    const weaponComponents = buildWeaponComponentMap(
-      weapons,
-      quality,
-      baseFlags,
-      passiveItems,
-      passiveMap,
-      null,
-    );
-    let melee = 0;
-    let ranged = 0;
-    if (clone && clone.weapons instanceof Map) {
-      clone.weapons.forEach((storedCount, weaponId) => {
-        const countValue = Math.max(Number(storedCount) || 0, 0);
-        if (countValue <= 0) {
-          return;
-        }
-        const parts = weaponComponents.get(Number(weaponId));
-        if (!parts) {
-          return;
-        }
-        melee += (Number(parts.melee) || 0) * countValue;
-        ranged += (Number(parts.ranged) || 0) * countValue;
-      });
-    }
-=======
     const baseWeaponFlags = buildWeaponFlags(baseFlags, passiveItems, passiveMap);
     const unitTraits = [...new Set(flagsToAbilityList(baseWeaponFlags))];
     const toWeaponTotal = (value) => {
@@ -5705,7 +5671,6 @@ function initRosterEditor() {
     weaponComponentsById.forEach((components, weaponId) => {
       neutralWeaponMap.set(weaponId, components.melee + components.ranged);
     });
->>>>>>> Klasyfikacja
     const neutralTotal = computeTotalCost(
       baseCostPerModel,
       count,
@@ -5715,18 +5680,6 @@ function initRosterEditor() {
       passiveItems,
       neutralWeaponMap,
     );
-<<<<<<< HEAD
-    const weaponNeutralTotal = melee + ranged;
-    const commonTotal = neutralTotal - weaponNeutralTotal;
-    const warriorTotal = commonTotal + melee + (ranged * 0.5);
-    const shooterTotal = commonTotal + ranged + (melee * 0.5);
-    return {
-      available,
-      warrior: available.has('wojownik') ? { total: warriorTotal, weaponMap: neutralWeaponMap } : null,
-      shooter: available.has('strzelec') ? { total: shooterTotal, weaponMap: neutralWeaponMap } : null,
-      melee,
-      ranged,
-=======
     const neutralWeaponTotal = Math.max(weaponBuckets.melee + weaponBuckets.ranged, 0);
     const nonWeaponTotal = Math.max(neutralTotal - neutralWeaponTotal, 0);
     const warriorTotal = nonWeaponTotal + weaponBuckets.melee + weaponBuckets.ranged * 0.5;
@@ -5753,7 +5706,6 @@ function initRosterEditor() {
       },
       warrior: { total: Math.round(warriorTotal * 100) / 100, weaponMap: buildRoleWeaponMap('wojownik') },
       shooter: { total: Math.round(shooterTotal * 100) / 100, weaponMap: buildRoleWeaponMap('strzelec') },
->>>>>>> Klasyfikacja
     };
   }
 
@@ -5787,26 +5739,11 @@ function initRosterEditor() {
       (primaryContext && primaryContext.currentClassification)
       || (partnerContext && partnerContext.currentClassification)
       || null;
-<<<<<<< HEAD
-    let preferredSlug = null;
-    const meleeTotal = (primaryTotals.melee || 0) + (partnerTotals ? partnerTotals.melee || 0 : 0);
-    const rangedTotal = (primaryTotals.ranged || 0) + (partnerTotals ? partnerTotals.ranged || 0 : 0);
-    if (meleeTotal > rangedTotal) {
-      preferredSlug = 'wojownik';
-    } else if (rangedTotal > meleeTotal) {
-      preferredSlug = 'strzelec';
-    }
-    const classification = createClassificationPayload(
-      warriorTotal,
-      shooterTotal,
-=======
     const classificationByBuckets = createClassificationPayload(
       meleeBucketTotal,
       rangedBucketTotal,
->>>>>>> Klasyfikacja
       available,
       previousClassification,
-      preferredSlug,
     );
     const classification = classificationByBuckets
       ? {
