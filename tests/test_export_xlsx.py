@@ -28,7 +28,7 @@ def test_army_rules_rendered_in_xlsx_header() -> None:
     workbook = Workbook()
     rules = _army_rule_labels(army)
 
-    _append_roster_sheet(workbook, [], spells=None, army_rules=rules)
+    _append_roster_sheet(workbook, [], 0.0, spells=None, army_rules=rules)
     _append_weapons_sheet(workbook, [], army_rules=rules)
 
     expected = f"Zasady armii: {', '.join(rules)}"
@@ -53,9 +53,20 @@ def test_export_xlsx_refreshes_cached_costs_before_building_entries_and_total(mo
     roster_unit = DummyRosterUnit(id=1, count=4, cached_cost=10.0)
     roster = DummyRoster([roster_unit])
 
+    def fake_recalculate(roster, loadout_overrides=None):
+        total = 0.0
+        unit_costs: dict[int, float] = {}
+        for ru in getattr(roster, "roster_units", []) or []:
+            cost_value = ru.count * 11.6
+            if hasattr(ru, "cached_cost"):
+                ru.cached_cost = cost_value
+            total += cost_value
+            unit_costs[ru.id] = cost_value
+        return total, unit_costs
+
     monkeypatch.setattr(export_xlsx, "_load_roster_for_export", lambda db, roster_id: roster)
     monkeypatch.setattr(export_xlsx, "_ensure_roster_view_access", lambda roster, user: None)
-    monkeypatch.setattr(export_xlsx.costs, "roster_unit_cost", lambda ru: ru.count * 11.6)
+    monkeypatch.setattr(export_xlsx.costs, "recalculate_roster_costs", fake_recalculate)
     monkeypatch.setattr(export_xlsx, "_roster_unit_loadout", lambda ru: {"mode": "per_model"})
     monkeypatch.setattr(
         export_xlsx,
@@ -86,9 +97,10 @@ def test_export_xlsx_refreshes_cached_costs_before_building_entries_and_total(mo
 
     captured: dict[str, object] = {}
 
-    def fake_append_roster_sheet(workbook, entries, spells, army_rules=None):
+    def fake_append_roster_sheet(workbook, entries, roster_total, spells=None, army_rules=None):
         captured["entries"] = entries
-        return sum(float(entry["total_cost"]) for entry in entries)
+        captured["roster_total"] = roster_total
+        return None
 
     monkeypatch.setattr(export_xlsx, "_append_roster_sheet", fake_append_roster_sheet)
     monkeypatch.setattr(export_xlsx, "_append_weapons_sheet", lambda workbook, entries, army_rules=None: None)
