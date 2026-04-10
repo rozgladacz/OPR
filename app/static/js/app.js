@@ -1652,15 +1652,11 @@ function initSpellWeaponCostPreview() {
       return;
     }
 
-    const toFiniteNumber = (value, fallback = 0) => {
-      const parsed = Number.parseFloat(String(value ?? '').replace(',', '.'));
-      return Number.isFinite(parsed) ? parsed : fallback;
-    };
+    const armyId = form.dataset.armyId || '';
+    const useApi = Boolean(armyId);
 
-    const parseIntValue = (value, fallback = 0) => {
-      const parsed = Number.parseInt(String(value ?? '').trim(), 10);
-      return Number.isFinite(parsed) ? parsed : fallback;
-    };
+    let spellPreviewTimer = null;
+    let spellPreviewController = null;
 
     const collectTraits = () => {
       const hidden = form.querySelector('#weapon-abilities');
@@ -1681,8 +1677,7 @@ function initSpellWeaponCostPreview() {
             if (raw) {
               return raw;
             }
-            const label = String(entry.label || '').trim();
-            return label;
+            return String(entry.label || '').trim();
           })
           .filter((entry) => entry.length > 0);
       } catch (err) {
@@ -1690,21 +1685,79 @@ function initSpellWeaponCostPreview() {
       }
     };
 
-    const updatePreview = () => {
+    const collectFormValues = () => {
       const rangeInput = form.querySelector('input[name="range"]');
       const attacksInput = form.querySelector('input[name="attacks"]');
       const apInput = form.querySelector('input[name="ap"]');
-      const rangeValue = rangeInput ? rangeInput.value : '';
-      const attacksValue = toFiniteNumber(attacksInput ? attacksInput.value : '', 1);
-      const apValue = parseIntValue(apInput ? apInput.value : '', 0);
-      const traits = collectTraits();
-      const rawCost = weaponCostInternal(4, rangeValue, attacksValue, apValue, traits, [], true);
+      return {
+        range: rangeInput ? rangeInput.value : '',
+        attacks: attacksInput ? attacksInput.value : '',
+        ap: apInput ? apInput.value : '',
+        abilities: collectTraits(),
+      };
+    };
+
+    const updatePreviewLocal = () => {
+      const formValues = collectFormValues();
+      const toFiniteNumber = (value, fallback = 0) => {
+        const parsed = Number.parseFloat(String(value ?? '').replace(',', '.'));
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+      const parseIntValue = (value, fallback = 0) => {
+        const parsed = Number.parseInt(String(value ?? '').trim(), 10);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+      const attacksValue = toFiniteNumber(formValues.attacks, 1);
+      const apValue = parseIntValue(formValues.ap, 0);
+      const rawCost = weaponCostInternal(4, formValues.range, attacksValue, apValue, formValues.abilities, [], true);
       if (!Number.isFinite(rawCost)) {
         return;
       }
       const spellCost = Math.ceil(Math.max(rawCost, 0) / 7);
       costValueEl.textContent = String(spellCost);
     };
+
+    const updatePreviewApi = () => {
+      if (spellPreviewTimer) {
+        window.clearTimeout(spellPreviewTimer);
+      }
+      if (spellPreviewController) {
+        spellPreviewController.abort();
+        spellPreviewController = null;
+      }
+      spellPreviewTimer = window.setTimeout(() => {
+        spellPreviewTimer = null;
+        const formValues = collectFormValues();
+        spellPreviewController = new AbortController();
+        const signal = spellPreviewController.signal;
+        fetch(`/armies/${armyId}/spells/weapon-cost-preview`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(formValues),
+          credentials: 'same-origin',
+          signal,
+        })
+          .then((res) => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
+          .then((data) => {
+            if (spellPreviewController && spellPreviewController.signal === signal) {
+              spellPreviewController = null;
+            }
+            const cost = data?.spell_cost;
+            if (cost != null) {
+              costValueEl.textContent = String(cost);
+            }
+          })
+          .catch((err) => {
+            if (err && err.name === 'AbortError') {
+              return;
+            }
+            console.error('Nie udało się pobrać podglądu kosztu broni zaklęcia', err);
+            updatePreviewLocal();
+          });
+      }, 300);
+    };
+
+    const updatePreview = useApi ? updatePreviewApi : updatePreviewLocal;
 
     updatePreview();
 
@@ -4385,6 +4438,7 @@ function initRosterEditor() {
   let quoteRefreshTimer = null;
   let activeQuoteController = null;
   let quoteRequestVersion = 0;
+  let lastQuoteItemCosts = null;
 
   function nextRefreshVersion(seedVersion = null) {
     const seed = Number(seedVersion);
@@ -6039,6 +6093,7 @@ function initRosterEditor() {
       customEditInput = null;
     }
 
+    lastQuoteItemCosts = null;
     currentPassives = getUnitDatasetList(item, 'passive_items');
     currentActives = getUnitDatasetList(item, 'active_items');
     currentAuras = getUnitDatasetList(item, 'aura_items');
@@ -6374,6 +6429,7 @@ function initRosterEditor() {
       total: selectedTotal,
       rosterUnitId: responseRosterUnitId || String(requestedRosterUnitId),
       loadout: payload?.loadout && typeof payload.loadout === 'object' ? payload.loadout : null,
+      itemCosts: payload?.item_costs && typeof payload.item_costs === 'object' ? payload.item_costs : null,
     };
   }
 
@@ -6772,6 +6828,10 @@ function initRosterEditor() {
           if (requestVersion !== quoteRequestVersion) {
             return;
           }
+          if (quote.itemCosts && typeof quote.itemCosts === 'object') {
+            lastQuoteItemCosts = quote.itemCosts;
+            renderEditors();
+          }
           setCostDisplayStatus('ready');
           renderActiveCost(quote.total);
         })
@@ -6911,7 +6971,12 @@ function createClassificationPayload(
 
 function renderEditors(precomputedWeaponMap = null) {
     const passiveState = loadoutState && loadoutState.passive instanceof Map ? loadoutState.passive : new Map();
-    if (precomputedWeaponMap instanceof Map) {
+    if (!ENABLE_JS_COST_FALLBACK && lastQuoteItemCosts) {
+      const weaponCosts = lastQuoteItemCosts.weapons || {};
+      currentWeaponCostMap = new Map(
+        Object.entries(weaponCosts).map(([id, cost]) => [Number(id), Number(cost)]),
+      );
+    } else if (precomputedWeaponMap instanceof Map) {
       currentWeaponCostMap = precomputedWeaponMap;
     } else {
       currentWeaponCostMap = buildWeaponCostMap(
@@ -6928,6 +6993,15 @@ function renderEditors(precomputedWeaponMap = null) {
         return Number.NaN;
       }
       const normalizedSlug = String(slug);
+      if (!ENABLE_JS_COST_FALLBACK && lastQuoteItemCosts) {
+        const passiveDeltas = lastQuoteItemCosts.passive_deltas || {};
+        const identifier = abilityIdentifier(normalizedSlug) || normalizedSlug;
+        const delta = passiveDeltas[identifier];
+        if (Number.isFinite(delta)) {
+          return delta;
+        }
+        return Number.NaN;
+      }
       const evaluateTotal = (flag) => {
         const nextState = cloneLoadoutState(loadoutState);
         const passiveClone = nextState.passive instanceof Map ? nextState.passive : new Map();
