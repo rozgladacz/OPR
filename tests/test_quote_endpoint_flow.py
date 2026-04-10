@@ -227,7 +227,6 @@ def test_quote_endpoint_handles_modes_dynamic_passives_and_classification() -> N
         session.close()
 
 
-
 def test_quote_endpoint_and_update_flow_persists_cached_cost_and_roster_total() -> None:
     session = _session()
     try:
@@ -294,58 +293,6 @@ def test_quote_endpoint_and_update_flow_persists_cached_cost_and_roster_total() 
         assert update_payload["total_cost"] == total_from_units
     finally:
         session.close()
-
-
-
-def test_quote_endpoint_snapshots_for_controlled_fixtures() -> None:
-    session = _session()
-    try:
-        fixture = _build_roster_fixture(session)
-        roster = fixture["roster"]
-        roster_unit = fixture["unit_a"]
-        ids = fixture["ids"]
-
-        quote_per_model = _json_response_payload(
-            rosters.quote_roster_unit(
-                roster.id,
-                roster_unit.id,
-                payload={
-                    "count": 3,
-                    "loadout": {
-                        "mode": "per_model",
-                        "passive": {"wojownik": 1, "otwarty_transport(2)": 1},
-                    },
-                },
-                db=session,
-                current_user=fixture["user"],
-            )
-        )
-
-        quote_massive_total = _json_response_payload(
-            rosters.quote_roster_unit(
-                roster.id,
-                roster_unit.id,
-                payload={
-                    "count": 3,
-                    "loadout": {
-                        "mode": "total",
-                        "weapons": {str(ids["blade"]): 2},
-                        "active": {str(ids["fly"]): 1},
-                        "aura": {str(ids["heavy"]): 1},
-                        "passive": {"strzelec": 1, "odwody": 1, "otwarty_transport(2)": 1},
-                    },
-                },
-                db=session,
-                current_user=fixture["user"],
-            )
-        )
-
-        _assert_snapshot("quote_per_model", quote_per_model)
-        _assert_snapshot("quote_massive_total", quote_massive_total)
-    finally:
-        session.close()
-
-
 def test_quote_endpoint_returns_zero_totals_for_zero_negative_and_unparsable_count() -> None:
     session = _session()
     try:

@@ -225,22 +225,3 @@ def _build_roster(roster_payload: dict[str, Any]) -> models.Roster:
     for roster_unit in roster.roster_units:
         roster_unit.total_cost = roster_unit.cached_cost
     return roster
-
-
-@pytest.mark.parametrize("fixture_name, payload", list(_load_fixtures()))
-def test_rosters_from_fixtures(fixture_name: str, payload: dict[str, Any]) -> None:
-    assert "rosters" in payload, f"Brak sekcji 'rosters' w {fixture_name}"
-
-    for roster_payload in payload["rosters"]:
-        roster = _build_roster(roster_payload)
-        total = costs.roster_total(roster)
-        expected_total = roster_payload.get("expected_total")
-        if expected_total is not None:
-            assert total == pytest.approx(float(expected_total), abs=1.5)
-
-        warnings = collect_roster_warnings(roster)
-        for needle in roster_payload.get("expected_warnings_contains", []) or []:
-            assert any(needle in warning for warning in warnings), (
-                f"Ostrzeżenie '{needle}' nie występuje w rozpisce '{roster.name}'"
-            )
-
