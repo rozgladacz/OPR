@@ -22,8 +22,10 @@ Zależności:
 
 ## Baza danych
 - Traktuj bazę jako środowisko testowe, ale współdzielone.
-- Nie wykonuj destrukcyjnych operacji bez wyraźnego polecenia.
+- Nie wykonuj destrukcyjnych operacji bez wyraźnego polecenia. Zawsze trzymaj kopię zapasową.
 - Jeśli zadanie wymaga migracji lub zmian danych, opisz ich wpływ i przygotuj proces migracji.
+- Przed zakończeniem prac i udostępnieniem Preview do akceptacji podłącz bazę z danymi produkcyjnymi (`data/opr.db`). Preview z pustą bazą nie nadaje się do weryfikacji przez użytkownika.
+- Zawsze trzymaj kopię oryginalnej bazy (`data/opr.db.backup` lub commit w git), aby móc ją przywrócić po testach. Wersja w git jest źródłem prawdy — przywracaj przez `git show <commit>:data/opr.db > data/opr.db`.
 
 ## Użytkownicy i uprawnienia
 - System ma mieć dwa poziomy dostępu:
@@ -50,6 +52,7 @@ Zależności:
 - Po zmianie UI sprawdź też stan pusty, błędny i podstawowy scenariusz.
 - Jeśli testów brakuje, dodaj minimalny test regresji.
 - Nie uznawaj zadania za zakończone bez krótkiej weryfikacji diffu.
+- Na początku analizy wymagań oceń, czy zlecone zadanie dezaktualizuje istniejące testy. Jeśli tak — popraw lub usuń je jako pierwszy krok, zanim zmienisz kod produkcyjny. Nieaktualne testy blokują pracę i generują fałszywe błędy.
 
 ## Konwencje zmian
 - Nie zmieniaj formatowania poza zakresem zadania.
