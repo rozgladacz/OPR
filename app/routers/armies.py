@@ -4,9 +4,9 @@ import json
 import math
 from types import SimpleNamespace
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Request
 
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
@@ -1671,6 +1671,22 @@ def create_army_variant(
     db.commit()
 
     return RedirectResponse(url=f"/armies/{variant.id}", status_code=303)
+
+
+@router.post("/{army_id}/spells/weapon-cost-preview")
+def spell_weapon_cost_preview(
+    army_id: int,
+    payload: dict | None = Body(default=None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    _ensure_army_view_access(army, current_user)
+    form_values = payload if isinstance(payload, dict) else {}
+    spell_cost = _spell_weapon_cost(None, form_values)
+    return JSONResponse({"spell_cost": spell_cost})
 
 
 @router.get("/{army_id}/spells", response_class=HTMLResponse)

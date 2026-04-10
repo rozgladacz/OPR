@@ -1240,10 +1240,12 @@ def quote_roster_unit(
                 "unit_id": roster_unit.id,
                 "count": count,
                 "cost_engine_version": quote.get("cost_engine_version"),
+                "selected_role": quote.get("selected_role"),
                 "warrior_total": quote.get("warrior_total"),
                 "shooter_total": quote.get("shooter_total"),
                 "selected_total": quote.get("selected_total"),
                 "components": quote.get("components") or {},
+                "item_costs": quote.get("item_costs") or {},
                 "loadout": quote.get("loadout") or {},
             }
         )
