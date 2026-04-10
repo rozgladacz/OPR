@@ -367,12 +367,57 @@ def _active_traits_from_payload(
     return traits
 
 
+def _canonicalize_passive_counts(
+    payload: Sequence[dict[str, Any]], counts: dict[str, int]
+) -> dict[str, int]:
+    if not counts:
+        return counts
+    alias_to_slug: dict[str, str] = {}
+    for entry in payload:
+        slug = str(entry.get("slug") or "").strip()
+        if not slug or slug.startswith(ARMY_RULE_OFF_PREFIX):
+            continue
+        candidates = {slug, slug.casefold(), normalize_name(slug), ability_identifier(slug)}
+        label = entry.get("label")
+        if label:
+            label_str = str(label).strip()
+            if label_str:
+                candidates.update(
+                    {label_str, label_str.casefold(), normalize_name(label_str), ability_identifier(label_str)}
+                )
+        for candidate in candidates:
+            if candidate:
+                alias_to_slug.setdefault(candidate, slug)
+    normalized: dict[str, int] = {}
+    for raw_key, raw_value in counts.items():
+        key = str(raw_key).strip()
+        if not key:
+            continue
+        if key.startswith(ARMY_RULE_OFF_PREFIX):
+            target_key = key
+        else:
+            canonical = None
+            for candidate in (key, key.casefold(), normalize_name(key), ability_identifier(key)):
+                if not candidate:
+                    continue
+                if candidate in alias_to_slug:
+                    canonical = alias_to_slug[candidate]
+                    break
+            target_key = canonical or key
+        if int(raw_value) > 0:
+            normalized[target_key] = 1
+        else:
+            normalized.setdefault(target_key, 0)
+    return normalized
+
+
 def compute_passive_state(
     unit: models.Unit | None, extra: dict[str, Any] | str | None = None
 ) -> PassiveState:
     payload = _passive_payload_with_army(unit)
     extra_data = _ensure_extra_data(extra)
     counts = _parse_passive_counts(extra_data)
+    counts = _canonicalize_passive_counts(payload, counts)
     counts = _apply_army_rule_overrides(payload, counts)
     traits = _active_traits_from_payload(payload, counts)
     return PassiveState(payload=payload, counts=counts, traits=traits)
@@ -1475,19 +1520,35 @@ def normalize_roster_unit_loadout(
             aura_ids.add(int(ability_id))
 
     passive_state = compute_passive_state(unit, raw_loadout)
-    allowed_passive_slugs = {
-        str(entry.get("slug") or "").strip()
-        for entry in passive_state.payload
-        if str(entry.get("slug") or "").strip()
-    }
+    allowed_passive_lookup: dict[str, str] = {}
+    for entry in passive_state.payload:
+        slug = str(entry.get("slug") or "").strip()
+        if not slug:
+            continue
+        identifier = ability_identifier(slug) or slug
+        for candidate in (slug, slug.casefold(), normalize_name(slug), identifier):
+            if candidate:
+                allowed_passive_lookup.setdefault(candidate, identifier)
 
     passive_counts = _parse_passive_counts(raw_loadout)
     sanitized_passive: dict[str, int] = {}
     for slug, value in passive_counts.items():
         slug_text = str(slug).strip()
-        if not slug_text or slug_text not in allowed_passive_slugs:
+        if not slug_text:
             continue
-        sanitized_passive[slug_text] = 1 if int(value) > 0 else 0
+        canonical = None
+        for candidate in (
+            slug_text,
+            slug_text.casefold(),
+            normalize_name(slug_text),
+            ability_identifier(slug_text),
+        ):
+            if candidate and candidate in allowed_passive_lookup:
+                canonical = allowed_passive_lookup[candidate]
+                break
+        if canonical is None:
+            continue
+        sanitized_passive[canonical] = 1 if int(value) > 0 else 0
 
     return {
         "mode": normalized_mode,
@@ -1574,6 +1635,7 @@ def calculate_roster_unit_quote(
 
     melee_bucket = 0.0
     ranged_bucket = 0.0
+    has_explicit_weapons = False
     raw_weapons = normalized_loadout.get("weapons")
     if isinstance(raw_weapons, dict):
         for raw_key, raw_count in raw_weapons.items():
@@ -1597,9 +1659,15 @@ def calculate_roster_unit_quote(
             weapon = weapon_by_id.get(weapon_id)
             if weapon is None:
                 continue
+            has_explicit_weapons = True
             components = weapon_cost_components(weapon, unit.quality, base_traits)
             melee_bucket += float(components.get("melee") or 0.0) * selected_count
             ranged_bucket += float(components.get("ranged") or 0.0) * selected_count
+    if not has_explicit_weapons:
+        for default_weapon in unit_default_weapons(unit):
+            components = weapon_cost_components(default_weapon, unit.quality, base_traits)
+            melee_bucket += float(components.get("melee") or 0.0) * model_count
+            ranged_bucket += float(components.get("ranged") or 0.0) * model_count
 
     previous_classification_slug: str | None = None
     raw_selected_role = raw_loadout.get("selected_role")
@@ -1680,6 +1748,13 @@ def calculate_roster_unit_quote(
         return round(total, 2)
 
     weapon_component = _section_total("weapons")
+    if not has_explicit_weapons:
+        default_weapon_total = 0.0
+        for default_weapon in unit_default_weapons(unit):
+            default_weapon_total += weapon_cost(
+                default_weapon, unit.quality, selected_traits
+            ) * model_count
+        weapon_component = round(default_weapon_total, 2)
     active_component = _section_total("active", ability=True)
     aura_component = _section_total("aura", ability=True)
 
@@ -1731,6 +1806,8 @@ def roster_unit_role_totals(
 
     passive_state = compute_passive_state(unit, raw_data)
     base_traits = _strip_role_traits(passive_state.traits)
+    default_traits_full = _active_traits_from_payload(passive_state.payload, {})
+    default_base_traits = _strip_role_traits(default_traits_full)
     default_weapons = unit_default_weapons(unit)
     has_massive_trait = any(
         ability_identifier(trait) == "masywny" for trait in base_traits
@@ -1912,15 +1989,17 @@ def roster_unit_role_totals(
 
     def _compute_total(current_traits: Sequence[str], selected_role: str) -> float:
         ability_map, passive_total, _ = _ability_cost_map(current_traits)
+        default_traits_with_role = _with_role_trait(default_base_traits, selected_role)
         base_value = base_model_cost(
             unit.quality,
             unit.defense,
             unit.toughness,
-            current_traits,
+            default_traits_with_role,
         )
         base_per_model = base_value
         passive_entries = _passive_entries(current_traits)
-        weapon_components = _weapon_components_map(current_traits)
+        weapon_traits_without_role = _strip_role_traits(current_traits)
+        weapon_components = _weapon_components_map(weapon_traits_without_role)
         weapon_buckets = _aggregate_weapon_buckets(weapon_components)
 
         total = base_per_model * model_count

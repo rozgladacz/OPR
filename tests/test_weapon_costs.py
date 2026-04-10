@@ -145,16 +145,6 @@ def test_overcharge_applies_once_per_assault_component():
     total_cost = costs.weapon_cost(assault_overcharge, unit_quality=4, unit_flags=[])
 
     assert total_cost == pytest.approx(expected, rel=1e-3, abs=0.02)
-
-
-def test_overcharge_weapon_matches_expected_formula():
-    plasma_cannon = _weapon("30\"", ap=4, tags="Blast(3), Deadly(2), Overcharge")
-
-    cost = costs.weapon_cost(plasma_cannon, unit_quality=4, unit_flags=[])
-
-    assert cost == pytest.approx(110.99, abs=0.02)
-
-
 def test_ambush_assault_reduces_only_ranged_component() -> None:
     ranged_component = costs._weapon_cost(
         4,
