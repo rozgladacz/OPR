@@ -5598,6 +5598,7 @@ function initRosterEditor() {
   }
 
 function renderEditors() {
+    const passiveState = loadoutState && loadoutState.passive instanceof Map ? loadoutState.passive : new Map();
     if (lastQuoteItemCosts) {
       const weaponCosts = lastQuoteItemCosts.weapons || {};
       currentWeaponCostMap = new Map(
