@@ -1227,10 +1227,13 @@ def quote_roster_unit(
             default=0,
         )
 
+    include_item_costs = request_payload.get("include_item_costs", True) is not False
+
     quote = costs.calculate_roster_unit_quote(
         roster_unit.unit,
         request_payload.get("loadout"),
         count,
+        include_item_costs=include_item_costs,
     )
     return JSONResponse(
         _json_safe(

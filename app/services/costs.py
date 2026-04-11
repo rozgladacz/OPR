@@ -1569,12 +1569,16 @@ def calculate_roster_unit_quote(
     unit: models.Unit | None,
     loadout: dict[str, Any] | None = None,
     count: int = 1,
+    include_item_costs: bool = True,
 ) -> dict[str, Any]:
     """Public quote interface for a single roster unit.
 
     ``count`` is normalized through :func:`normalize_roster_unit_count`.
     ``count <= 0`` or unparsable values produce zero totals and normalized
     loadout payload.
+    ``include_item_costs`` controls whether per-item cost breakdowns and
+    passive deltas are computed. Pass ``False`` for badge-only refreshes
+    to skip the expensive passive-delta loop.
     """
     _empty_item_costs: dict[str, Any] = {
         "weapons": {},
@@ -1772,37 +1776,50 @@ def calculate_roster_unit_quote(
     )
 
     # --- item_costs: per-item breakdown for frontend display ---
-    item_weapons: dict[str, float] = {}
-    for wid, weapon in weapon_by_id.items():
-        item_weapons[str(wid)] = round(weapon_cost(weapon, unit.quality, selected_traits), 2)
+    # Only computed when include_item_costs=True to avoid the expensive
+    # passive-delta loop (2 × roster_unit_role_totals per passive ability)
+    # on badge-only refresh calls.
+    if include_item_costs:
+        item_weapons: dict[str, float] = {}
+        for wid, weapon in weapon_by_id.items():
+            item_weapons[str(wid)] = round(weapon_cost(weapon, unit.quality, selected_traits), 2)
 
-    item_active: dict[str, float] = {}
-    item_aura: dict[str, float] = {}
-    for ability_id, link in ability_link_by_id.items():
-        ability = getattr(link, "ability", None)
-        if ability is None:
-            continue
-        cost = round(ability_cost(link, selected_traits, toughness=unit.toughness), 2)
-        ability_type = getattr(ability, "type", None)
-        if ability_type == "active":
-            item_active[str(ability_id)] = cost
-        elif ability_type == "aura":
-            item_aura[str(ability_id)] = cost
+        item_active: dict[str, float] = {}
+        item_aura: dict[str, float] = {}
+        for ability_id, link in ability_link_by_id.items():
+            ability = getattr(link, "ability", None)
+            if ability is None:
+                continue
+            cost = round(ability_cost(link, selected_traits, toughness=unit.toughness), 2)
+            ability_type = getattr(ability, "type", None)
+            if ability_type == "active":
+                item_active[str(ability_id)] = cost
+            elif ability_type == "aura":
+                item_aura[str(ability_id)] = cost
 
-    item_passive_deltas: dict[str, float] = {}
-    passive_state_for_deltas = compute_passive_state(unit, normalized_loadout)
-    current_passive = dict(normalized_loadout.get("passive") or {})
-    for entry in passive_state_for_deltas.payload:
-        slug = str(entry.get("slug") or "").strip()
-        if not slug or slug.startswith(ARMY_RULE_OFF_PREFIX):
-            continue
-        identifier = ability_identifier(slug) or slug
-        loadout_on = {**normalized_loadout, "passive": {**current_passive, identifier: 1}}
-        loadout_off = {**normalized_loadout, "passive": {**current_passive, identifier: 0}}
-        totals_on = roster_unit_role_totals(roster_unit, loadout_on)
-        totals_off = roster_unit_role_totals(roster_unit, loadout_off)
-        delta = totals_on.get(selected_role_slug, 0.0) - totals_off.get(selected_role_slug, 0.0)
-        item_passive_deltas[identifier] = round(delta, 2)
+        item_passive_deltas: dict[str, float] = {}
+        passive_state_for_deltas = compute_passive_state(unit, normalized_loadout)
+        current_passive = dict(normalized_loadout.get("passive") or {})
+        for entry in passive_state_for_deltas.payload:
+            slug = str(entry.get("slug") or "").strip()
+            if not slug or slug.startswith(ARMY_RULE_OFF_PREFIX):
+                continue
+            identifier = ability_identifier(slug) or slug
+            loadout_on = {**normalized_loadout, "passive": {**current_passive, identifier: 1}}
+            loadout_off = {**normalized_loadout, "passive": {**current_passive, identifier: 0}}
+            totals_on = roster_unit_role_totals(roster_unit, loadout_on)
+            totals_off = roster_unit_role_totals(roster_unit, loadout_off)
+            delta = totals_on.get(selected_role_slug, 0.0) - totals_off.get(selected_role_slug, 0.0)
+            item_passive_deltas[identifier] = round(delta, 2)
+
+        computed_item_costs: dict[str, Any] = {
+            "weapons": item_weapons,
+            "active": item_active,
+            "aura": item_aura,
+            "passive_deltas": item_passive_deltas,
+        }
+    else:
+        computed_item_costs = _empty_item_costs
 
     return {
         "cost_engine_version": COST_ENGINE_VERSION,
@@ -1817,12 +1834,7 @@ def calculate_roster_unit_quote(
             "aura": aura_component,
             "passive": passive_component,
         },
-        "item_costs": {
-            "weapons": item_weapons,
-            "active": item_active,
-            "aura": item_aura,
-            "passive_deltas": item_passive_deltas,
-        },
+        "item_costs": computed_item_costs,
         "loadout": normalized_loadout,
     }
 

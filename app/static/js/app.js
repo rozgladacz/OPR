@@ -5264,17 +5264,20 @@ function initRosterEditor() {
     badgeEl.classList.toggle('opacity-50', status === 'loading');
   }
 
-  async function fetchRosterUnitQuote(requestedRosterUnitId, quotePayload, signal) {
+  async function fetchRosterUnitQuote(requestedRosterUnitId, quotePayload, signal, includeItemCosts = true) {
     if (!rosterId || !requestedRosterUnitId) {
       throw new Error('Brak identyfikatora oddziału do wyceny');
     }
+    const body = includeItemCosts
+      ? (quotePayload || {})
+      : { ...(quotePayload || {}), include_item_costs: false };
     const response = await fetch(`/rosters/${rosterId}/units/${requestedRosterUnitId}/quote`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(quotePayload || {}),
+      body: JSON.stringify(body),
       credentials: 'same-origin',
       signal,
     });
@@ -5426,7 +5429,7 @@ function initRosterEditor() {
                 passiveItems: getUnitDatasetList(item, 'passive_items'),
               });
               const quotePayload = serializeQuotePayloadFromState(itemLoadout, count);
-              const quote = await fetchRosterUnitQuote(rosterUnitId, quotePayload, null);
+              const quote = await fetchRosterUnitQuote(rosterUnitId, quotePayload, null, false);
               return {
                 item,
                 rosterUnitId,
