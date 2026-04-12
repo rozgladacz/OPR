@@ -694,7 +694,6 @@ const CAUTIOUS_HIT_BONUS = { 0: 0.0, 12: 0.0, 18: 0.6, 24: 0.7, 30: 0.8, 36: 0.9
 // Production flow should rely on the backend quote endpoint.
 const AP_BASE = { '-1': 0.8, 0: 1.0, 1: 1.4, 2: 1.8, 3: 2.1, 4: 2.3, 5: 2.4 };
 const AP_LANCE = { '-1': 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05 };
-const BRUTAL_MULTIPLIER = 1.05;
 const PENETRATING_MULTIPLIER = { '-1': 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2.9, 5: 3.0 };
 const WAAGH_AP_MODIFIER = { '-1': 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02 };
 const BLAST_MULTIPLIER = { 2: 1.9, 3: 2.7, 6: 4.3 };
@@ -1092,6 +1091,7 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
 
   let assault = false;
   let overcharge = false;
+  let brutal = false;
   let rangeBonus = 0;
   let rangePenalty = 0;
   const traitList = Array.isArray(weaponTraits) ? weaponTraits : splitTraits(weaponTraits);
@@ -1141,7 +1141,7 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
         'no regeneration',
       ].includes(norm)
     ) {
-      mult *= BRUTAL_MULTIPLIER;
+      brutal = true;
     } else if (['niebezposredni', 'indirect'].includes(norm)) {
       mult *= 1.2;
     } else if (['zuzywalny', 'limited'].includes(norm)) {
@@ -1174,6 +1174,9 @@ function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unit
   const adjustedRangeMod = Math.max(rangeMod + rangeBonus - rangePenalty, 0);
 
   chance = Math.max(chance - q, 0.9);
+  if (brutal) {
+    chance += ((7 - q) * (6 - q)) / 20;
+  }
   let cost = attacksValue * 2 * adjustedRangeMod * chance * apMod * mult;
 
   if (overcharge && (!assault || normalizedRange !== 0)) {
