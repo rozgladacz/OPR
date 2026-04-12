@@ -596,9 +596,8 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Brutalny",
         type="weapon",
         description=(
-            "Zmniejsz liczbę odzyskanych ran w tej aktywacji "
-            "o liczbę ran otrzymanych tą bronią. "
-            "Modele pokonane tą bronią nie mogą wrócić do gry."
+            "Możesz zachować wynik udanego rzutu na trafienie "
+            "jako wynik rzutu na obronę."
         ),
     ),
     AbilityDefinition(

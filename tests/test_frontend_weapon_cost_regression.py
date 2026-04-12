@@ -168,6 +168,36 @@ def test_frontend_weapon_cost_matches_backend_weapon_cost_with_tolerance() -> No
         assert frontend[case["name"]] == pytest.approx(backend, abs=NUMERIC_TOLERANCE)
 
 
+@pytest.mark.parametrize("quality", [2, 3, 4, 5, 6])
+def test_frontend_brutalny_bonus_matches_quality_formula(quality: int) -> None:
+    base_case = {
+        "name": "base",
+        "quality": quality,
+        "range": 24,
+        "attacks": 2,
+        "ap": 1,
+        "weapon_traits": [],
+        "unit_traits": [],
+    }
+    brutal_case = {
+        "name": "brutal",
+        "quality": quality,
+        "range": 24,
+        "attacks": 2,
+        "ap": 1,
+        "weapon_traits": ["Brutalny"],
+        "unit_traits": [],
+    }
+    frontend = _run_node_cases([base_case, brutal_case])
+
+    range_mod = costs.lookup_with_nearest(costs.RANGE_TABLE, 24)
+    ap_mod = costs.lookup_with_nearest(costs.AP_BASE, 1)
+    brutal_bonus = ((7 - quality) * (6 - quality)) / 20.0
+    expected_delta = 2 * 2.0 * range_mod * brutal_bonus * ap_mod
+
+    assert frontend["brutal"] - frontend["base"] == pytest.approx(expected_delta, abs=NUMERIC_TOLERANCE)
+
+
 def test_frontend_alias_ability_identifier_and_cost_match_backend() -> None:
     alias = "Nieustępliwy"
     canonical = "Przygotowanie"
@@ -391,4 +421,3 @@ def test_frontend_weapon_cost_end_to_end_tie_break_uses_same_fallback_as_backend
     assert entry["classification"] == "strzelec"
     assert entry["classification"] == backend["classification"]
     assert entry["total_cost"] == pytest.approx(backend["total_cost"], abs=NUMERIC_TOLERANCE)
-
