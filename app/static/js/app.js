@@ -2893,6 +2893,10 @@ function createRosterItemElement(data, options = {}) {
   item.setAttribute('data-default-summary', defaultSummary || '');
   item.setAttribute('data-weapon-options', toJsonString(data.weapon_options, []));
   item.setAttribute('data-passives', toJsonString(data.passive_items, []));
+  item.setAttribute(
+    'data-passive-ability-links',
+    toJsonString(data.passive_ability_items, []),
+  );
   item.setAttribute('data-actives', toJsonString(data.active_items, []));
   item.setAttribute('data-auras', toJsonString(data.aura_items, []));
   item.setAttribute('data-selected-passives', toJsonString(data.selected_passive_items, []));
@@ -4082,6 +4086,13 @@ function computeTotalCost(
   const abilityMultiplier = count <= 0 ? 0 : (hasMassiveTrait ? 1 : count);
   const activeAuraMultiplier = stateMode === 'total' ? 1 : abilityMultiplier;
   const passiveMultiplier = stateMode === 'total' ? 1 : abilityMultiplier;
+  const passiveDefaultAbilityTotal =
+    costMaps && Number.isFinite(Number(costMaps.passiveDefaultAbilityTotal))
+      ? Number(costMaps.passiveDefaultAbilityTotal)
+      : 0;
+  if (passiveDefaultAbilityTotal > 0) {
+    total += passiveDefaultAbilityTotal * passiveMultiplier;
+  }
   const toActiveAuraTotal = (value) => {
     const numeric = Number(value);
     if (!Number.isFinite(numeric) || numeric <= 0) {
@@ -4864,6 +4875,7 @@ function initRosterEditor() {
   let currentActives = [];
   let currentAuras = [];
   let currentPassives = [];
+  let currentPassiveAbilityLinks = [];
   let currentBaseFlags = {};
   let currentQuality = 4;
   let currentWeaponCostMap = new Map();
@@ -4894,6 +4906,7 @@ function initRosterEditor() {
   const UNIT_DATASET_KEYS = [
     'weapon_options',
     'passive_items',
+    'passive_ability_items',
     'active_items',
     'aura_items',
     'default_summary',
@@ -4901,6 +4914,7 @@ function initRosterEditor() {
   const UNIT_DATASET_ATTRIBUTE_MAP = new Map([
     ['data-weapon-options', 'weapon_options'],
     ['data-passives', 'passive_items'],
+    ['data-passive-ability-links', 'passive_ability_items'],
     ['data-actives', 'active_items'],
     ['data-auras', 'aura_items'],
     ['data-default-summary', 'default_summary'],
@@ -5553,6 +5567,7 @@ function initRosterEditor() {
     const activeItems = getUnitDatasetList(item, 'active_items');
     const auraItems = getUnitDatasetList(item, 'aura_items');
     const passiveItems = getUnitDatasetList(item, 'passive_items');
+    const passiveAbilityItems = getUnitDatasetList(item, 'passive_ability_items');
     const baseFlags = parseFlagString(item.getAttribute('data-unit-flags'));
     const qualityValue = Number(item.getAttribute('data-unit-quality') || '4');
     const classificationData = getParsedObject(
@@ -5567,7 +5582,12 @@ function initRosterEditor() {
       auraItems,
       passiveItems,
     });
-    const abilityCosts = buildAbilityCostMap(activeItems, auraItems, passiveItems);
+    const abilityCosts = buildAbilityCostMap(
+      activeItems,
+      auraItems,
+      passiveItems,
+      passiveAbilityItems,
+    );
     return prepareCostContext({
       item,
       count,
@@ -5810,11 +5830,12 @@ function initRosterEditor() {
     adjust(loadoutState.aura, currentAuras, 'ability_id', ['id']);
   }
 
-  function buildAbilityCostMap(activeItems, auraItems, passiveItems) {
+  function buildAbilityCostMap(activeItems, auraItems, passiveItems, passiveAbilityItems) {
     const activeMap = new Map();
     const passiveMap = new Map();
     const passiveEntries = new Map();
     const activeIdentifiers = new Map();
+    let passiveDefaultAbilityTotal = 0;
     [...(Array.isArray(activeItems) ? activeItems : []), ...(Array.isArray(auraItems) ? auraItems : [])].forEach((item) => {
       if (!item) {
         return;
@@ -5848,7 +5869,28 @@ function initRosterEditor() {
         passiveMap.set(key, totalCostValue);
       }
     });
-    return { active: activeMap, passive: passiveMap, passiveEntries, activeIdentifiers };
+    (Array.isArray(passiveAbilityItems) ? passiveAbilityItems : []).forEach((item) => {
+      if (!item) {
+        return;
+      }
+      const defaultCountValue = Number(item.default_count ?? (item.is_default ? 1 : 0));
+      const defaultCount = Number.isFinite(defaultCountValue) ? Math.max(defaultCountValue, 0) : 0;
+      if (defaultCount <= 0) {
+        return;
+      }
+      const costValue = Number(item.cost);
+      if (!Number.isFinite(costValue) || costValue <= 0) {
+        return;
+      }
+      passiveDefaultAbilityTotal += costValue * defaultCount;
+    });
+    return {
+      active: activeMap,
+      passive: passiveMap,
+      passiveEntries,
+      activeIdentifiers,
+      passiveDefaultAbilityTotal,
+    };
   }
 
   function updateTotalSummary(total) {
@@ -6043,6 +6085,7 @@ function initRosterEditor() {
     }
 
     currentPassives = getUnitDatasetList(item, 'passive_items');
+    currentPassiveAbilityLinks = getUnitDatasetList(item, 'passive_ability_items');
     currentActives = getUnitDatasetList(item, 'active_items');
     currentAuras = getUnitDatasetList(item, 'aura_items');
     currentWeapons = getUnitDatasetList(item, 'weapon_options');
@@ -6094,7 +6137,12 @@ function initRosterEditor() {
       passiveItems: currentPassives,
     });
 
-    abilityCostMap = buildAbilityCostMap(currentActives, currentAuras, currentPassives);
+    abilityCostMap = buildAbilityCostMap(
+      currentActives,
+      currentAuras,
+      currentPassives,
+      currentPassiveAbilityLinks,
+    );
     baseCostPerModel = Number.isFinite(baseCostValue) && baseCostValue >= 0 ? baseCostValue : 0;
 
     ignoreNextSave = true;
