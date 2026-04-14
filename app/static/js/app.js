@@ -1,3 +1,8 @@
+// ============================================================
+// SECTION: GLOBAL STATE & REFRESH TOKEN UTILS
+// normalizeRosterRefreshCycleToken, resolveRosterRefreshPriority
+// Globalne zmienne stanu + narzędzia wersjonowania odświeżeń.
+// ============================================================
 const abilityDefinitionsCache = new Map();
 const ARMY_RULE_OFF_PREFIX = '__army_off__';
 
@@ -47,6 +52,10 @@ function resolveRosterRefreshPriority(state, cycleToken) {
   return { apply: true, token, state: nextState };
 }
 
+// ============================================================
+// SECTION: ABILITY PICKER
+// initAbilityPicker, initAbilityPickers — picker zdolności w edytorze
+// ============================================================
 function initAbilityPicker(root) {
   const definitionsData = root.dataset.definitions || '';
   let definitions;
@@ -686,6 +695,12 @@ function initAbilityPickers() {
   });
 }
 
+// ============================================================
+// SECTION: TEXT PARSING UTILS
+// splitTraits, normalizeName, extractNumber, abilityIdentifier,
+// passiveIdentifier, parseFlagString, normalizeRangeValue,
+// stripOptionalFlagSuffix
+// ============================================================
 const ABILITY_NAME_MAX_LENGTH = 60;
 const ABILITY_ALIASES = new Map([
   ['nieustepliwy', 'przygotowanie'],
@@ -839,6 +854,11 @@ function stripOptionalFlagSuffix(name) {
 }
 
 
+// ============================================================
+// SECTION: SPELL WEAPON COST PREVIEW
+// initSpellWeaponCostPreview — podgląd kosztu broni zaklęcia,
+// wywołuje POST /armies/{id}/spells/weapon-cost-preview
+// ============================================================
 function initSpellWeaponCostPreview() {
   document.querySelectorAll('form[data-spell-weapon-form]').forEach((form) => {
     const costValueEl = form.querySelector('[data-spell-weapon-cost]');
@@ -973,6 +993,336 @@ function initSpellWeaponCostPreview() {
   });
 }
 
+// ============================================================
+// SECTION: UI PICKERS — NUMBER, RANGE, WEAPON DEFAULTS
+// initNumberPicker, initNumberPickers, initRangePicker,
+// initRangePickers, initWeaponDefaults
+//
+// UWAGA: To są helpery UI (spinners, zakresy) — NIE silnik kosztów.
+// Wywoływane w łańcuchu DOMContentLoaded. Ich brak = ReferenceError
+// który cicho blokuje całą inicjalizację strony.
+// NIE usuwać przy cleanup kosztowym.
+// ============================================================
+function initNumberPicker(root) {
+  const selectEl = root.querySelector('.number-picker-select');
+  const customInput = root.querySelector('.number-picker-custom');
+  const hiddenInput = root.querySelector('.number-picker-value');
+  const initialValue = root.dataset.selected || '';
+
+  const syncHidden = (value) => {
+    const text = value !== undefined && value !== null ? String(value) : '';
+    if (hiddenInput) {
+      hiddenInput.value = text;
+    }
+    root.dataset.selected = text;
+  };
+
+  const hideCustom = () => {
+    if (customInput) {
+      customInput.classList.add('d-none');
+      customInput.value = '';
+    }
+  };
+
+  const showCustom = () => {
+    if (customInput) {
+      customInput.classList.remove('d-none');
+    }
+  };
+
+  const findMatchingOption = (value) => {
+    if (!selectEl) {
+      return '';
+    }
+    const textValue = String(value).trim();
+    if (!textValue) {
+      return '';
+    }
+    const numeric = Number(textValue);
+    let matched = '';
+    Array.from(selectEl.options || []).forEach((option) => {
+      if (!option.value || option.value === '__custom__') {
+        if (!matched && option.value === textValue) {
+          matched = option.value;
+        }
+        return;
+      }
+      if (option.value === textValue) {
+        matched = option.value;
+        return;
+      }
+      const optionNumeric = Number(option.value);
+      if (Number.isFinite(optionNumeric) && Number.isFinite(numeric) && optionNumeric === numeric) {
+        matched = option.value;
+      }
+    });
+    return matched;
+  };
+
+  const setValue = (rawValue) => {
+    const textValue = rawValue !== undefined && rawValue !== null ? String(rawValue).trim() : '';
+    if (!textValue) {
+      if (selectEl) {
+        selectEl.value = '';
+      }
+      hideCustom();
+      syncHidden('');
+      return;
+    }
+    const matched = findMatchingOption(textValue);
+    if (matched) {
+      if (selectEl) {
+        selectEl.value = matched;
+      }
+      hideCustom();
+      syncHidden(matched);
+      return;
+    }
+    if (selectEl) {
+      selectEl.value = '__custom__';
+    }
+    showCustom();
+    if (customInput) {
+      customInput.value = textValue;
+    }
+    syncHidden(textValue);
+  };
+
+  if (selectEl) {
+    selectEl.addEventListener('change', () => {
+      const value = selectEl.value;
+      if (value === '__custom__') {
+        showCustom();
+        if (customInput && !customInput.value) {
+          customInput.focus();
+        }
+        syncHidden(customInput ? customInput.value || '' : '');
+      } else if (value === '') {
+        hideCustom();
+        syncHidden('');
+      } else {
+        hideCustom();
+        syncHidden(value);
+      }
+    });
+  }
+
+  if (customInput) {
+    customInput.addEventListener('input', () => {
+      if (selectEl && selectEl.value !== '__custom__') {
+        selectEl.value = '__custom__';
+      }
+      syncHidden(customInput.value || '');
+    });
+  }
+
+  setValue(initialValue);
+
+  root.numberPicker = {
+    setValue: (value) => setValue(value),
+  };
+}
+
+function initNumberPickers() {
+  document.querySelectorAll('[data-number-picker]').forEach((element) => {
+    initNumberPicker(element);
+  });
+}
+
+function initRangePicker(root) {
+  const selectEl = root.querySelector('.range-picker-select');
+  const customInput = root.querySelector('.range-picker-custom');
+  const hiddenInput = root.querySelector('.range-picker-value');
+  const initialValue = root.dataset.selected || '';
+
+  const normalizeForOption = (raw) => {
+    if (raw === undefined || raw === null) {
+      return '';
+    }
+    const text = String(raw).trim();
+    if (!text) {
+      return '';
+    }
+    const lowered = text.toLowerCase();
+    if (lowered === 'none' || lowered === 'null' || lowered === 'undefined') {
+      return '';
+    }
+    if (['wrÄ™cz', 'wrecz', 'melee', 'm'].includes(lowered)) {
+      return '0';
+    }
+    const numericMatch = lowered.match(/^(\d+)(?:["â€ť])?$/);
+    if (numericMatch) {
+      return numericMatch[1];
+    }
+    return text;
+  };
+
+  const showCustom = () => {
+    if (customInput) {
+      customInput.classList.remove('d-none');
+    }
+  };
+
+  const hideCustom = () => {
+    if (customInput) {
+      customInput.classList.add('d-none');
+      customInput.value = '';
+    }
+  };
+
+  const syncHidden = (value) => {
+    const text = value !== undefined && value !== null ? String(value) : '';
+    if (hiddenInput) {
+      hiddenInput.value = text;
+    }
+    root.dataset.selected = text;
+  };
+
+  const setValue = (rawValue) => {
+    const textValue = rawValue !== undefined && rawValue !== null ? String(rawValue).trim() : '';
+    if (!textValue) {
+      if (selectEl) {
+        selectEl.value = '';
+      }
+      hideCustom();
+      syncHidden('');
+      return;
+    }
+    if (textValue.toLowerCase() === '__custom__') {
+      if (selectEl) {
+        selectEl.value = '__custom__';
+      }
+      showCustom();
+      if (customInput && !customInput.value) {
+        customInput.focus();
+      }
+      syncHidden(customInput ? customInput.value || '' : '');
+      return;
+    }
+    const normalized = normalizeForOption(textValue);
+    if (!normalized) {
+      if (selectEl) {
+        selectEl.value = '';
+      }
+      hideCustom();
+      syncHidden('');
+      return;
+    }
+    if (selectEl && normalized !== '__custom__') {
+      const option = Array.from(selectEl.options || []).find((opt) => opt.value === normalized);
+      if (option && normalized !== '__custom__') {
+        selectEl.value = normalized;
+        hideCustom();
+        syncHidden(normalized);
+        return;
+      }
+    }
+    if (selectEl) {
+      selectEl.value = '__custom__';
+    }
+    showCustom();
+    if (customInput) {
+      customInput.value = textValue;
+    }
+    syncHidden(textValue);
+  };
+
+  if (selectEl) {
+    selectEl.addEventListener('change', () => {
+      const value = selectEl.value;
+      if (value === '__custom__') {
+        showCustom();
+        if (customInput && !customInput.value) {
+          customInput.focus();
+        }
+        syncHidden(customInput ? customInput.value : '');
+      } else {
+        hideCustom();
+        syncHidden(value);
+      }
+    });
+  }
+
+  if (customInput) {
+    customInput.addEventListener('input', () => {
+      syncHidden(customInput.value || '');
+    });
+  }
+
+  setValue(initialValue);
+  root.rangePicker = {
+    setValue,
+  };
+}
+
+function initRangePickers() {
+  document.querySelectorAll('[data-range-picker]').forEach((element) => {
+    initRangePicker(element);
+  });
+}
+
+function initWeaponDefaults() {
+  document.querySelectorAll('form[data-defaults]').forEach((form) => {
+    const defaultsData = form.dataset.defaults;
+    if (!defaultsData) {
+      return;
+    }
+    let defaults = null;
+    try {
+      defaults = JSON.parse(defaultsData);
+    } catch (err) {
+      defaults = null;
+    }
+    if (!defaults) {
+      return;
+    }
+    const resetButton = form.querySelector('[data-weapon-reset]');
+    if (!resetButton) {
+      return;
+    }
+    resetButton.addEventListener('click', () => {
+      const nameInput = form.querySelector('#name');
+      if (nameInput) {
+        nameInput.value = defaults.name || '';
+      }
+      const rangePicker = form.querySelector('[data-range-picker]');
+      if (rangePicker && rangePicker.rangePicker && typeof rangePicker.rangePicker.setValue === 'function') {
+        rangePicker.rangePicker.setValue(defaults.range || '');
+      }
+      const attacksPicker = form.querySelector('[data-number-picker][data-target-input="attacks"]');
+      if (attacksPicker && attacksPicker.numberPicker && typeof attacksPicker.numberPicker.setValue === 'function') {
+        attacksPicker.numberPicker.setValue(defaults.attacks || '');
+      } else {
+        const attacksInput = form.querySelector('#attacks');
+        if (attacksInput) {
+          attacksInput.value = defaults.attacks || '';
+        }
+      }
+      const apPicker = form.querySelector('[data-number-picker][data-target-input="ap"]');
+      if (apPicker && apPicker.numberPicker && typeof apPicker.numberPicker.setValue === 'function') {
+        apPicker.numberPicker.setValue(defaults.ap || '');
+      } else {
+        const apInput = form.querySelector('#ap');
+        if (apInput) {
+          apInput.value = defaults.ap || '';
+        }
+      }
+      const notesInput = form.querySelector('#notes');
+      if (notesInput) {
+        notesInput.value = defaults.notes || '';
+      }
+      const abilityPickerRoot = form.querySelector('[data-ability-picker]');
+      if (abilityPickerRoot && abilityPickerRoot.abilityPicker && typeof abilityPickerRoot.abilityPicker.setItems === 'function') {
+        abilityPickerRoot.abilityPicker.setItems(defaults.abilities || []);
+      }
+    });
+  });
+}
+
+// ============================================================
+// SECTION: WEAPON PICKER
+// initWeaponPicker, initWeaponPickers — drzewo wyboru broni
+// ============================================================
 function initWeaponPicker(root) {
   const treePayloadRaw =
     root.dataset.weaponTreePayload ||
@@ -1995,6 +2345,11 @@ function initWeaponPickers() {
   });
 }
 
+// ============================================================
+// SECTION: ROSTER ITEM RENDERING
+// formatPoints, createRosterItemElement, renderPassiveEditor
+// Tworzą elementy listy rozpiski i edytor pasywek.
+// ============================================================
 function formatPoints(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
@@ -2345,6 +2700,12 @@ function renderPassiveEditor(
   return true;
 }
 
+// ============================================================
+// SECTION: LOADOUT STATE MANAGEMENT
+// createLoadoutState, cloneLoadoutState, serializeLoadoutState,
+// ensureStateEntries, ensurePassiveStateEntries, itp.
+// Zarządza stanem loadoutu oddziału (broń, zdolności, pasywki).
+// ============================================================
 function normalizeLoadoutKey(rawKey) {
   if (rawKey === undefined || rawKey === null) {
     return '';
@@ -2753,6 +3114,11 @@ function createModeIndicator(mode) {
   return indicator;
 }
 
+// ============================================================
+// SECTION: EDITOR RENDERERS
+// renderAbilityEditor, renderWeaponEditor, toggleSectionVisibility
+// Renderują edytory zdolności i broni w prawym panelu rozpiski.
+// ============================================================
 function renderAbilityEditor(
   container,
   items,
@@ -3169,6 +3535,10 @@ function renderWeaponEditor(
   return true;
 }
 
+// ============================================================
+// SECTION: ROSTER ADDERS
+// initRosterAdders — przyciski dodawania oddziałów do rozpiski
+// ============================================================
 function initRosterAdders(root) {
   if (!root) {
     return;
@@ -3271,6 +3641,18 @@ function initRosterAdders(root) {
   });
 }
 
+// ============================================================
+// SECTION: ROSTER EDITOR CLOSURE
+// initRosterEditor — wielkie domknięcie (~2000 linii).
+// Zawiera ~60 prywatnych funkcji współdzielących stan przez closure-scope:
+//   loadoutState, activeItem, refreshRosterCostBadgesInProgress,
+//   pendingRefreshOptions, lastQuoteItemCosts, itp.
+// Kluczowe podfunkcje:
+//   handleStateChange, renderEditors, refreshRosterCostBadges,
+//   fetchRosterUnitQuote, applyServerUpdate, selectItem
+// UWAGA: include_item_costs=false dla badge-only calls (refreshRosterCostBadges),
+//        include_item_costs=true tylko dla quote aktywnego oddziału (handleStateChange).
+// ============================================================
 function initRosterEditor() {
   const root = document.querySelector('[data-roster-root]');
   if (!root) {
@@ -4948,17 +5330,20 @@ function initRosterEditor() {
     badgeEl.classList.toggle('opacity-50', status === 'loading');
   }
 
-  async function fetchRosterUnitQuote(requestedRosterUnitId, quotePayload, signal) {
+  async function fetchRosterUnitQuote(requestedRosterUnitId, quotePayload, signal, includeItemCosts = true) {
     if (!rosterId || !requestedRosterUnitId) {
       throw new Error('Brak identyfikatora oddziału do wyceny');
     }
+    const body = includeItemCosts
+      ? (quotePayload || {})
+      : { ...(quotePayload || {}), include_item_costs: false };
     const response = await fetch(`/rosters/${rosterId}/units/${requestedRosterUnitId}/quote`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(quotePayload || {}),
+      body: JSON.stringify(body),
       credentials: 'same-origin',
       signal,
     });
@@ -5110,7 +5495,7 @@ function initRosterEditor() {
                 passiveItems: getUnitDatasetList(item, 'passive_items'),
               });
               const quotePayload = serializeQuotePayloadFromState(itemLoadout, count);
-              const quote = await fetchRosterUnitQuote(rosterUnitId, quotePayload, null);
+              const quote = await fetchRosterUnitQuote(rosterUnitId, quotePayload, null, false);
               return {
                 item,
                 rosterUnitId,
@@ -5282,6 +5667,7 @@ function initRosterEditor() {
   }
 
 function renderEditors() {
+    const passiveState = loadoutState && loadoutState.passive instanceof Map ? loadoutState.passive : new Map();
     if (lastQuoteItemCosts) {
       const weaponCosts = lastQuoteItemCosts.weapons || {};
       currentWeaponCostMap = new Map(
@@ -5526,6 +5912,10 @@ function renderEditors() {
 
 }
 
+// ============================================================
+// SECTION: SPELL ABILITY FORMS
+// initSpellAbilityForms — formularze zdolności zaklęć
+// ============================================================
 function initSpellAbilityForms() {
   document.querySelectorAll('[data-spell-ability-form]').forEach((form) => {
     const abilitySelect = form.querySelector('[data-ability-select]');
@@ -5716,6 +6106,10 @@ function initSpellAbilityForms() {
   });
 }
 
+// ============================================================
+// SECTION: ARMORY WEAPON TREE
+// initArmoryWeaponTree — drzewo broni w zbrojowni (filtry, sortowanie)
+// ============================================================
 function initArmoryWeaponTree() {
   const root = document.getElementById('armory-weapons-tree');
   if (!root) {
@@ -6221,6 +6615,13 @@ function initArmoryWeaponTree() {
   applyFilterAndRender();
 }
 
+// ============================================================
+// SECTION: BOOTSTRAP — DOMContentLoaded
+// Łańcuch inicjalizacji (kolejność krytyczna — patrz AGENTS.md):
+//   initAbilityPickers → initNumberPickers → initRangePickers →
+//   initWeaponPickers → initRosterEditor → initWeaponDefaults →
+//   initSpellAbilityForms → initArmoryWeaponTree → initSpellWeaponCostPreview
+// ============================================================
 document.addEventListener('DOMContentLoaded', () => {
   initAbilityPickers();
   initNumberPickers();

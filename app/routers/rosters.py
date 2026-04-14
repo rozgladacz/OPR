@@ -1,3 +1,8 @@
+# ============================================================
+# SECTION: IMPORTS & UTILITY HELPERS
+# _parse_bool, _unit_cache_value, _unit_eager_options,
+# _unit_payload_cached, _unit_army_flags, _json_safe, itp.
+# ============================================================
 from __future__ import annotations
 
 import json
@@ -164,6 +169,11 @@ def _json_safe(value: Any) -> Any:
     return None
 
 
+# ============================================================
+# SECTION: ACCESS CONTROL & ROSTER ORDERING
+# _ensure_roster_view_access, _ensure_roster_edit_access,
+# _ordered_roster_units, _apply_roster_order
+# ============================================================
 def _ensure_roster_view_access(roster: models.Roster, user: models.User) -> None:
     if user.is_admin:
         return
@@ -276,6 +286,11 @@ def _internal_roster_unit_quote(
     )
 
 
+# ============================================================
+# SECTION: ROSTER VIEWS & CRUD
+# list_rosters, new_roster_form, create_roster, edit_roster,
+# update_roster, duplicate_roster, delete_roster
+# ============================================================
 @router.get("", response_class=HTMLResponse)
 def list_rosters(
     request: Request,
@@ -678,6 +693,10 @@ def delete_roster(
     return RedirectResponse(url="/rosters", status_code=303)
 
 
+# ============================================================
+# SECTION: ROSTER UNIT MANAGEMENT
+# add_roster_unit, move_roster_unit, reorder_roster_units
+# ============================================================
 @router.post("/{roster_id}/units/add")
 def add_roster_unit(
     roster_id: int,
@@ -987,6 +1006,12 @@ def reorder_roster_units(
     return JSONResponse(_json_safe(payload))
 
 
+# ============================================================
+# SECTION: UNIT UPDATE & QUOTE ENDPOINT
+# update_roster_unit — zapis loadoutu, klasyfikacji, liczebności
+# quote_roster_unit  — POST /quote, wywołuje calculate_roster_unit_quote
+# duplicate_roster_unit, delete_roster_unit
+# ============================================================
 @router.post("/{roster_id}/units/{roster_unit_id}/update")
 def update_roster_unit(
     roster_id: int,
@@ -1227,10 +1252,13 @@ def quote_roster_unit(
             default=0,
         )
 
+    include_item_costs = request_payload.get("include_item_costs", True) is not False
+
     quote = costs.calculate_roster_unit_quote(
         roster_unit.unit,
         request_payload.get("loadout"),
         count,
+        include_item_costs=include_item_costs,
     )
     return JSONResponse(
         _json_safe(
@@ -1327,6 +1355,14 @@ def delete_roster_unit(
     )
     db.commit()
     return RedirectResponse(url=f"/rosters/{roster.id}", status_code=303)
+
+
+# ============================================================
+# SECTION: UNIT DISPLAY HELPERS
+# _default_loadout_summary, _unit_weapon_options, _passive_entries,
+# _base_cost_per_model, _default_loadout_payload, itp.
+# Dane wyświetlane w edytorze oddziału (prawy panel rozpiski).
+# ============================================================
 def _default_loadout_summary(unit: models.Unit) -> str:
     parts: list[str] = []
     for weapon, count in unit.default_weapon_loadout:
@@ -1694,6 +1730,12 @@ def _selected_passive_entries(
     return selected
 
 
+# ============================================================
+# SECTION: LOADOUT PROCESSING
+# _role_slug_map, _apply_classification_to_loadout,
+# _selected_ability_entries, _ability_entries, itp.
+# Buduje payload loadoutu wysyłany do calculate_roster_unit_quote.
+# ============================================================
 def _role_slug_map(unit: models.Unit | None) -> dict[str, str]:
     if unit is None:
         return {}
@@ -2193,6 +2235,10 @@ def _parse_loadout_json(text: str | None) -> dict[str, Any]:
     return base
 
 
+# ============================================================
+# SECTION: LOADOUT SANITIZATION
+# _sanitize_loadout — walidacja i czyszczenie loadoutu przed zapisem
+# ============================================================
 def _sanitize_loadout(
     unit: models.Unit,
     model_count: int,

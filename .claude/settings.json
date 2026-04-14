@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make test)",
+      "Bash(make test-fast)",
+      "Bash(make lint)",
+      "Bash(pytest*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git status*)",
+      "Bash(git show*)",
+      "Bash(ls*)",
+      "Bash(find*)",
+      "Bash(rg*)",
+      "Bash(cat*)",
+      "Bash(sed*)"
+    ]
+  }
+}
