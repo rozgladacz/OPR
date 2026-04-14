@@ -1,3 +1,8 @@
+// ============================================================
+// SECTION: GLOBAL STATE & REFRESH TOKEN UTILS
+// normalizeRosterRefreshCycleToken, resolveRosterRefreshPriority
+// Globalne zmienne stanu + narzędzia wersjonowania odświeżeń.
+// ============================================================
 const abilityDefinitionsCache = new Map();
 const ARMY_RULE_OFF_PREFIX = '__army_off__';
 
@@ -47,6 +52,10 @@ function resolveRosterRefreshPriority(state, cycleToken) {
   return { apply: true, token, state: nextState };
 }
 
+// ============================================================
+// SECTION: ABILITY PICKER
+// initAbilityPicker, initAbilityPickers — picker zdolności w edytorze
+// ============================================================
 function initAbilityPicker(root) {
   const definitionsData = root.dataset.definitions || '';
   let definitions;
@@ -686,6 +695,12 @@ function initAbilityPickers() {
   });
 }
 
+// ============================================================
+// SECTION: TEXT PARSING UTILS
+// splitTraits, normalizeName, extractNumber, abilityIdentifier,
+// passiveIdentifier, parseFlagString, normalizeRangeValue,
+// stripOptionalFlagSuffix
+// ============================================================
 const ABILITY_NAME_MAX_LENGTH = 60;
 const ABILITY_ALIASES = new Map([
   ['nieustepliwy', 'przygotowanie'],
@@ -839,6 +854,11 @@ function stripOptionalFlagSuffix(name) {
 }
 
 
+// ============================================================
+// SECTION: SPELL WEAPON COST PREVIEW
+// initSpellWeaponCostPreview — podgląd kosztu broni zaklęcia,
+// wywołuje POST /armies/{id}/spells/weapon-cost-preview
+// ============================================================
 function initSpellWeaponCostPreview() {
   document.querySelectorAll('form[data-spell-weapon-form]').forEach((form) => {
     const costValueEl = form.querySelector('[data-spell-weapon-cost]');
@@ -973,6 +993,16 @@ function initSpellWeaponCostPreview() {
   });
 }
 
+// ============================================================
+// SECTION: UI PICKERS — NUMBER, RANGE, WEAPON DEFAULTS
+// initNumberPicker, initNumberPickers, initRangePicker,
+// initRangePickers, initWeaponDefaults
+//
+// UWAGA: To są helpery UI (spinners, zakresy) — NIE silnik kosztów.
+// Wywoływane w łańcuchu DOMContentLoaded. Ich brak = ReferenceError
+// który cicho blokuje całą inicjalizację strony.
+// NIE usuwać przy cleanup kosztowym.
+// ============================================================
 function initNumberPicker(root) {
   const selectEl = root.querySelector('.number-picker-select');
   const customInput = root.querySelector('.number-picker-custom');
@@ -1289,6 +1319,10 @@ function initWeaponDefaults() {
   });
 }
 
+// ============================================================
+// SECTION: WEAPON PICKER
+// initWeaponPicker, initWeaponPickers — drzewo wyboru broni
+// ============================================================
 function initWeaponPicker(root) {
   const treePayloadRaw =
     root.dataset.weaponTreePayload ||
@@ -2311,6 +2345,11 @@ function initWeaponPickers() {
   });
 }
 
+// ============================================================
+// SECTION: ROSTER ITEM RENDERING
+// formatPoints, createRosterItemElement, renderPassiveEditor
+// Tworzą elementy listy rozpiski i edytor pasywek.
+// ============================================================
 function formatPoints(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
@@ -2661,6 +2700,12 @@ function renderPassiveEditor(
   return true;
 }
 
+// ============================================================
+// SECTION: LOADOUT STATE MANAGEMENT
+// createLoadoutState, cloneLoadoutState, serializeLoadoutState,
+// ensureStateEntries, ensurePassiveStateEntries, itp.
+// Zarządza stanem loadoutu oddziału (broń, zdolności, pasywki).
+// ============================================================
 function normalizeLoadoutKey(rawKey) {
   if (rawKey === undefined || rawKey === null) {
     return '';
@@ -3069,6 +3114,11 @@ function createModeIndicator(mode) {
   return indicator;
 }
 
+// ============================================================
+// SECTION: EDITOR RENDERERS
+// renderAbilityEditor, renderWeaponEditor, toggleSectionVisibility
+// Renderują edytory zdolności i broni w prawym panelu rozpiski.
+// ============================================================
 function renderAbilityEditor(
   container,
   items,
@@ -3485,6 +3535,10 @@ function renderWeaponEditor(
   return true;
 }
 
+// ============================================================
+// SECTION: ROSTER ADDERS
+// initRosterAdders — przyciski dodawania oddziałów do rozpiski
+// ============================================================
 function initRosterAdders(root) {
   if (!root) {
     return;
@@ -3587,6 +3641,18 @@ function initRosterAdders(root) {
   });
 }
 
+// ============================================================
+// SECTION: ROSTER EDITOR CLOSURE
+// initRosterEditor — wielkie domknięcie (~2000 linii).
+// Zawiera ~60 prywatnych funkcji współdzielących stan przez closure-scope:
+//   loadoutState, activeItem, refreshRosterCostBadgesInProgress,
+//   pendingRefreshOptions, lastQuoteItemCosts, itp.
+// Kluczowe podfunkcje:
+//   handleStateChange, renderEditors, refreshRosterCostBadges,
+//   fetchRosterUnitQuote, applyServerUpdate, selectItem
+// UWAGA: include_item_costs=false dla badge-only calls (refreshRosterCostBadges),
+//        include_item_costs=true tylko dla quote aktywnego oddziału (handleStateChange).
+// ============================================================
 function initRosterEditor() {
   const root = document.querySelector('[data-roster-root]');
   if (!root) {
@@ -5846,6 +5912,10 @@ function renderEditors() {
 
 }
 
+// ============================================================
+// SECTION: SPELL ABILITY FORMS
+// initSpellAbilityForms — formularze zdolności zaklęć
+// ============================================================
 function initSpellAbilityForms() {
   document.querySelectorAll('[data-spell-ability-form]').forEach((form) => {
     const abilitySelect = form.querySelector('[data-ability-select]');
@@ -6036,6 +6106,10 @@ function initSpellAbilityForms() {
   });
 }
 
+// ============================================================
+// SECTION: ARMORY WEAPON TREE
+// initArmoryWeaponTree — drzewo broni w zbrojowni (filtry, sortowanie)
+// ============================================================
 function initArmoryWeaponTree() {
   const root = document.getElementById('armory-weapons-tree');
   if (!root) {
@@ -6541,6 +6615,13 @@ function initArmoryWeaponTree() {
   applyFilterAndRender();
 }
 
+// ============================================================
+// SECTION: BOOTSTRAP — DOMContentLoaded
+// Łańcuch inicjalizacji (kolejność krytyczna — patrz AGENTS.md):
+//   initAbilityPickers → initNumberPickers → initRangePickers →
+//   initWeaponPickers → initRosterEditor → initWeaponDefaults →
+//   initSpellAbilityForms → initArmoryWeaponTree → initSpellWeaponCostPreview
+// ============================================================
 document.addEventListener('DOMContentLoaded', () => {
   initAbilityPickers();
   initNumberPickers();
