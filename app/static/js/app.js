@@ -4185,6 +4185,7 @@ function initRosterEditor() {
   let customEditInput = null;
   let autoSaveEnabled = false;
   let ignoreNextSave = false;
+  let suppressNextBadgeRefresh = false;
   let saveTimer = null;
   let isSaving = false;
   let pendingSave = false;
@@ -5236,7 +5237,9 @@ function initRosterEditor() {
         auras: Array.isArray(nextAuraItems) ? nextAuraItems : [],
       });
       if (isActiveMatch) {
+        suppressNextBadgeRefresh = true;
         syncEditorFromItem(targetItem, { preserveAutoSave: true });
+        suppressNextBadgeRefresh = false;
       }
     };
 
@@ -5422,6 +5425,7 @@ function initRosterEditor() {
       ? normalizedOptions.totalOverride
       : null;
     const recomputeItems = normalizedOptions.recomputeItems !== false;
+    const changedUnitId = normalizedOptions.changedUnitId || null;
     const normalizedToken = normalizeRosterRefreshCycleToken(cycleToken, nextRefreshVersion());
     if (normalizedToken.dedupeKey && normalizedToken.dedupeKey === lastRefreshRosterCostCycleToken) {
       return;
@@ -5473,6 +5477,24 @@ function initRosterEditor() {
             : null;
           const safeTotal = Number.isFinite(expectedSingleUnitTotal) ? expectedSingleUnitTotal : summedTotal;
           updateTotalSummary(safeTotal);
+          return;
+        }
+
+        if (changedUnitId) {
+          const changedItem = rosterItems.find(
+            (item) => item.getAttribute('data-roster-unit-id') === String(changedUnitId),
+          );
+          if (changedItem) {
+            setRosterItemCostStatus(changedItem, 'loading');
+          }
+          const cachedTotal = rosterItems.reduce((sum, item) => {
+            const value = Number(item?.getAttribute?.('data-unit-cost'));
+            return Number.isFinite(value) ? sum + value : sum;
+          }, 0);
+          const decision = applyRefreshPriority(normalizedToken);
+          if (decision.apply) {
+            updateTotalSummary(cachedTotal);
+          }
           return;
         }
 
@@ -5572,6 +5594,21 @@ function initRosterEditor() {
     })();
   }
 
+  function recalculateTotalFromCachedBadges() {
+    const listElement = rosterListEl || ensureRosterList();
+    if (!listElement) return;
+    const items = Array.from(listElement.querySelectorAll('[data-roster-item]'));
+    if (!items.length) return;
+    const summedTotal = items.reduce((sum, item) => {
+      const v = Number(item?.getAttribute?.('data-unit-cost'));
+      return Number.isFinite(v) ? sum + v : sum;
+    }, 0);
+    const expectedSingleUnitTotal = items.length === 1
+      ? Number(items[0].getAttribute('data-unit-cost'))
+      : null;
+    const safeTotal = Number.isFinite(expectedSingleUnitTotal) ? expectedSingleUnitTotal : summedTotal;
+    updateTotalSummary(safeTotal);
+  }
 
 
   function handleStateChange() {
@@ -5618,6 +5655,8 @@ function initRosterEditor() {
           renderEditors();
           setCostDisplayStatus('ready');
           renderActiveCost(quote.total);
+          setRosterItemCostStatus(activeItem, 'ready');
+          recalculateTotalFromCachedBadges();
         })
         .catch((error) => {
           if (error && error.name === 'AbortError') {
@@ -5628,9 +5667,11 @@ function initRosterEditor() {
           if (Number.isFinite(total)) {
             setCostDisplayStatus('ready');
             renderActiveCost(total);
+            setRosterItemCostStatus(activeItem, 'ready');
             return;
           }
           setCostDisplayStatus('error');
+          setRosterItemCostStatus(activeItem, 'error');
         })
         .finally(() => {
           if (activeQuoteController && activeQuoteController.signal === currentSignal) {
@@ -5655,7 +5696,15 @@ function initRosterEditor() {
       activeItem.setAttribute('data-unit-count', String(currentCount));
       invalidateCachedAttribute(activeItem, 'data-unit-count');
     }
-    refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, stateChangeCycleToken);
+    if (suppressNextBadgeRefresh) {
+      suppressNextBadgeRefresh = false;
+    } else {
+      refreshRosterCostBadges({
+        totalOverride: null,
+        recomputeItems: true,
+        changedUnitId: activeId || null,
+      }, stateChangeCycleToken);
+    }
     if (ignoreNextSave) {
       ignoreNextSave = false;
       return;
