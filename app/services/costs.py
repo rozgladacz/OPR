@@ -2265,6 +2265,7 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
         getattr(roster_unit, "unit", None),
         _ensure_extra_data(getattr(roster_unit, "extra_weapons_json", None)),
         count,
+        include_item_costs=False,
     )
     return float(quote.get("selected_total") or 0.0)
 
@@ -2272,12 +2273,19 @@ def roster_unit_cost(roster_unit: models.RosterUnit) -> float:
 def recalculate_roster_costs(
     roster: models.Roster | None,
     loadout_overrides: Mapping[int, dict[str, Any] | None] | None = None,
+    changed_unit_ids: set[int] | None = None,
 ) -> tuple[float, dict[int, float]]:
     """Recalculate ``cached_cost`` for every roster unit and return total + per-unit map.
 
     ``loadout_overrides`` can provide transient loadouts keyed by ``RosterUnit.id``.
     Overrides are used for cost calculation in the current call and persisted back to
     ``cached_cost`` immediately.
+
+    ``changed_unit_ids`` — when provided, only those units are recalculated; all
+    other units reuse their existing ``cached_cost`` value.  This avoids recomputing
+    the entire roster on every single-unit edit.  Only pass this when you can guarantee
+    that the other units' ``cached_cost`` values are up to date (i.e. after a prior full
+    recalculation or save).
 
     Architectural rule: ORM entities and SQLAlchemy ``Session`` are processed
     sequentially in-request. If CPU parallelism is introduced in the future, it must
@@ -2290,8 +2298,14 @@ def recalculate_roster_costs(
     unit_costs: dict[int, float] = {}
     roster_units = getattr(roster, "roster_units", []) or []
     for roster_unit in roster_units:
-        override = None
         unit_id = getattr(roster_unit, "id", None)
+        if changed_unit_ids is not None and unit_id not in changed_unit_ids:
+            cost_value = float(getattr(roster_unit, "cached_cost", None) or 0.0)
+            if unit_id is not None:
+                unit_costs[unit_id] = cost_value
+            total += cost_value
+            continue
+        override = None
         if loadout_overrides and unit_id is not None:
             override = loadout_overrides.get(unit_id)
         quote = calculate_roster_unit_quote(
@@ -2300,6 +2314,7 @@ def recalculate_roster_costs(
             if override is not None
             else _ensure_extra_data(getattr(roster_unit, "extra_weapons_json", None)),
             normalize_roster_unit_count(getattr(roster_unit, "count", 1), default=1),
+            include_item_costs=False,
         )
         cost_value = float(quote.get("selected_total") or 0.0)
         if hasattr(roster_unit, "cached_cost"):

@@ -274,6 +274,7 @@ def _classification_map(
 def _internal_roster_unit_quote(
     roster_unit: models.RosterUnit,
     loadout: dict[str, Any] | None = None,
+    include_item_costs: bool = False,
 ) -> dict[str, Any]:
     """Internal adapter that routes all roster-unit quote calculations via costs.py."""
     normalized_count = costs.normalize_roster_unit_count(
@@ -283,6 +284,7 @@ def _internal_roster_unit_quote(
         getattr(roster_unit, "unit", None),
         loadout,
         normalized_count,
+        include_item_costs=include_item_costs,
     )
 
 
@@ -788,9 +790,6 @@ def add_roster_unit(
         )
         selected_auras = _selected_ability_entries(loadout_payload, aura_items, "aura")
         total_cost, _ = costs.recalculate_roster_costs(roster)
-        loadout_mapping = (
-            {roster_unit.id: loadout_payload} if roster_unit.id is not None else None
-        )
         loadout_json = json.dumps(loadout_payload, ensure_ascii=False)
         default_summary = _default_loadout_summary(unit)
         loadout_summary = _loadout_display_summary(
@@ -1144,14 +1143,12 @@ def update_roster_unit(
         if ru.id == roster_unit.id:
             ru.custom_name = custom_name.strip() if custom_name else None
             ru.count = roster_unit.count
+    affected_ids = {ru.id for ru in affected_units if ru.id is not None}
     total_cost, _ = costs.recalculate_roster_costs(
-        roster, loadout_overrides=applied_loadouts
+        roster, loadout_overrides=applied_loadouts, changed_unit_ids=affected_ids
     )
 
     db.commit()
-    loadout_mapping = {
-        key: value for key, value in applied_loadouts.items() if key is not None
-    }
     accept_header = (request.headers.get("accept") or "").lower()
     if "application/json" in accept_header:
         def _unit_payload_for_response(target: models.RosterUnit) -> dict[str, Any]:

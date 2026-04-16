@@ -5393,30 +5393,6 @@ function initRosterEditor() {
     return total;
   }
 
-  async function updateCostDisplays() {
-    if (!activeItem || !loadoutState) {
-      return null;
-    }
-    const rosterUnitId = activeItem.getAttribute('data-roster-unit-id') || '';
-    const quotePayload = serializeQuotePayloadFromState(loadoutState, currentCount);
-    setCostDisplayStatus('loading');
-    try {
-      const quote = await fetchRosterUnitQuote(rosterUnitId, quotePayload, null);
-      setCostDisplayStatus('ready');
-      return renderActiveCost(quote.total);
-    } catch (error) {
-      console.error('Nie udało się pobrać wyceny oddziału (quote)', error);
-      const total = getLastKnownItemCost(activeItem);
-      if (Number.isFinite(total)) {
-        setCostDisplayStatus('ready');
-        return renderActiveCost(total);
-      }
-      setCostDisplayStatus('error');
-      return null;
-    }
-  }
-
-
   function refreshRosterCostBadges(options = null, cycleToken = null) {
     const normalizedOptions = options && typeof options === 'object'
       ? options
@@ -5568,10 +5544,7 @@ function initRosterEditor() {
             : null;
           const safeTotal = Number.isFinite(expectedSingleUnitTotal) ? expectedSingleUnitTotal : totalOverride;
           updateTotalSummary(safeTotal);
-        } else if (
-          Number.isFinite(aggregatedTotal)
-          && currentRefreshCycle > preserveServerTotalUntilRefreshCycle
-        ) {
+        } else if (Number.isFinite(aggregatedTotal)) {
           const expectedSingleUnitTotal = rosterItems.length === 1
             ? Number(rosterItems[0].getAttribute('data-unit-cost'))
             : null;
