@@ -3671,6 +3671,52 @@ function initRosterEditor() {
   const form = root.querySelector('[data-roster-editor-form]');
   const duplicateForm = root.querySelector('[data-roster-editor-duplicate]');
   const deleteForm = root.querySelector('[data-roster-editor-delete]');
+  if (deleteForm) {
+    deleteForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!confirm('Usunąć pozycję?')) return;
+      const action = deleteForm.getAttribute('action');
+      if (!action) return;
+      try {
+        const response = await fetch(action, {
+          method: 'POST',
+          headers: { accept: 'application/json' },
+        });
+        if (!response.ok) {
+          window.location.href = action;
+          return;
+        }
+        const data = await response.json();
+        const deletedId = String(data.deleted_roster_unit_id || '');
+        if (deletedId) {
+          const listElement = rosterListEl || root.querySelector('[data-roster-list]');
+          if (listElement) {
+            const item = listElement.querySelector(`[data-roster-unit-id="${deletedId}"]`);
+            if (item) {
+              const entry = item.closest('[data-roster-entry]');
+              (entry || item).remove();
+            }
+          }
+        }
+        if (activeItem && activeItem.getAttribute('data-roster-unit-id') === deletedId) {
+          activeItem = null;
+          loadoutState = null;
+          const editorEl = root.querySelector('[data-roster-editor]');
+          const emptyEl = root.querySelector('[data-roster-editor-empty]');
+          const actionsEl = root.querySelector('[data-roster-editor-actions]');
+          if (editorEl) editorEl.classList.add('d-none');
+          if (emptyEl) emptyEl.classList.remove('d-none');
+          if (actionsEl) actionsEl.classList.add('d-none');
+        }
+        if (Number.isFinite(data.total_cost)) {
+          updateTotalSummary(data.total_cost);
+        }
+      } catch (err) {
+        console.error('Błąd usuwania oddziału', err);
+        window.location.href = action;
+      }
+    });
+  }
   const editorActions = root.querySelector('[data-roster-editor-actions]');
   const countInput = root.querySelector('[data-roster-editor-count]');
   const customNameInput = root.querySelector('[data-roster-editor-custom-name]');
@@ -3701,6 +3747,7 @@ function initRosterEditor() {
   let quoteRequestVersion = 0;
   let lastQuoteItemCosts = null;
   let lastSelectedRole = null;
+  let skipCostDisplayLoading = false;
 
   function nextRefreshVersion(seedVersion = null) {
     const seed = Number(seedVersion);
@@ -5238,6 +5285,7 @@ function initRosterEditor() {
       });
       if (isActiveMatch) {
         suppressNextBadgeRefresh = true;
+        skipCostDisplayLoading = true;
         syncEditorFromItem(targetItem, { preserveAutoSave: true });
         suppressNextBadgeRefresh = false;
       }
@@ -5613,7 +5661,11 @@ function initRosterEditor() {
       const currentSignal = activeQuoteController.signal;
       const rosterUnitId = activeItem ? activeItem.getAttribute('data-roster-unit-id') || '' : '';
       const quotePayload = serializeQuotePayloadFromState(loadoutState, currentCount);
-      setCostDisplayStatus('loading');
+      if (skipCostDisplayLoading) {
+        skipCostDisplayLoading = false;
+      } else {
+        setCostDisplayStatus('loading');
+      }
       fetchRosterUnitQuote(rosterUnitId, quotePayload, currentSignal)
         .then((quote) => {
           if (requestVersion !== quoteRequestVersion) {
@@ -5882,9 +5934,9 @@ function renderEditors() {
       initializeMoveForms();
       const initialItems = collectInitialRosterItems();
       hydrateInitialLockPairs();
-      refreshRosterCostBadges();
       syncInitialRosterList(initialItems);
       selectInitialRosterItem();
+      refreshRosterCostBadges();
     } catch (error) {
       resetRosterCaches();
       throw error;

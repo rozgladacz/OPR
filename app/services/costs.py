@@ -1668,9 +1668,8 @@ def calculate_roster_unit_quote(
         }
 
     roster_unit = SimpleNamespace(unit=unit, count=unit_count, extra_weapons_json=None)
-    base_traits = _strip_role_traits(
-        compute_passive_state(unit, normalized_loadout).traits
-    )
+    _passive_state_cache = compute_passive_state(unit, normalized_loadout)
+    base_traits = _strip_role_traits(_passive_state_cache.traits)
     mode_total = normalized_loadout.get("mode") == "total"
     model_count = unit_count
 
@@ -1740,7 +1739,7 @@ def calculate_roster_unit_quote(
         ranged_bucket,
         fallback=previous_classification_slug or "wojownik",
     )
-    totals = roster_unit_role_totals(roster_unit, normalized_loadout)
+    totals = roster_unit_role_totals(roster_unit, normalized_loadout, _passive_state=_passive_state_cache)
     warrior_total = float(totals.get("wojownik") or 0.0)
     shooter_total = float(totals.get("strzelec") or 0.0)
     selected_total_raw = shooter_total if selected_role_slug == "strzelec" else warrior_total
@@ -1839,7 +1838,7 @@ def calculate_roster_unit_quote(
                 item_aura[str(ability_id)] = cost
 
         item_passive_deltas: dict[str, float] = {}
-        passive_state_for_deltas = compute_passive_state(unit, normalized_loadout)
+        passive_state_for_deltas = _passive_state_cache
         current_passive = dict(normalized_loadout.get("passive") or {})
         for entry in passive_state_for_deltas.payload:
             slug = str(entry.get("slug") or "").strip()
@@ -1891,12 +1890,18 @@ def calculate_roster_unit_quote(
 def roster_unit_role_totals(
     roster_unit: models.RosterUnit,
     payload: dict[str, dict[str, int]] | None = None,
+    *,
+    _passive_state: PassiveState | None = None,
 ) -> dict[str, float]:
     """Return totals for both role variants for one roster unit.
 
     ``roster_unit.count`` is normalized through :func:`normalize_roster_unit_count`.
     Values less than or equal to zero (or unparsable values) return
     zero totals for both roles.
+
+    ``_passive_state`` — optional pre-computed result of ``compute_passive_state``.
+    When provided, avoids the redundant second call to ``compute_passive_state``
+    (e.g. when the caller already computed it).
     """
     unit = getattr(roster_unit, "unit", None)
     if unit is None:
@@ -1912,7 +1917,7 @@ def roster_unit_role_totals(
     mode_value = raw_data.get("mode")
     loadout_mode: str | None = mode_value if isinstance(mode_value, str) else None
 
-    passive_state = compute_passive_state(unit, raw_data)
+    passive_state = _passive_state if _passive_state is not None else compute_passive_state(unit, raw_data)
     base_traits = _strip_role_traits(passive_state.traits)
     default_traits_full = _active_traits_from_payload(passive_state.payload, {})
     default_base_traits = _strip_role_traits(default_traits_full)
@@ -2095,6 +2100,9 @@ def roster_unit_role_totals(
                 active_total += cost_value
         return ability_map, passive_total, active_total
 
+    # Pre-compute weapon components once (role-independent: role slug is stripped)
+    _shared_weapon_components = _weapon_components_map(base_traits)
+
     def _compute_total(current_traits: Sequence[str], selected_role: str) -> float:
         ability_map, passive_total, _ = _ability_cost_map(current_traits)
         default_traits_with_role = _with_role_trait(default_base_traits, selected_role)
@@ -2106,9 +2114,7 @@ def roster_unit_role_totals(
         )
         base_per_model = base_value
         passive_entries = _passive_entries(current_traits)
-        weapon_traits_without_role = _strip_role_traits(current_traits)
-        weapon_components = _weapon_components_map(weapon_traits_without_role)
-        weapon_buckets = _aggregate_weapon_buckets(weapon_components)
+        weapon_buckets = _aggregate_weapon_buckets(_shared_weapon_components)
 
         total = base_per_model * model_count
         if passive_total:
@@ -2274,6 +2280,7 @@ def recalculate_roster_costs(
     roster: models.Roster | None,
     loadout_overrides: Mapping[int, dict[str, Any] | None] | None = None,
     changed_unit_ids: set[int] | None = None,
+    precomputed_costs: Mapping[int, float] | None = None,
 ) -> tuple[float, dict[int, float]]:
     """Recalculate ``cached_cost`` for every roster unit and return total + per-unit map.
 
@@ -2286,6 +2293,11 @@ def recalculate_roster_costs(
     the entire roster on every single-unit edit.  Only pass this when you can guarantee
     that the other units' ``cached_cost`` values are up to date (i.e. after a prior full
     recalculation or save).
+
+    ``precomputed_costs`` — when provided, units whose id appears in this mapping
+    use the given cost value directly without calling ``calculate_roster_unit_quote``.
+    Callers are responsible for ensuring these values are correct (e.g. derived from
+    a prior ``_classification_map`` that already computed the quote).
 
     Architectural rule: ORM entities and SQLAlchemy ``Session`` are processed
     sequentially in-request. If CPU parallelism is introduced in the future, it must
@@ -2303,6 +2315,13 @@ def recalculate_roster_costs(
             cost_value = float(getattr(roster_unit, "cached_cost", None) or 0.0)
             if unit_id is not None:
                 unit_costs[unit_id] = cost_value
+            total += cost_value
+            continue
+        if precomputed_costs and unit_id is not None and unit_id in precomputed_costs:
+            cost_value = round(float(precomputed_costs[unit_id]), 2)
+            if hasattr(roster_unit, "cached_cost"):
+                roster_unit.cached_cost = cost_value
+            unit_costs[unit_id] = cost_value
             total += cost_value
             continue
         override = None
