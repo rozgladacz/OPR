@@ -1,3 +1,8 @@
+# ============================================================
+# SECTION: IMPORTS & UTILITY HELPERS
+# _parse_bool, _unit_cache_value, _unit_eager_options,
+# _unit_payload_cached, _unit_army_flags, _json_safe, itp.
+# ============================================================
 from __future__ import annotations
 
 import json
@@ -164,6 +169,11 @@ def _json_safe(value: Any) -> Any:
     return None
 
 
+# ============================================================
+# SECTION: ACCESS CONTROL & ROSTER ORDERING
+# _ensure_roster_view_access, _ensure_roster_edit_access,
+# _ordered_roster_units, _apply_roster_order
+# ============================================================
 def _ensure_roster_view_access(roster: models.Roster, user: models.User) -> None:
     if user.is_admin:
         return
@@ -264,6 +274,7 @@ def _classification_map(
 def _internal_roster_unit_quote(
     roster_unit: models.RosterUnit,
     loadout: dict[str, Any] | None = None,
+    include_item_costs: bool = False,
 ) -> dict[str, Any]:
     """Internal adapter that routes all roster-unit quote calculations via costs.py."""
     normalized_count = costs.normalize_roster_unit_count(
@@ -273,9 +284,15 @@ def _internal_roster_unit_quote(
         getattr(roster_unit, "unit", None),
         loadout,
         normalized_count,
+        include_item_costs=include_item_costs,
     )
 
 
+# ============================================================
+# SECTION: ROSTER VIEWS & CRUD
+# list_rosters, new_roster_form, create_roster, edit_roster,
+# update_roster, duplicate_roster, delete_roster
+# ============================================================
 @router.get("", response_class=HTMLResponse)
 def list_rosters(
     request: Request,
@@ -411,7 +428,7 @@ def edit_roster(
 
     selected_id = request.query_params.get("selected")
 
-    total_cost, _ = costs.recalculate_roster_costs(roster)
+    costs.ensure_cached_costs(roster.roster_units)
     available_units_stmt = (
         select(models.Unit)
         .where(models.Unit.army_id == roster.army_id)
@@ -484,9 +501,19 @@ def edit_roster(
         if roster_unit.id is not None:
             sanitized_loadouts[roster_unit.id] = loadout
 
-    classifications, _totals_by_id = _classification_map(
+    classifications, totals_by_id = _classification_map(
         roster.roster_units, sanitized_loadouts
     )
+    # Avoids the second full recalculate_roster_costs call by deriving costs from
+    # the classification map that was already computed above.
+    total_cost = 0.0
+    for roster_unit in roster.roster_units:
+        ru_id = roster_unit.id
+        role_slug = (classifications.get(ru_id) or {}).get("slug", "wojownik")
+        cost_value = round(float(totals_by_id.get(ru_id, {}).get(role_slug, 0.0)), 2)
+        roster_unit.cached_cost = cost_value
+        total_cost += cost_value
+    total_cost = round(total_cost, 2)
 
     for roster_unit in roster.roster_units:
         unit = roster_unit.unit
@@ -678,6 +705,10 @@ def delete_roster(
     return RedirectResponse(url="/rosters", status_code=303)
 
 
+# ============================================================
+# SECTION: ROSTER UNIT MANAGEMENT
+# add_roster_unit, move_roster_unit, reorder_roster_units
+# ============================================================
 @router.post("/{roster_id}/units/add")
 def add_roster_unit(
     roster_id: int,
@@ -768,10 +799,11 @@ def add_roster_unit(
             loadout_payload, active_items, "active"
         )
         selected_auras = _selected_ability_entries(loadout_payload, aura_items, "aura")
-        total_cost, _ = costs.recalculate_roster_costs(roster)
-        loadout_mapping = (
-            {roster_unit.id: loadout_payload} if roster_unit.id is not None else None
+        total_cost = sum(
+            float(getattr(ru, "cached_cost", None) or 0.0)
+            for ru in getattr(roster, "roster_units", []) or []
         )
+        total_cost = round(total_cost, 2)
         loadout_json = json.dumps(loadout_payload, ensure_ascii=False)
         default_summary = _default_loadout_summary(unit)
         loadout_summary = _loadout_display_summary(
@@ -987,6 +1019,12 @@ def reorder_roster_units(
     return JSONResponse(_json_safe(payload))
 
 
+# ============================================================
+# SECTION: UNIT UPDATE & QUOTE ENDPOINT
+# update_roster_unit — zapis loadoutu, klasyfikacji, liczebności
+# quote_roster_unit  — POST /quote, wywołuje calculate_roster_unit_quote
+# duplicate_roster_unit, delete_roster_unit
+# ============================================================
 @router.post("/{roster_id}/units/{roster_unit_id}/update")
 def update_roster_unit(
     roster_id: int,
@@ -1013,7 +1051,6 @@ def update_roster_unit(
     if not roster or roster_unit is None or roster_unit.roster_id != roster.id:
         raise HTTPException(status_code=404)
     _ensure_roster_edit_access(roster, current_user)
-
     roster_unit.count = max(int(count), 1)
     unit_data_cache: dict[int, dict[str, Any]] = {}
     unit_payloads: dict[int, dict[str, Any]] = {}
@@ -1119,14 +1156,20 @@ def update_roster_unit(
         if ru.id == roster_unit.id:
             ru.custom_name = custom_name.strip() if custom_name else None
             ru.count = roster_unit.count
+    affected_ids = {ru.id for ru in affected_units if ru.id is not None}
+    precomputed_costs: dict[int, float] = {}
+    for ru in affected_units:
+        if ru.id is None:
+            continue
+        role_slug = (classifications.get(ru.id) or {}).get("slug", "wojownik")
+        precomputed_costs[ru.id] = round(float(totals_by_id.get(ru.id, {}).get(role_slug, 0.0)), 2)
     total_cost, _ = costs.recalculate_roster_costs(
-        roster, loadout_overrides=applied_loadouts
+        roster,
+        loadout_overrides=applied_loadouts,
+        changed_unit_ids=affected_ids,
+        precomputed_costs=precomputed_costs,
     )
-
     db.commit()
-    loadout_mapping = {
-        key: value for key, value in applied_loadouts.items() if key is not None
-    }
     accept_header = (request.headers.get("accept") or "").lower()
     if "application/json" in accept_header:
         def _unit_payload_for_response(target: models.RosterUnit) -> dict[str, Any]:
@@ -1227,10 +1270,13 @@ def quote_roster_unit(
             default=0,
         )
 
+    include_item_costs = request_payload.get("include_item_costs", True) is not False
+
     quote = costs.calculate_roster_unit_quote(
         roster_unit.unit,
         request_payload.get("loadout"),
         count,
+        include_item_costs=include_item_costs,
     )
     return JSONResponse(
         _json_safe(
@@ -1240,10 +1286,12 @@ def quote_roster_unit(
                 "unit_id": roster_unit.id,
                 "count": count,
                 "cost_engine_version": quote.get("cost_engine_version"),
+                "selected_role": quote.get("selected_role"),
                 "warrior_total": quote.get("warrior_total"),
                 "shooter_total": quote.get("shooter_total"),
                 "selected_total": quote.get("selected_total"),
                 "components": quote.get("components") or {},
+                "item_costs": quote.get("item_costs") or {},
                 "loadout": quote.get("loadout") or {},
             }
         )
@@ -1296,6 +1344,7 @@ def duplicate_roster_unit(
 def delete_roster_unit(
     roster_id: int,
     roster_unit_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -1305,6 +1354,13 @@ def delete_roster_unit(
         raise HTTPException(status_code=404)
     _ensure_roster_edit_access(roster, current_user)
 
+    accept_header = (request.headers.get("accept") or "").lower()
+    wants_json = "application/json" in accept_header
+    removed_cost = float(roster_unit.cached_cost or 0.0)
+    pre_delete_total = (
+        sum(float(ru.cached_cost or 0.0) for ru in roster.roster_units)
+        if wants_json else 0.0
+    )
     removed_position = roster_unit.position or 0
     db.query(models.RosterUnitPair).filter(
         models.RosterUnitPair.roster_id == roster.id,
@@ -1324,7 +1380,20 @@ def delete_roster_unit(
         .values(position=models.RosterUnit.position - 1)
     )
     db.commit()
+    if wants_json:
+        return JSONResponse({
+            "deleted_roster_unit_id": roster_unit_id,
+            "total_cost": round(pre_delete_total - removed_cost, 2),
+        })
     return RedirectResponse(url=f"/rosters/{roster.id}", status_code=303)
+
+
+# ============================================================
+# SECTION: UNIT DISPLAY HELPERS
+# _default_loadout_summary, _unit_weapon_options, _passive_entries,
+# _base_cost_per_model, _default_loadout_payload, itp.
+# Dane wyświetlane w edytorze oddziału (prawy panel rozpiski).
+# ============================================================
 def _default_loadout_summary(unit: models.Unit) -> str:
     parts: list[str] = []
     for weapon, count in unit.default_weapon_loadout:
@@ -1692,6 +1761,12 @@ def _selected_passive_entries(
     return selected
 
 
+# ============================================================
+# SECTION: LOADOUT PROCESSING
+# _role_slug_map, _apply_classification_to_loadout,
+# _selected_ability_entries, _ability_entries, itp.
+# Buduje payload loadoutu wysyłany do calculate_roster_unit_quote.
+# ============================================================
 def _role_slug_map(unit: models.Unit | None) -> dict[str, str]:
     if unit is None:
         return {}
@@ -2191,6 +2266,10 @@ def _parse_loadout_json(text: str | None) -> dict[str, Any]:
     return base
 
 
+# ============================================================
+# SECTION: LOADOUT SANITIZATION
+# _sanitize_loadout — walidacja i czyszczenie loadoutu przed zapisem
+# ============================================================
 def _sanitize_loadout(
     unit: models.Unit,
     model_count: int,

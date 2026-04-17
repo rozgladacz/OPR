@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import sys
 
+import pytest
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from starlette.requests import Request
@@ -340,5 +342,109 @@ def test_quote_endpoint_returns_zero_totals_for_zero_negative_and_unparsable_cou
         assert quoted_zero["selected_total"] == 0.0
         assert quoted_negative["selected_total"] == 0.0
         assert quoted_unparsable["selected_total"] == 0.0
+    finally:
+        session.close()
+
+
+def test_quote_endpoint_returns_item_costs_and_selected_role() -> None:
+    session = _session()
+    try:
+        fixture = _build_roster_fixture(session)
+        roster = fixture["roster"]
+        roster_unit = fixture["unit_a"]
+        ids = fixture["ids"]
+
+        response = rosters.quote_roster_unit(
+            roster.id,
+            roster_unit.id,
+            payload={
+                "count": 2,
+                "loadout": {
+                    "mode": "per_model",
+                    "weapons": {str(ids["blade"]): 1},
+                    "active": {str(ids["scout"]): 1},
+                    "aura": {str(ids["heavy"]): 1},
+                    "passive": {"otwarty_transport(2)": 1},
+                },
+            },
+            db=session,
+            current_user=fixture["user"],
+        )
+        payload = _json_response_payload(response)
+
+        # selected_role is present and valid
+        assert payload["selected_role"] in {"wojownik", "strzelec"}
+
+        # item_costs structure is present
+        assert "item_costs" in payload
+        item_costs = payload["item_costs"]
+        assert "weapons" in item_costs
+        assert "active" in item_costs
+        assert "aura" in item_costs
+        assert "passive_deltas" in item_costs
+
+        # weapons: blade is in loadout so should have a cost
+        assert str(ids["blade"]) in item_costs["weapons"]
+        assert item_costs["weapons"][str(ids["blade"])] >= 0.0
+
+        # active: scout should have a cost
+        assert str(ids["scout"]) in item_costs["active"]
+
+        # aura: heavy should have a cost
+        assert str(ids["heavy"]) in item_costs["aura"]
+
+        # passive_deltas: otwarty_transport should have an entry
+        assert "otwarty_transport" in item_costs["passive_deltas"]
+        # delta for a transport should be non-zero when enabled
+        assert item_costs["passive_deltas"]["otwarty_transport"] != 0.0
+
+        # zero-count: item_costs is empty dicts
+        zero_response = rosters.quote_roster_unit(
+            roster.id,
+            roster_unit.id,
+            payload={"count": 0, "loadout": {}},
+            db=session,
+            current_user=fixture["user"],
+        )
+        zero_payload = _json_response_payload(zero_response)
+        assert zero_payload["item_costs"] == {
+            "weapons": {},
+            "active": {},
+            "aura": {},
+            "passive_deltas": {},
+        }
+    finally:
+        session.close()
+
+
+def test_quote_item_costs_weapons_match_weapon_cost_per_model() -> None:
+    session = _session()
+    try:
+        fixture = _build_roster_fixture(session)
+        roster = fixture["roster"]
+        roster_unit = fixture["unit_a"]
+        ids = fixture["ids"]
+
+        response = rosters.quote_roster_unit(
+            roster.id,
+            roster_unit.id,
+            payload={
+                "count": 3,
+                "loadout": {
+                    "mode": "per_model",
+                    "weapons": {str(ids["blade"]): 1},
+                },
+            },
+            db=session,
+            current_user=fixture["user"],
+        )
+        payload = _json_response_payload(response)
+
+        # item_costs.weapons[blade] should equal weapon_cost per 1 model with role traits
+        blade_item_cost = payload["item_costs"]["weapons"][str(ids["blade"])]
+        # weapon_component = item_cost * count (per_model * 1 weapon * 3 models)
+        assert payload["components"]["weapon"] == pytest.approx(
+            blade_item_cost * 3, abs=0.05
+        )
     finally:
         session.close()

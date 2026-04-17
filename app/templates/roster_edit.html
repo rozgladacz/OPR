@@ -228,7 +228,6 @@
                 data-selected-actives='{{ item.selected_active_items | tojson | e }}'
                 data-selected-auras='{{ item.selected_aura_items | tojson | e }}'
                 data-loadout='{{ item.loadout | tojson | e }}'
-                data-unit-classification='{{ item.classification | tojson | e }}'
                 role="button"
                 tabindex="0"
               >
@@ -305,7 +304,7 @@
             <form method="post" data-roster-editor-duplicate>
               <button class="btn btn-outline-secondary btn-sm" type="submit">Duplikuj oddział</button>
             </form>
-            <form method="post" data-roster-editor-delete onsubmit="return confirm('Usunąć pozycję?');">
+            <form method="post" data-roster-editor-delete>
               <button class="btn btn-outline-danger btn-sm" type="submit">Usuń oddział</button>
             </form>
           </div>

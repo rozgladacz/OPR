@@ -100,10 +100,12 @@ def test_quote_api_contract_contains_frontend_required_fields() -> None:
             "unit_id",
             "count",
             "cost_engine_version",
+            "selected_role",
             "warrior_total",
             "shooter_total",
             "selected_total",
             "components",
+            "item_costs",
             "loadout",
         }
         assert payload["roster_unit_id"] == roster_unit.id

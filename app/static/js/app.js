@@ -1,3 +1,8 @@
+// ============================================================
+// SECTION: GLOBAL STATE & REFRESH TOKEN UTILS
+// normalizeRosterRefreshCycleToken, resolveRosterRefreshPriority
+// Globalne zmienne stanu + narzędzia wersjonowania odświeżeń.
+// ============================================================
 const abilityDefinitionsCache = new Map();
 const ARMY_RULE_OFF_PREFIX = '__army_off__';
 
@@ -47,6 +52,10 @@ function resolveRosterRefreshPriority(state, cycleToken) {
   return { apply: true, token, state: nextState };
 }
 
+// ============================================================
+// SECTION: ABILITY PICKER
+// initAbilityPicker, initAbilityPickers — picker zdolności w edytorze
+// ============================================================
 function initAbilityPicker(root) {
   const definitionsData = root.dataset.definitions || '';
   let definitions;
@@ -686,20 +695,12 @@ function initAbilityPickers() {
   });
 }
 
-const RANGE_TABLE = { 0: 0.6, 12: 0.65, 18: 1.0, 24: 1.25, 30: 1.45, 36: 1.55 };
-const ARTILLERY_RANGE_BONUS = { 0: 0.0, 12: 0.85, 18: 0.55, 24: 0.35, 30: 0.2, 36: 0.15 };
-const UNWIELDY_RANGE_PENALTY = { 0: 0.0, 12: 0.6, 18: 0.4, 24: 0.4, 30: 0.3, 36: 0.15 };
-const CAUTIOUS_HIT_BONUS = { 0: 0.0, 12: 0.0, 18: 0.6, 24: 0.7, 30: 0.8, 36: 0.9 };
-// @deprecated Local pricing tables are retained only for local development mode.
-// Production flow should rely on the backend quote endpoint.
-const AP_BASE = { '-1': 0.8, 0: 1.0, 1: 1.4, 2: 1.8, 3: 2.1, 4: 2.3, 5: 2.4 };
-const AP_LANCE = { '-1': 0.15, 0: 0.35, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.1, 5: 0.05 };
-const PENETRATING_MULTIPLIER = { '-1': 1.5, 0: 2.0, 1: 2.5, 2: 2.7, 3: 2.8, 4: 2.9, 5: 3.0 };
-const WAAGH_AP_MODIFIER = { '-1': 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0.02 };
-const BLAST_MULTIPLIER = { 2: 1.9, 3: 2.7, 6: 4.3 };
-const DEADLY_MULTIPLIER = { 2: 1.8, 3: 2.5, 6: 3.8 };
-const OVERCHARGE_MULTIPLIER = 1.05;
-const CLASSIFICATION_SLUGS = new Set(['wojownik', 'strzelec']);
+// ============================================================
+// SECTION: TEXT PARSING UTILS
+// splitTraits, normalizeName, extractNumber, abilityIdentifier,
+// passiveIdentifier, parseFlagString, normalizeRangeValue,
+// stripOptionalFlagSuffix
+// ============================================================
 const ABILITY_NAME_MAX_LENGTH = 60;
 const ABILITY_ALIASES = new Map([
   ['nieustepliwy', 'przygotowanie'],
@@ -818,106 +819,6 @@ function parseFlagString(text) {
   return result;
 }
 
-function flagsToAbilityList(flags) {
-  const abilities = [];
-  Object.entries(flags || {}).forEach(([key, value]) => {
-    if (key === undefined || key === null) {
-      return;
-    }
-    const rawName = String(key).trim();
-    if (!rawName) {
-      return;
-    }
-    if (rawName.startsWith(ARMY_RULE_OFF_PREFIX)) {
-      return;
-    }
-    let name = rawName;
-    let isOptional = false;
-    while (name.endsWith('?') || name.endsWith('!')) {
-      if (name.endsWith('?')) {
-        isOptional = true;
-      }
-      name = name.slice(0, -1).trim();
-    }
-    if (isOptional) {
-      return;
-    }
-    const slug = abilityIdentifier(name) || normalizeName(name);
-    if (typeof value === 'boolean') {
-      if (value) {
-        abilities.push(slug);
-      }
-      return;
-    }
-    if (value === null || value === undefined) {
-      abilities.push(slug);
-      return;
-    }
-    const trimmed = String(value).trim();
-    if (!trimmed) {
-      abilities.push(slug);
-      return;
-    }
-    const lowered = trimmed.toLowerCase();
-    if (lowered === 'true' || lowered === 'yes') {
-      abilities.push(slug);
-      return;
-    }
-    const numeric = Number(trimmed);
-    if (Number.isFinite(numeric) && numeric > 0) {
-      abilities.push(slug);
-    }
-  });
-  return abilities;
-}
-
-function lookupWithNearest(table, key) {
-  if (table === undefined || table === null) {
-    return 0;
-  }
-  const numericKey = Number(key);
-  if (Number.isFinite(numericKey) && Object.prototype.hasOwnProperty.call(table, numericKey)) {
-    return Number(table[numericKey]);
-  }
-  const entries = Object.keys(table).map((entry) => Number(entry));
-  if (!entries.length) {
-    return 0;
-  }
-  const target = Number.isFinite(numericKey) ? numericKey : entries[0];
-  let nearest = entries[0];
-  let minDiff = Math.abs(nearest - target);
-  entries.forEach((entry) => {
-    const diff = Math.abs(entry - target);
-    if (diff < minDiff) {
-      nearest = entry;
-      minDiff = diff;
-    }
-  });
-  return Number(table[nearest]);
-}
-
-function rangeMultiplier(rangeValue) {
-  const numeric = Number(rangeValue);
-  if (Number.isFinite(numeric) && Object.prototype.hasOwnProperty.call(RANGE_TABLE, numeric)) {
-    return RANGE_TABLE[numeric];
-  }
-  const keys = Object.keys(RANGE_TABLE).map((entry) => Number(entry));
-  if (!keys.length) {
-    return 1;
-  }
-  const target = Number.isFinite(numeric) ? numeric : keys[0];
-  let nearest = keys[0];
-  let minDiff = Math.abs(nearest - target);
-  keys.forEach((entry) => {
-    const diff = Math.abs(entry - target);
-    if (diff < minDiff) {
-      nearest = entry;
-      minDiff = diff;
-    }
-  });
-  return RANGE_TABLE[nearest];
-}
-
 function normalizeRangeValue(value) {
   if (value === undefined || value === null) {
     return 0;
@@ -952,385 +853,156 @@ function stripOptionalFlagSuffix(name) {
   return normalized;
 }
 
-function buildWeaponFlags(baseFlags, passiveItems, passiveState) {
-  const result = { ...(baseFlags || {}) };
-  const identifierKeys = new Map();
-  Object.keys(baseFlags || {}).forEach((key) => {
-    const ident = passiveIdentifier(key);
-    if (!ident) {
+
+// ============================================================
+// SECTION: SPELL WEAPON COST PREVIEW
+// initSpellWeaponCostPreview — podgląd kosztu broni zaklęcia,
+// wywołuje POST /armies/{id}/spells/weapon-cost-preview
+// ============================================================
+function initSpellWeaponCostPreview() {
+  document.querySelectorAll('form[data-spell-weapon-form]').forEach((form) => {
+    const costValueEl = form.querySelector('[data-spell-weapon-cost]');
+    if (!costValueEl) {
       return;
     }
-    if (!identifierKeys.has(ident)) {
-      identifierKeys.set(ident, []);
-    }
-    identifierKeys.get(ident).push(key);
-  });
-  const stateMap = passiveState instanceof Map ? passiveState : new Map();
-  (Array.isArray(passiveItems) ? passiveItems : []).forEach((entry) => {
-    if (!entry || !entry.slug) {
+
+    const armyId = form.dataset.armyId || '';
+    if (!armyId) {
       return;
     }
-    const slug = String(entry.slug);
-    const ident = passiveIdentifier(slug);
-    const isMandatory = Boolean(entry.is_mandatory);
-    const defaultCount = Number(entry.default_count ?? (entry.is_default ? 1 : 0));
-    const defaultFlag = Number.isFinite(defaultCount) && defaultCount > 0 ? 1 : 0;
-    const stored = stateMap.get(slug);
-    const selectedFlag = isMandatory
-      ? 1
-      : Number.isFinite(stored)
-        ? stored > 0
-          ? 1
-          : 0
-        : defaultFlag;
-    const enabled = selectedFlag > 0;
-    if (slug.startsWith(ARMY_RULE_OFF_PREFIX)) {
-      if (enabled) {
-        const targetSlug = slug.slice(ARMY_RULE_OFF_PREFIX.length).trim();
-        const targetIdent = passiveIdentifier(targetSlug);
-        const targetKeys = targetIdent ? identifierKeys.get(targetIdent) || [] : [];
-        if (targetKeys.length) {
-          targetKeys.forEach((key) => {
-            delete result[key];
-          });
-        } else if (targetSlug) {
-          delete result[targetSlug];
-        }
+
+    let spellPreviewTimer = null;
+    let spellPreviewController = null;
+
+    const collectTraits = () => {
+      const hidden = form.querySelector('#weapon-abilities');
+      if (!hidden) {
+        return [];
       }
-      return;
-    }
-    const keys = identifierKeys.get(ident) || [];
-    if (enabled) {
-      if (keys.length) {
-        const key = keys[0];
-        const original = baseFlags ? baseFlags[key] : undefined;
-        const optionalLikeKey = /[?!]\s*$/.test(String(key || '').trim());
-        const targetKey = optionalLikeKey
-          ? stripOptionalFlagSuffix(key) || stripOptionalFlagSuffix(slug) || slug
-          : key;
-        if (optionalLikeKey) {
-          keys.forEach((entryKey) => {
-            if (/[?!]\s*$/.test(String(entryKey || '').trim())) {
-              delete result[entryKey];
+      try {
+        const payload = JSON.parse(hidden.value || '[]');
+        if (!Array.isArray(payload)) {
+          return [];
+        }
+        return payload
+          .map((entry) => {
+            if (!entry || typeof entry !== 'object') {
+              return '';
             }
+            const raw = String(entry.raw || '').trim();
+            if (raw) {
+              return raw;
+            }
+            return String(entry.label || '').trim();
+          })
+          .filter((entry) => entry.length > 0);
+      } catch (err) {
+        return [];
+      }
+    };
+
+    const collectFormValues = () => {
+      const rangeInput = form.querySelector('input[name="range"]');
+      const attacksInput = form.querySelector('input[name="attacks"]');
+      const apInput = form.querySelector('input[name="ap"]');
+      return {
+        range: rangeInput ? rangeInput.value : '',
+        attacks: attacksInput ? attacksInput.value : '',
+        ap: apInput ? apInput.value : '',
+        abilities: collectTraits(),
+      };
+    };
+
+    const updatePreview = () => {
+      if (spellPreviewTimer) {
+        window.clearTimeout(spellPreviewTimer);
+      }
+      if (spellPreviewController) {
+        spellPreviewController.abort();
+        spellPreviewController = null;
+      }
+      spellPreviewTimer = window.setTimeout(() => {
+        spellPreviewTimer = null;
+        const formValues = collectFormValues();
+        spellPreviewController = new AbortController();
+        const signal = spellPreviewController.signal;
+        fetch(`/armies/${armyId}/spells/weapon-cost-preview`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(formValues),
+          credentials: 'same-origin',
+          signal,
+        })
+          .then((res) => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
+          .then((data) => {
+            if (spellPreviewController && spellPreviewController.signal === signal) {
+              spellPreviewController = null;
+            }
+            const cost = data?.spell_cost;
+            if (cost != null) {
+              costValueEl.textContent = String(cost);
+            }
+          })
+          .catch((err) => {
+            if (err && err.name === 'AbortError') {
+              return;
+            }
+            console.error('Nie udało się pobrać podglądu kosztu broni zaklęcia', err);
           });
+      }, 300);
+    };
+
+    updatePreview();
+
+    ['input', 'change'].forEach((eventName) => {
+      form.addEventListener(eventName, (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
         }
-        if (typeof original === 'boolean') {
-          result[targetKey] = true;
-        } else if (original === null || original === '' || original === 0) {
-          result[targetKey] = true;
-        } else if (original !== undefined) {
-          result[targetKey] = original;
-        } else {
-          result[targetKey] = true;
-        }
-      } else {
-        result[stripOptionalFlagSuffix(slug) || slug] = true;
-      }
-    } else if (keys.length) {
-      keys.forEach((key) => {
-        delete result[key];
-      });
-    } else {
-      delete result[slug];
-    }
-  });
-  return result;
-}
-
-// @deprecated Production flow should use backend quote endpoint.
-function weaponCostInternal(quality, rangeValue, attacks, ap, weaponTraits, unitTraits, allowAssaultExtra = true) {
-  let chance = 6.65;
-  const attacksValue = Math.max(Number(attacks) || 0, 0);
-  const apValue = Number.isFinite(Number(ap)) ? Number(ap) : 0;
-  const normalizedRange = normalizeRangeValue(rangeValue);
-  let rangeMod = rangeMultiplier(normalizedRange);
-  let apMod = lookupWithNearest(AP_BASE, apValue);
-  let mult = 1;
-  let q = Number(quality);
-  if (!Number.isFinite(q)) {
-    q = 4;
-  }
-  const traitSet = new Set((Array.isArray(unitTraits) ? unitTraits : []).map((trait) => abilityIdentifier(trait)));
-  const melee = normalizedRange === 0;
-  const waaghPenalty = traitSet.has('waagh') ? lookupWithNearest(WAAGH_AP_MODIFIER, apValue) : 0
-
-  if (melee && traitSet.has('furia')) {
-    chance += 0.65;
-  }
-  if (!melee && traitSet.has('przygotowanie')) {
-    chance += 0.65;
-  }
-  if (traitSet.has('szpica')) {
-    chance += 0.5;
-  }
-  if (traitSet.has('ostrozny')) {
-    chance += lookupWithNearest(CAUTIOUS_HIT_BONUS, normalizedRange);
-  }
-  if (!melee && traitSet.has('wojownik')) {
-    mult *= 0.5;
-  }
-  if (melee && traitSet.has('strzelec')) {
-    mult *= 0.5;
-  }
-  if (!melee && traitSet.has('zle_strzela')) {
-    q = 5;
-  }
-  if (!melee && traitSet.has('dobrze_strzela')) {
-    q = 4;
-  }
-  if (traitSet.has('zemsta')) {
-    mult *= 1.2;
-  }
-  if (traitSet.has('rezerwa')) {
-    mult *= 0.6;
-  }
-  if (!melee && traitSet.has('zasadzka')) {
-    mult *= 0.6;
-  }
-
-  let assault = false;
-  let overcharge = false;
-  let brutal = false;
-  let rangeBonus = 0;
-  let rangePenalty = 0;
-  const traitList = Array.isArray(weaponTraits) ? weaponTraits : splitTraits(weaponTraits);
-
-  traitList.forEach((trait) => {
-    const norm = normalizeName(trait);
-    if (!norm) {
-      return;
-    }
-    if (norm.startsWith('rozprysk') || norm.startsWith('blast')) {
-      const value = Math.round(extractNumber(trait));
-      if (BLAST_MULTIPLIER[value]) {
-        mult *= BLAST_MULTIPLIER[value];
-      }
-      return;
-    }
-    if (norm.startsWith('zabojczy') || norm.startsWith('deadly')) {
-      const value = Math.round(extractNumber(trait));
-      if (DEADLY_MULTIPLIER[value]) {
-        mult *= DEADLY_MULTIPLIER[value];
-      }
-      return;
-    }
-    if (
-      ['seria', 'rozrywajacy', 'rozrywajaca', 'rozrwyajaca', 'podwojny', 'podwojna', 'rending'].includes(
-        norm,
-      )
-    ) {
-      chance += 1;
-    } else if (['lanca', 'lance'].includes(norm)) {
-      chance += 0.65;
-    } else if (['namierzanie', 'lock on'].includes(norm)) {
-      chance += 0.5;
-      mult *= 1.1;
-    } else if (['impet', 'impact'].includes(norm)) {
-      apMod += lookupWithNearest(AP_LANCE, apValue);
-    } else if (['przebijajaca', 'przebijajacy', 'penetrating'].includes(norm)) {
-      mult *= lookupWithNearest(PENETRATING_MULTIPLIER, apValue);
-    } else if (
-      [
-        'brutalny',
-        'brutalna',
-        'brutal',
-        'bez regeneracji',
-        'bez regegenracji',
-        'no regen',
-        'no regeneration',
-      ].includes(norm)
-    ) {
-      brutal = true;
-    } else if (['niebezposredni', 'indirect'].includes(norm)) {
-      mult *= 1.2;
-    } else if (['zuzywalny', 'limited'].includes(norm)) {
-      mult *= 0.4;
-    } else if (['precyzyjny', 'precise'].includes(norm)) {
-      mult *= 1.5;
-    } else if (['niezawodny', 'niezawodna', 'reliable'].includes(norm)) {
-      q = 2;
-    } else if (['szturmowy', 'szturmowa', 'assault'].includes(norm)) {
-      assault = true;
-    } else if (['artyleria', 'artillery'].includes(norm)) {
-      rangeBonus += lookupWithNearest(ARTILLERY_RANGE_BONUS, normalizedRange);
-    } else if (['nieporeczny', 'unwieldy'].includes(norm)) {
-      rangePenalty += lookupWithNearest(UNWIELDY_RANGE_PENALTY, normalizedRange);
-    } else if (['podkrecenie', 'overcharge', 'overclock'].includes(norm)) {
-      overcharge = true;
-    } else if (['burzaca'].includes(norm)) {
-      mult *= 1.5;
-    } else if (['unik'].includes(norm)) {
-      mult *= 1.2;
-    } else if (melee && ['porazenie'].includes(norm)) {
-      mult *= 1.1;
-    }
-  });
-
-  if (waaghPenalty) {
-    apMod = Math.max(apMod - waaghPenalty, 0);
-  }
-
-  const adjustedRangeMod = Math.max(rangeMod + rangeBonus - rangePenalty, 0);
-
-  chance = Math.max(chance - q, 0.9);
-  if (brutal) {
-    chance += ((7 - q) * (6 - q)) / 20;
-  }
-  let cost = attacksValue * 2 * adjustedRangeMod * chance * apMod * mult;
-
-  if (overcharge && (!assault || normalizedRange !== 0)) {
-    cost *= OVERCHARGE_MULTIPLIER;
-  }
-
-  if (assault && allowAssaultExtra && normalizedRange !== 0) {
-    const extra = weaponCostInternal(quality, 0, attacksValue, apValue, traitList, unitTraits, false);
-    cost += extra;
-  }
-
-  return cost;
-}
-
-function weaponCostComponentsInternal(quality, rangeValue, attacks, ap, weaponTraits, unitTraits) {
-  const normalizedRange = normalizeRangeValue(rangeValue);
-  const traitList = Array.isArray(weaponTraits) ? weaponTraits : splitTraits(weaponTraits);
-  const hasAssault = traitList.some((trait) => ['szturmowy', 'szturmowa', 'assault'].includes(normalizeName(trait)));
-
-  let ranged = 0;
-  let melee = 0;
-
-  if (normalizedRange > 0) {
-    ranged = weaponCostInternal(quality, normalizedRange, attacks, ap, traitList, unitTraits, false);
-  }
-  if (normalizedRange === 0 || (normalizedRange > 0 && hasAssault)) {
-    melee = weaponCostInternal(quality, 0, attacks, ap, traitList, unitTraits, false);
-  }
-
-  const safeRanged = Number.isFinite(ranged) ? Math.max(0, ranged) : 0;
-  const safeMelee = Number.isFinite(melee) ? Math.max(0, melee) : 0;
-  return {
-    ranged: Math.round(safeRanged * 100) / 100,
-    melee: Math.round(safeMelee * 100) / 100,
-    total: Math.round((safeRanged + safeMelee) * 100) / 100,
-  };
-}
-
-function buildWeaponCostMap(
-  options,
-  unitQuality,
-  baseFlags,
-  passiveItems,
-  passiveState,
-  classification,
-) {
-  const result = new Map();
-  const weaponFlags = buildWeaponFlags(baseFlags, passiveItems, passiveState);
-  if (classification && typeof classification === 'object' && classification.slug) {
-    const slugText = String(classification.slug).trim();
-    if (slugText) {
-      const normalizedSlug = passiveIdentifier(slugText);
-      let hasMatchingKey = false;
-      Object.keys(weaponFlags).forEach((key) => {
-        const ident = passiveIdentifier(key);
-        if (CLASSIFICATION_SLUGS.has(ident)) {
-          if (ident === normalizedSlug) {
-            hasMatchingKey = true;
-            weaponFlags[key] = true;
-          } else {
-            delete weaponFlags[key];
-          }
+        if (
+          target.matches('#name')
+          || target.matches('#notes')
+          || target.matches('.ability-picker-select')
+          || target.matches('.ability-picker-value-input')
+          || target.matches('.ability-picker-value-select')
+          || target.matches('.ability-picker-add')
+          || target.closest('.ability-picker-list')
+          || target.matches('.range-picker-select')
+          || target.matches('.range-picker-custom')
+          || target.matches('.number-picker-select')
+          || target.matches('.number-picker-custom')
+          || target.matches('input[name="range"]')
+          || target.matches('input[name="attacks"]')
+          || target.matches('input[name="ap"]')
+        ) {
+          updatePreview();
         }
       });
-      if (!hasMatchingKey) {
-        const key = normalizedSlug || slugText.toLowerCase();
-        weaponFlags[key] = true;
-      }
-    }
-  }
-  const unitTraits = [...new Set(flagsToAbilityList(weaponFlags))];
-  const quality = Number.isFinite(Number(unitQuality)) ? Number(unitQuality) : 4;
-  (Array.isArray(options) ? options : []).forEach((option) => {
-    if (!option || option.id === undefined || option.id === null) {
-      return;
-    }
-    const weaponId = Number(option.id);
-    if (!Number.isFinite(weaponId)) {
-      return;
-    }
-    const attacks = option.attacks ?? option.display_attacks ?? 0;
-    const ap = option.ap ?? 0;
-    const traits = splitTraits(option.traits);
-    const components = weaponCostComponentsInternal(quality, option.range, attacks, ap, traits, unitTraits);
-    const cost = components.total;
-    if (Number.isFinite(cost)) {
-      const rounded = Math.max(0, Math.round(cost * 100) / 100);
-      result.set(weaponId, rounded);
-    }
-  });
-  return result;
-}
-
-function buildWeaponComponentMap(
-  options,
-  unitQuality,
-  baseFlags,
-  passiveItems,
-  passiveState,
-  classification,
-) {
-  const result = new Map();
-  const weaponFlags = buildWeaponFlags(baseFlags, passiveItems, passiveState);
-  if (classification && typeof classification === 'object' && classification.slug) {
-    const slugText = String(classification.slug).trim();
-    if (slugText) {
-      const normalizedSlug = passiveIdentifier(slugText);
-      let hasMatchingKey = false;
-      Object.keys(weaponFlags).forEach((key) => {
-        const ident = passiveIdentifier(key);
-        if (CLASSIFICATION_SLUGS.has(ident)) {
-          if (ident === normalizedSlug) {
-            hasMatchingKey = true;
-            weaponFlags[key] = true;
-          } else {
-            delete weaponFlags[key];
-          }
-        }
-      });
-      if (!hasMatchingKey) {
-        const key = normalizedSlug || slugText.toLowerCase();
-        weaponFlags[key] = true;
-      }
-    }
-  }
-  const unitTraits = [...new Set(flagsToAbilityList(weaponFlags))];
-  const quality = Number.isFinite(Number(unitQuality)) ? Number(unitQuality) : 4;
-  (Array.isArray(options) ? options : []).forEach((option) => {
-    if (!option || option.id === undefined || option.id === null) {
-      return;
-    }
-    const weaponId = Number(option.id);
-    if (!Number.isFinite(weaponId)) {
-      return;
-    }
-    const attacks = option.attacks ?? option.display_attacks ?? 0;
-    const ap = option.ap ?? 0;
-    const traits = splitTraits(option.traits);
-    const normalizedRange = normalizeRangeValue(option.range);
-    const rawCost = weaponCostInternal(quality, normalizedRange, attacks, ap, traits, unitTraits, false);
-    let melee = normalizedRange === 0 ? rawCost : 0;
-    let ranged = normalizedRange === 0 ? 0 : rawCost;
-    const isAssault = traits.some((trait) => ['szturmowy', 'szturmowa', 'assault'].includes(normalizeName(trait)));
-    if (isAssault && normalizedRange !== 0) {
-      melee += weaponCostInternal(quality, 0, attacks, ap, traits, unitTraits, false);
-    }
-    result.set(weaponId, {
-      melee: Math.max(0, Math.round(melee * 100) / 100),
-      ranged: Math.max(0, Math.round(ranged * 100) / 100),
     });
+
+    const abilitiesInput = form.querySelector('#weapon-abilities');
+    if (abilitiesInput) {
+      const observer = new MutationObserver(() => {
+        updatePreview();
+      });
+      observer.observe(abilitiesInput, { attributes: true, attributeFilter: ['value'] });
+      abilitiesInput.addEventListener('input', updatePreview);
+      abilitiesInput.addEventListener('change', updatePreview);
+    }
   });
-  return result;
 }
 
+// ============================================================
+// SECTION: UI PICKERS — NUMBER, RANGE, WEAPON DEFAULTS
+// initNumberPicker, initNumberPickers, initRangePicker,
+// initRangePickers, initWeaponDefaults
+//
+// UWAGA: To są helpery UI (spinners, zakresy) — NIE silnik kosztów.
+// Wywoływane w łańcuchu DOMContentLoaded. Ich brak = ReferenceError
+// który cicho blokuje całą inicjalizację strony.
+// NIE usuwać przy cleanup kosztowym.
+// ============================================================
 function initNumberPicker(root) {
   const selectEl = root.querySelector('.number-picker-select');
   const customInput = root.querySelector('.number-picker-custom');
@@ -1475,10 +1147,10 @@ function initRangePicker(root) {
     if (lowered === 'none' || lowered === 'null' || lowered === 'undefined') {
       return '';
     }
-    if (['wręcz', 'wrecz', 'melee', 'm'].includes(lowered)) {
+    if (['wrÄ™cz', 'wrecz', 'melee', 'm'].includes(lowered)) {
       return '0';
     }
-    const numericMatch = lowered.match(/^(\d+)(?:["”])?$/);
+    const numericMatch = lowered.match(/^(\d+)(?:["â€ť])?$/);
     if (numericMatch) {
       return numericMatch[1];
     }
@@ -1647,109 +1319,10 @@ function initWeaponDefaults() {
   });
 }
 
-
-function initSpellWeaponCostPreview() {
-  document.querySelectorAll('form[data-spell-weapon-form]').forEach((form) => {
-    const costValueEl = form.querySelector('[data-spell-weapon-cost]');
-    if (!costValueEl) {
-      return;
-    }
-
-    const toFiniteNumber = (value, fallback = 0) => {
-      const parsed = Number.parseFloat(String(value ?? '').replace(',', '.'));
-      return Number.isFinite(parsed) ? parsed : fallback;
-    };
-
-    const parseIntValue = (value, fallback = 0) => {
-      const parsed = Number.parseInt(String(value ?? '').trim(), 10);
-      return Number.isFinite(parsed) ? parsed : fallback;
-    };
-
-    const collectTraits = () => {
-      const hidden = form.querySelector('#weapon-abilities');
-      if (!hidden) {
-        return [];
-      }
-      try {
-        const payload = JSON.parse(hidden.value || '[]');
-        if (!Array.isArray(payload)) {
-          return [];
-        }
-        return payload
-          .map((entry) => {
-            if (!entry || typeof entry !== 'object') {
-              return '';
-            }
-            const raw = String(entry.raw || '').trim();
-            if (raw) {
-              return raw;
-            }
-            const label = String(entry.label || '').trim();
-            return label;
-          })
-          .filter((entry) => entry.length > 0);
-      } catch (err) {
-        return [];
-      }
-    };
-
-    const updatePreview = () => {
-      const rangeInput = form.querySelector('input[name="range"]');
-      const attacksInput = form.querySelector('input[name="attacks"]');
-      const apInput = form.querySelector('input[name="ap"]');
-      const rangeValue = rangeInput ? rangeInput.value : '';
-      const attacksValue = toFiniteNumber(attacksInput ? attacksInput.value : '', 1);
-      const apValue = parseIntValue(apInput ? apInput.value : '', 0);
-      const traits = collectTraits();
-      const rawCost = weaponCostInternal(4, rangeValue, attacksValue, apValue, traits, [], true);
-      if (!Number.isFinite(rawCost)) {
-        return;
-      }
-      const spellCost = Math.ceil(Math.max(rawCost, 0) / 7);
-      costValueEl.textContent = String(spellCost);
-    };
-
-    updatePreview();
-
-    ['input', 'change'].forEach((eventName) => {
-      form.addEventListener(eventName, (event) => {
-        const target = event.target;
-        if (!(target instanceof Element)) {
-          return;
-        }
-        if (
-          target.matches('#name')
-          || target.matches('#notes')
-          || target.matches('.ability-picker-select')
-          || target.matches('.ability-picker-value-input')
-          || target.matches('.ability-picker-value-select')
-          || target.matches('.ability-picker-add')
-          || target.closest('.ability-picker-list')
-          || target.matches('.range-picker-select')
-          || target.matches('.range-picker-custom')
-          || target.matches('.number-picker-select')
-          || target.matches('.number-picker-custom')
-          || target.matches('input[name="range"]')
-          || target.matches('input[name="attacks"]')
-          || target.matches('input[name="ap"]')
-        ) {
-          updatePreview();
-        }
-      });
-    });
-
-    const abilitiesInput = form.querySelector('#weapon-abilities');
-    if (abilitiesInput) {
-      const observer = new MutationObserver(() => {
-        updatePreview();
-      });
-      observer.observe(abilitiesInput, { attributes: true, attributeFilter: ['value'] });
-      abilitiesInput.addEventListener('input', updatePreview);
-      abilitiesInput.addEventListener('change', updatePreview);
-    }
-  });
-}
-
+// ============================================================
+// SECTION: WEAPON PICKER
+// initWeaponPicker, initWeaponPickers — drzewo wyboru broni
+// ============================================================
 function initWeaponPicker(root) {
   const treePayloadRaw =
     root.dataset.weaponTreePayload ||
@@ -2772,6 +2345,11 @@ function initWeaponPickers() {
   });
 }
 
+// ============================================================
+// SECTION: ROSTER ITEM RENDERING
+// formatPoints, createRosterItemElement, renderPassiveEditor
+// Tworzą elementy listy rozpiski i edytor pasywek.
+// ============================================================
 function formatPoints(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
@@ -2893,10 +2471,6 @@ function createRosterItemElement(data, options = {}) {
   item.setAttribute('data-default-summary', defaultSummary || '');
   item.setAttribute('data-weapon-options', toJsonString(data.weapon_options, []));
   item.setAttribute('data-passives', toJsonString(data.passive_items, []));
-  item.setAttribute(
-    'data-passive-ability-links',
-    toJsonString(data.passive_ability_items, []),
-  );
   item.setAttribute('data-actives', toJsonString(data.active_items, []));
   item.setAttribute('data-auras', toJsonString(data.aura_items, []));
   item.setAttribute('data-selected-passives', toJsonString(data.selected_passive_items, []));
@@ -3126,6 +2700,12 @@ function renderPassiveEditor(
   return true;
 }
 
+// ============================================================
+// SECTION: LOADOUT STATE MANAGEMENT
+// createLoadoutState, cloneLoadoutState, serializeLoadoutState,
+// ensureStateEntries, ensurePassiveStateEntries, itp.
+// Zarządza stanem loadoutu oddziału (broń, zdolności, pasywki).
+// ============================================================
 function normalizeLoadoutKey(rawKey) {
   if (rawKey === undefined || rawKey === null) {
     return '';
@@ -3534,6 +3114,11 @@ function createModeIndicator(mode) {
   return indicator;
 }
 
+// ============================================================
+// SECTION: EDITOR RENDERERS
+// renderAbilityEditor, renderWeaponEditor, toggleSectionVisibility
+// Renderują edytory zdolności i broni w prawym panelu rozpiski.
+// ============================================================
 function renderAbilityEditor(
   container,
   items,
@@ -3950,300 +3535,10 @@ function renderWeaponEditor(
   return true;
 }
 
-function computeTotalCost(
-  basePerModel,
-  modelCount,
-  weaponOptions,
-  state,
-  costMaps,
-  passiveItems,
-  weaponCostOverrides
-) {
-  const count = Math.max(Number(modelCount) || 0, 0);
-  if (count <= 0) {
-    return 0;
-  }
-  let total = Number(basePerModel) * count;
-  if (!Number.isFinite(total)) {
-    total = 0;
-  }
-  const stateMode = state && state.mode === 'total' ? 'total' : 'per_model';
-  const weaponMultiplier = stateMode === 'total' ? 1 : count;
-  const toWeaponTotal = (value) => {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric) || numeric <= 0) {
-      return 0;
-    }
-    return numeric * weaponMultiplier;
-  };
-  const weaponCostMap = new Map();
-  if (weaponCostOverrides instanceof Map) {
-    weaponCostOverrides.forEach((value, key) => {
-      const weaponId = Number(key);
-      const numericValue = Number(value);
-      if (Number.isFinite(weaponId) && Number.isFinite(numericValue)) {
-        weaponCostMap.set(weaponId, numericValue);
-      }
-    });
-  }
-  const safeOptions = Array.isArray(weaponOptions) ? weaponOptions : [];
-  safeOptions.forEach((option) => {
-    if (!option || option.id === undefined || option.id === null) {
-      return;
-    }
-    const weaponId = Number(option.id);
-    const costValue = Number(option.cost);
-    if (
-      Number.isFinite(weaponId)
-      && Number.isFinite(costValue)
-      && !weaponCostMap.has(weaponId)
-    ) {
-      weaponCostMap.set(weaponId, costValue);
-    }
-  });
-
-  if (state && state.weapons instanceof Map) {
-    state.weapons.forEach((value, weaponId) => {
-      const totalCount = toWeaponTotal(value);
-      if (totalCount <= 0) {
-        return;
-      }
-      const costValue = weaponCostMap.get(Number(weaponId));
-      if (Number.isFinite(costValue)) {
-        total += costValue * totalCount;
-      }
-    });
-  }
-
-  const activeCostMap = costMaps && costMaps.active instanceof Map ? costMaps.active : new Map();
-  const passiveCostMap = costMaps && costMaps.passive instanceof Map ? costMaps.passive : new Map();
-  const passiveEntryMap = costMaps && costMaps.passiveEntries instanceof Map ? costMaps.passiveEntries : new Map();
-  const activeIdentifierMap =
-    costMaps && costMaps.activeIdentifiers instanceof Map ? costMaps.activeIdentifiers : new Map();
-  const passiveList = Array.isArray(passiveItems) ? passiveItems : [];
-  const passiveState = state && state.passive instanceof Map ? state.passive : new Map();
-  const basePassiveSet = new Set();
-  const selectedPassiveSet = new Set();
-  const resolvePassiveFlags = (item) => {
-    const defaultValue = Number(item.default_count ?? (item.is_default ? 1 : 0));
-    const defaultFlag = Number.isFinite(defaultValue) && defaultValue > 0 ? 1 : 0;
-    const key = String(item.slug);
-    const hasStoredValue = passiveState.has(key);
-    const storedValue = Number(passiveState.get(key));
-    const selectedFlag = hasStoredValue
-      ? (Number.isFinite(storedValue) && storedValue > 0 ? 1 : 0)
-      : defaultFlag;
-    return { key, defaultFlag, selectedFlag };
-  };
-  const collectSectionIdentifiers = (section, labelsMap, identifierMap, targetSet) => {
-    if (!(section instanceof Map) || !(targetSet instanceof Set)) {
-      return;
-    }
-    section.forEach((value, rawKey) => {
-      const numeric = Number(value);
-      if (!Number.isFinite(numeric) || numeric <= 0) {
-        return;
-      }
-      const keyIdent = passiveIdentifier(rawKey);
-      if (keyIdent) {
-        targetSet.add(keyIdent);
-      }
-      if (identifierMap instanceof Map) {
-        const normalizedKey = normalizeLoadoutKey(rawKey);
-        const mappedIdent = identifierMap.get(normalizedKey || rawKey);
-        const mappedKeyIdent = passiveIdentifier(mappedIdent);
-        if (mappedKeyIdent) {
-          targetSet.add(mappedKeyIdent);
-        }
-      }
-      if (labelsMap instanceof Map) {
-        const labelIdent = passiveIdentifier(labelsMap.get(rawKey));
-        if (labelIdent) {
-          targetSet.add(labelIdent);
-        }
-      }
-    });
-  };
-  if (passiveList.length) {
-    passiveList.forEach((item) => {
-      if (!item || !item.slug || item.is_army_rule) {
-        return;
-      }
-      const ident = passiveIdentifier(item.slug);
-      if (!ident) {
-        return;
-      }
-      const { defaultFlag, selectedFlag } = resolvePassiveFlags(item);
-      if (defaultFlag) {
-        basePassiveSet.add(ident);
-      }
-      if (selectedFlag) {
-        selectedPassiveSet.add(ident);
-      }
-    });
-  }
-  const hasMassiveTrait = selectedPassiveSet.has('masywny') || basePassiveSet.has('masywny');
-  const abilityMultiplier = count <= 0 ? 0 : (hasMassiveTrait ? 1 : count);
-  const activeAuraMultiplier = stateMode === 'total' ? 1 : abilityMultiplier;
-  const passiveMultiplier = stateMode === 'total' ? 1 : abilityMultiplier;
-  const passiveDefaultAbilityTotal =
-    costMaps && Number.isFinite(Number(costMaps.passiveDefaultAbilityTotal))
-      ? Number(costMaps.passiveDefaultAbilityTotal)
-      : 0;
-  if (passiveDefaultAbilityTotal > 0) {
-    total += passiveDefaultAbilityTotal * passiveMultiplier;
-  }
-  const toActiveAuraTotal = (value) => {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric) || numeric <= 0) {
-      return 0;
-    }
-    return numeric * activeAuraMultiplier;
-  };
-  [state && state.active, state && state.aura].forEach((section) => {
-    if (!(section instanceof Map)) {
-      return;
-    }
-    section.forEach((value, abilityId) => {
-      const totalCount = toActiveAuraTotal(value);
-      if (totalCount <= 0) {
-        return;
-      }
-      const canonicalKey = normalizeLoadoutKey(abilityId) || String(abilityId);
-      let costValue = activeCostMap.get(canonicalKey);
-      if (!Number.isFinite(costValue) && canonicalKey !== abilityId) {
-        costValue = activeCostMap.get(abilityId);
-      }
-      if (!Number.isFinite(costValue)) {
-        const numericKey = Number(canonicalKey);
-        if (Number.isFinite(numericKey)) {
-          costValue = activeCostMap.get(String(numericKey));
-          if (!Number.isFinite(costValue)) {
-            costValue = activeCostMap.get(numericKey);
-          }
-        }
-      }
-      if (Number.isFinite(costValue)) {
-        total += costValue * totalCount;
-      }
-    });
-  });
-  if (passiveList.length) {
-    const baseAbilitySet = new Set(basePassiveSet);
-    const selectedAbilitySet = new Set(selectedPassiveSet);
-    const baseActiveSection = state && state.baseActive instanceof Map
-      ? state.baseActive
-      : state && state.active;
-    const baseAuraSection = state && state.baseAura instanceof Map
-      ? state.baseAura
-      : state && state.aura;
-    const baseActiveLabels = state && state.baseActiveLabels instanceof Map
-      ? state.baseActiveLabels
-      : state && state.activeLabels;
-    const baseAuraLabels = state && state.baseAuraLabels instanceof Map
-      ? state.baseAuraLabels
-      : state && state.auraLabels;
-    collectSectionIdentifiers(baseActiveSection, baseActiveLabels, activeIdentifierMap, baseAbilitySet);
-    collectSectionIdentifiers(baseAuraSection, baseAuraLabels, activeIdentifierMap, baseAbilitySet);
-    collectSectionIdentifiers(
-      state && state.active,
-      state && state.activeLabels,
-      activeIdentifierMap,
-      selectedAbilitySet,
-    );
-    collectSectionIdentifiers(state && state.aura, state && state.auraLabels, activeIdentifierMap, selectedAbilitySet);
-    const isOdwodyBlocked = (activeSet) =>
-      activeSet.has('rezerwa') || activeSet.has('zwiadowca') || activeSet.has('zasadzka');
-    const transportMultiplier = (activeSet) => {
-      if (!(activeSet instanceof Set)) {
-        return 1;
-      }
-      if (activeSet.has('samolot')) {
-        return 3.5;
-      }
-      if (activeSet.has('zasadzka') || activeSet.has('zwiadowca')) {
-        return 2.5;
-      }
-      if (activeSet.has('latajacy')) {
-        return 1.5;
-      }
-      if (activeSet.has('szybki') || activeSet.has('zwinny')) {
-        return 1.25;
-      }
-      return 1;
-    };
-    const effectivePassiveCost = (item, activeSet, costValue) => {
-      const ident = passiveIdentifier(item.slug);
-      if (!ident || !Number.isFinite(costValue)) {
-        return 0;
-      }
-      if (ident === 'odwody' && isOdwodyBlocked(activeSet)) {
-        return 0;
-      }
-      const isTransport = ident === 'transport';
-      const isOpenTransport = ident === 'otwarty_transport'
-        || ident === 'platforma_strzelecka'
-        || ident === 'otwarty transport'
-        || ident === 'platforma strzelecka';
-      if (isTransport || isOpenTransport) {
-        const capacity = extractNumber(item.value ?? item.label ?? item.raw ?? item.slug);
-        if (Number.isFinite(capacity) && capacity > 0) {
-          const baseMultiplier = transportMultiplier(activeSet);
-          const openTransportExtra = isOpenTransport ? 0.25 : 0;
-          return capacity * (baseMultiplier + openTransportExtra);
-        }
-      }
-      return costValue;
-    };
-    passiveList.forEach((item) => {
-      if (!item || !item.slug || item.is_army_rule) {
-        return;
-      }
-      const { key, defaultFlag, selectedFlag } = resolvePassiveFlags(item);
-      const mappedItem = passiveEntryMap.get(key);
-      const sourceItem = mappedItem && typeof mappedItem === 'object' ? mappedItem : item;
-      let costValue = passiveCostMap.get(key);
-      if (!Number.isFinite(costValue)) {
-        costValue = Number(sourceItem.cost_base);
-      }
-      if (!Number.isFinite(costValue)) {
-        costValue = Number(sourceItem.cost);
-      }
-      if (!Number.isFinite(costValue)) {
-        return;
-      }
-      const ident = passiveIdentifier(sourceItem.slug);
-      const isDynamicTransport = ident === 'transport'
-        || ident === 'otwarty_transport'
-        || ident === 'platforma_strzelecka'
-        || ident === 'otwarty transport'
-        || ident === 'platforma strzelecka';
-      if (costValue === 0 && !isDynamicTransport) {
-        return;
-      }
-      const baseCost = defaultFlag ? effectivePassiveCost(sourceItem, baseAbilitySet, costValue) : 0;
-      const selectedCost = selectedFlag
-        ? effectivePassiveCost(sourceItem, selectedAbilitySet, costValue)
-        : 0;
-      const diff = selectedCost - baseCost;
-      if (diff === 0) {
-        return;
-      }
-      const isUnitWideBinaryPassive = ident !== 'transport'
-        && ident !== 'otwarty_transport'
-        && ident !== 'platforma_strzelecka'
-        && ident !== 'otwarty transport'
-        && ident !== 'platforma strzelecka';
-      const entryMultiplier = isUnitWideBinaryPassive
-        ? count
-        : passiveMultiplier;
-      total += diff * entryMultiplier;
-    });
-  }
-
-  return total;
-}
-
+// ============================================================
+// SECTION: ROSTER ADDERS
+// initRosterAdders — przyciski dodawania oddziałów do rozpiski
+// ============================================================
 function initRosterAdders(root) {
   if (!root) {
     return;
@@ -4346,6 +3641,18 @@ function initRosterAdders(root) {
   });
 }
 
+// ============================================================
+// SECTION: ROSTER EDITOR CLOSURE
+// initRosterEditor — wielkie domknięcie (~2000 linii).
+// Zawiera ~60 prywatnych funkcji współdzielących stan przez closure-scope:
+//   loadoutState, activeItem, refreshRosterCostBadgesInProgress,
+//   pendingRefreshOptions, lastQuoteItemCosts, itp.
+// Kluczowe podfunkcje:
+//   handleStateChange, renderEditors, refreshRosterCostBadges,
+//   fetchRosterUnitQuote, applyServerUpdate, selectItem
+// UWAGA: include_item_costs=false dla badge-only calls (refreshRosterCostBadges),
+//        include_item_costs=true tylko dla quote aktywnego oddziału (handleStateChange).
+// ============================================================
 function initRosterEditor() {
   const root = document.querySelector('[data-roster-root]');
   if (!root) {
@@ -4364,6 +3671,52 @@ function initRosterEditor() {
   const form = root.querySelector('[data-roster-editor-form]');
   const duplicateForm = root.querySelector('[data-roster-editor-duplicate]');
   const deleteForm = root.querySelector('[data-roster-editor-delete]');
+  if (deleteForm) {
+    deleteForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!confirm('Usunąć pozycję?')) return;
+      const action = deleteForm.getAttribute('action');
+      if (!action) return;
+      try {
+        const response = await fetch(action, {
+          method: 'POST',
+          headers: { accept: 'application/json' },
+        });
+        if (!response.ok) {
+          window.location.href = action;
+          return;
+        }
+        const data = await response.json();
+        const deletedId = String(data.deleted_roster_unit_id || '');
+        if (deletedId) {
+          const listElement = rosterListEl || root.querySelector('[data-roster-list]');
+          if (listElement) {
+            const item = listElement.querySelector(`[data-roster-unit-id="${deletedId}"]`);
+            if (item) {
+              const entry = item.closest('[data-roster-entry]');
+              (entry || item).remove();
+            }
+          }
+        }
+        if (activeItem && activeItem.getAttribute('data-roster-unit-id') === deletedId) {
+          activeItem = null;
+          loadoutState = null;
+          const editorEl = root.querySelector('[data-roster-editor]');
+          const emptyEl = root.querySelector('[data-roster-editor-empty]');
+          const actionsEl = root.querySelector('[data-roster-editor-actions]');
+          if (editorEl) editorEl.classList.add('d-none');
+          if (emptyEl) emptyEl.classList.remove('d-none');
+          if (actionsEl) actionsEl.classList.add('d-none');
+        }
+        if (Number.isFinite(data.total_cost)) {
+          updateTotalSummary(data.total_cost);
+        }
+      } catch (err) {
+        console.error('Błąd usuwania oddziału', err);
+        window.location.href = action;
+      }
+    });
+  }
   const editorActions = root.querySelector('[data-roster-editor-actions]');
   const countInput = root.querySelector('[data-roster-editor-count]');
   const customNameInput = root.querySelector('[data-roster-editor-custom-name]');
@@ -4389,16 +3742,12 @@ function initRosterEditor() {
   let latestAppliedRefreshVersion = 0;
   let latestAuthoritativeRefreshVersion = 0;
   let rosterRefreshCycleCounter = 0;
-  const LOCAL_COST_ENGINE_ENABLED =
-    root.dataset.localCostEngineEnabled === 'true'
-    || window.__LOCAL_COST_ENGINE_ENABLED__ === true;
-  const ENABLE_JS_COST_FALLBACK =
-    LOCAL_COST_ENGINE_ENABLED
-    && (root.dataset.enableJsCostFallback === 'true'
-      || window.__ENABLE_JS_COST_FALLBACK__ === true);
   let quoteRefreshTimer = null;
   let activeQuoteController = null;
   let quoteRequestVersion = 0;
+  let lastQuoteItemCosts = null;
+  let lastSelectedRole = null;
+  let skipCostDisplayLoading = false;
 
   function nextRefreshVersion(seedVersion = null) {
     const seed = Number(seedVersion);
@@ -4875,17 +4224,15 @@ function initRosterEditor() {
   let currentActives = [];
   let currentAuras = [];
   let currentPassives = [];
-  let currentPassiveAbilityLinks = [];
   let currentBaseFlags = {};
   let currentQuality = 4;
   let currentWeaponCostMap = new Map();
-  let abilityCostMap = { active: new Map(), passive: new Map() };
   let baseCostPerModel = 0;
-  let currentClassification = null;
   let currentCustomName = '';
   let customEditInput = null;
   let autoSaveEnabled = false;
   let ignoreNextSave = false;
+  let suppressNextBadgeRefresh = false;
   let saveTimer = null;
   let isSaving = false;
   let pendingSave = false;
@@ -4906,7 +4253,6 @@ function initRosterEditor() {
   const UNIT_DATASET_KEYS = [
     'weapon_options',
     'passive_items',
-    'passive_ability_items',
     'active_items',
     'aura_items',
     'default_summary',
@@ -4914,7 +4260,6 @@ function initRosterEditor() {
   const UNIT_DATASET_ATTRIBUTE_MAP = new Map([
     ['data-weapon-options', 'weapon_options'],
     ['data-passives', 'passive_items'],
-    ['data-passive-ability-links', 'passive_ability_items'],
     ['data-actives', 'active_items'],
     ['data-auras', 'aura_items'],
     ['data-default-summary', 'default_summary'],
@@ -5466,26 +4811,6 @@ function initRosterEditor() {
     });
   }
 
-  function renderClassificationDisplay() {
-    if (!roleEl) {
-      return;
-    }
-    roleEl.textContent = '';
-    roleEl.classList.add('d-none');
-  }
-
-  function updateItemClassification(item, classification) {
-    if (!item) {
-      return;
-    }
-    try {
-      item.setAttribute('data-unit-classification', JSON.stringify(classification ?? null));
-    } catch (err) {
-      item.setAttribute('data-unit-classification', 'null');
-    }
-    invalidateCachedAttribute(item, 'data-unit-classification');
-  }
-
   function normalizeLoadoutStateTotals(state, count) {
     if (!state || state.mode === 'total') {
       return;
@@ -5510,30 +4835,6 @@ function initRosterEditor() {
     state.mode = 'total';
   }
 
-  function prepareCostContext(rawContext) {
-    if (!rawContext || !rawContext.loadoutState) {
-      return null;
-    }
-    const count = Math.max(Number(rawContext.count) || 0, 1);
-    const normalizedLoadoutState = cloneLoadoutState(rawContext.loadoutState);
-    normalizeLoadoutStateTotals(normalizedLoadoutState, count);
-    const costs = rawContext.abilityCosts || {};
-    return {
-      ...rawContext,
-      count,
-      loadoutState: normalizedLoadoutState,
-      abilityCosts: {
-        active: costs.active instanceof Map ? costs.active : new Map(),
-        passive: costs.passive instanceof Map ? costs.passive : new Map(),
-        passiveEntries: costs.passiveEntries instanceof Map ? costs.passiveEntries : new Map(),
-      },
-      currentClassification:
-        rawContext.currentClassification && typeof rawContext.currentClassification === 'object'
-          ? rawContext.currentClassification
-          : null,
-    };
-  }
-
   function hydrateLoadoutStateForItem(
     item,
     {
@@ -5556,240 +4857,6 @@ function initRosterEditor() {
     ensurePassiveStateEntries(hydratedLoadoutState.passive, passiveItems);
     normalizeLoadoutStateTotals(hydratedLoadoutState, count);
     return hydratedLoadoutState;
-  }
-
-  function buildClassificationContextFromItem(item) {
-    if (!item) {
-      return null;
-    }
-    const count = Math.max(Number(item.getAttribute('data-unit-count') || '1'), 1);
-    const weapons = getUnitDatasetList(item, 'weapon_options');
-    const activeItems = getUnitDatasetList(item, 'active_items');
-    const auraItems = getUnitDatasetList(item, 'aura_items');
-    const passiveItems = getUnitDatasetList(item, 'passive_items');
-    const passiveAbilityItems = getUnitDatasetList(item, 'passive_ability_items');
-    const baseFlags = parseFlagString(item.getAttribute('data-unit-flags'));
-    const qualityValue = Number(item.getAttribute('data-unit-quality') || '4');
-    const classificationData = getParsedObject(
-      item,
-      'data-unit-classification',
-      (value) => parseJsonValue(value, 'Nie udało się odczytać klasyfikacji oddziału', {}),
-    );
-    const loadout = hydrateLoadoutStateForItem(item, {
-      count,
-      weapons,
-      activeItems,
-      auraItems,
-      passiveItems,
-    });
-    const abilityCosts = buildAbilityCostMap(
-      activeItems,
-      auraItems,
-      passiveItems,
-      passiveAbilityItems,
-    );
-    return prepareCostContext({
-      item,
-      count,
-      weapons,
-      activeItems,
-      auraItems,
-      passiveItems,
-      baseFlags,
-      loadoutState: loadout,
-      abilityCosts,
-      baseCostPerModel: Number(item.getAttribute('data-base-cost-per-model') || '0'),
-      quality: Number.isFinite(qualityValue) ? qualityValue : 4,
-      currentClassification:
-        classificationData && typeof classificationData === 'object' ? classificationData : null,
-    });
-  }
-
-  function evaluateClassificationTotals(context) {
-    if (!context || !context.loadoutState) {
-      return null;
-    }
-    const {
-      loadoutState,
-      weapons = [],
-      passiveItems = [],
-      baseFlags = {},
-      abilityCosts = null,
-      baseCostPerModel = 0,
-      count = 1,
-      quality = 4,
-      currentClassification = null,
-    } = context;
-    const available = availableClassificationSlugs(baseFlags);
-    if (currentClassification && typeof currentClassification === 'object' && currentClassification.slug) {
-      const ident = abilityIdentifier(currentClassification.slug);
-      if (ident) {
-        available.add(ident);
-      }
-    }
-    const costs = abilityCosts || { active: new Map(), passive: new Map() };
-    const safeAbilityCosts = {
-      active: costs.active instanceof Map ? costs.active : new Map(),
-      passive: costs.passive instanceof Map ? costs.passive : new Map(),
-      passiveEntries: costs.passiveEntries instanceof Map ? costs.passiveEntries : new Map(),
-    };
-    const clone = cloneLoadoutState(loadoutState);
-    if (clone) {
-      clone.mode = 'total';
-    }
-    const passiveMap = clone && clone.passive instanceof Map ? clone.passive : new Map();
-    const baseWeaponFlags = buildWeaponFlags(baseFlags, passiveItems, passiveMap);
-    const unitTraits = [...new Set(flagsToAbilityList(baseWeaponFlags))];
-    const toWeaponTotal = (value) => {
-      const numeric = Number(value);
-      if (!Number.isFinite(numeric) || numeric <= 0) {
-        return 0;
-      }
-      return numeric;
-    };
-    const weaponBuckets = { melee: 0, ranged: 0 };
-    const weaponComponentsById = new Map();
-    (Array.isArray(weapons) ? weapons : []).forEach((option) => {
-      if (!option || option.id === undefined || option.id === null) {
-        return;
-      }
-      const weaponId = Number(option.id);
-      if (!Number.isFinite(weaponId)) {
-        return;
-      }
-      const attacks = option.attacks ?? option.display_attacks ?? 0;
-      const ap = option.ap ?? 0;
-      const traits = splitTraits(option.traits);
-      const components = weaponCostComponentsInternal(
-        Number.isFinite(Number(quality)) ? Number(quality) : 4,
-        option.range,
-        attacks,
-        ap,
-        traits,
-        unitTraits,
-      );
-      const melee = Number(components && components.melee);
-      const ranged = Number(components && components.ranged);
-      weaponComponentsById.set(weaponId, {
-        melee: Number.isFinite(melee) ? Math.max(melee, 0) : 0,
-        ranged: Number.isFinite(ranged) ? Math.max(ranged, 0) : 0,
-      });
-    });
-    if (clone && clone.weapons instanceof Map) {
-      clone.weapons.forEach((value, weaponId) => {
-        const selectedCount = toWeaponTotal(value);
-        if (selectedCount <= 0) {
-          return;
-        }
-        const components = weaponComponentsById.get(Number(weaponId));
-        if (!components) {
-          return;
-        }
-        weaponBuckets.melee += components.melee * selectedCount;
-        weaponBuckets.ranged += components.ranged * selectedCount;
-      });
-    }
-
-    const neutralWeaponMap = new Map();
-    weaponComponentsById.forEach((components, weaponId) => {
-      neutralWeaponMap.set(weaponId, components.melee + components.ranged);
-    });
-    const neutralTotal = computeTotalCost(
-      baseCostPerModel,
-      count,
-      weapons,
-      clone,
-      safeAbilityCosts,
-      passiveItems,
-      neutralWeaponMap,
-    );
-    const neutralWeaponTotal = Math.max(weaponBuckets.melee + weaponBuckets.ranged, 0);
-    const nonWeaponTotal = Math.max(neutralTotal - neutralWeaponTotal, 0);
-    const warriorTotal = nonWeaponTotal + weaponBuckets.melee + weaponBuckets.ranged * 0.5;
-    const shooterTotal = nonWeaponTotal + weaponBuckets.ranged + weaponBuckets.melee * 0.5;
-
-    const buildRoleWeaponMap = (slug) => {
-      const roleMap = new Map();
-      weaponComponentsById.forEach((components, weaponId) => {
-        if (slug === 'wojownik') {
-          roleMap.set(weaponId, components.melee + components.ranged * 0.5);
-        } else if (slug === 'strzelec') {
-          roleMap.set(weaponId, components.ranged + components.melee * 0.5);
-        } else {
-          roleMap.set(weaponId, components.melee + components.ranged);
-        }
-      });
-      return roleMap;
-    };
-    return {
-      available,
-      buckets: {
-        melee: Math.round(weaponBuckets.melee * 100) / 100,
-        ranged: Math.round(weaponBuckets.ranged * 100) / 100,
-      },
-      warrior: { total: Math.round(warriorTotal * 100) / 100, weaponMap: buildRoleWeaponMap('wojownik') },
-      shooter: { total: Math.round(shooterTotal * 100) / 100, weaponMap: buildRoleWeaponMap('strzelec') },
-    };
-  }
-
-  function estimateCombinedClassification(primaryContext, partnerContext = null) {
-    const primaryTotals = evaluateClassificationTotals(primaryContext);
-    if (!primaryTotals) {
-      return { classification: null, weaponMap: null };
-    }
-    const partnerTotals = partnerContext ? evaluateClassificationTotals(partnerContext) : null;
-    let available = primaryTotals.available || new Set();
-    if (partnerTotals && partnerTotals.available instanceof Set) {
-      const intersect = new Set(
-        Array.from(available).filter((slug) => partnerTotals.available.has(slug)),
-      );
-      if (intersect.size) {
-        available = intersect;
-      }
-    }
-    const sumTotals = (key) => {
-      const primaryTotal = primaryTotals[key]?.total || 0;
-      const partnerTotal = partnerTotals ? partnerTotals[key]?.total || 0 : 0;
-      return primaryTotal + partnerTotal;
-    };
-    const warriorTotal = sumTotals('warrior');
-    const shooterTotal = sumTotals('shooter');
-    const meleeBucketTotal =
-      (primaryTotals.buckets?.melee || 0) + (partnerTotals?.buckets?.melee || 0);
-    const rangedBucketTotal =
-      (primaryTotals.buckets?.ranged || 0) + (partnerTotals?.buckets?.ranged || 0);
-    const previousClassification =
-      (primaryContext && primaryContext.currentClassification)
-      || (partnerContext && partnerContext.currentClassification)
-      || null;
-    const classificationByBuckets = createClassificationPayload(
-      meleeBucketTotal,
-      rangedBucketTotal,
-      available,
-      previousClassification,
-    );
-    const classification = classificationByBuckets
-      ? {
-          ...classificationByBuckets,
-          warrior_cost: Math.round(Math.max(Number(warriorTotal) || 0, 0) * 100) / 100,
-          shooter_cost: Math.round(Math.max(Number(shooterTotal) || 0, 0) * 100) / 100,
-          display: `Wojownik ${Math.round(Math.max(Number(warriorTotal) || 0, 0))} pkt / Strzelec ${Math.round(Math.max(Number(shooterTotal) || 0, 0))} pkt`,
-        }
-      : null;
-    let weaponMap = null;
-    if (classification && classification.slug) {
-      const slug = String(classification.slug);
-      const source =
-        slug === 'wojownik'
-          ? primaryTotals.warrior
-          : slug === 'strzelec'
-            ? primaryTotals.shooter
-            : null;
-      if (source && source.weaponMap instanceof Map) {
-        weaponMap = source.weaponMap;
-      }
-    }
-    return { classification, weaponMap };
   }
 
   function syncDefaultEquipment(previousCount, nextCount) {
@@ -5828,69 +4895,6 @@ function initRosterEditor() {
     adjust(loadoutState.weapons, currentWeapons, 'id', ['weapon_id']);
     adjust(loadoutState.active, currentActives, 'ability_id', ['id']);
     adjust(loadoutState.aura, currentAuras, 'ability_id', ['id']);
-  }
-
-  function buildAbilityCostMap(activeItems, auraItems, passiveItems, passiveAbilityItems) {
-    const activeMap = new Map();
-    const passiveMap = new Map();
-    const passiveEntries = new Map();
-    const activeIdentifiers = new Map();
-    let passiveDefaultAbilityTotal = 0;
-    [...(Array.isArray(activeItems) ? activeItems : []), ...(Array.isArray(auraItems) ? auraItems : [])].forEach((item) => {
-      if (!item) {
-        return;
-      }
-      const abilityKey = resolveLoadoutEntryKey(item, 'ability_id');
-      const slugIdentifier = passiveIdentifier(item.slug);
-      const costValue = Number(item.cost);
-      if (abilityKey && Number.isFinite(costValue)) {
-        activeMap.set(abilityKey, costValue);
-      }
-      if (slugIdentifier) {
-        if (abilityKey) {
-          activeIdentifiers.set(abilityKey, slugIdentifier);
-        }
-        if (Number.isFinite(costValue)) {
-          activeMap.set(slugIdentifier, costValue);
-        }
-      }
-    });
-    (Array.isArray(passiveItems) ? passiveItems : []).forEach((item) => {
-      if (!item || !item.slug || item.is_army_rule) {
-        return;
-      }
-      const key = String(item.slug);
-      passiveEntries.set(key, item);
-      const baseCostValue = Number(item.cost_base);
-      const totalCostValue = Number(item.cost);
-      if (Number.isFinite(baseCostValue)) {
-        passiveMap.set(key, baseCostValue);
-      } else if (Number.isFinite(totalCostValue)) {
-        passiveMap.set(key, totalCostValue);
-      }
-    });
-    (Array.isArray(passiveAbilityItems) ? passiveAbilityItems : []).forEach((item) => {
-      if (!item) {
-        return;
-      }
-      const defaultCountValue = Number(item.default_count ?? (item.is_default ? 1 : 0));
-      const defaultCount = Number.isFinite(defaultCountValue) ? Math.max(defaultCountValue, 0) : 0;
-      if (defaultCount <= 0) {
-        return;
-      }
-      const costValue = Number(item.cost);
-      if (!Number.isFinite(costValue) || costValue <= 0) {
-        return;
-      }
-      passiveDefaultAbilityTotal += costValue * defaultCount;
-    });
-    return {
-      active: activeMap,
-      passive: passiveMap,
-      passiveEntries,
-      activeIdentifiers,
-      passiveDefaultAbilityTotal,
-    };
   }
 
   function updateTotalSummary(total) {
@@ -6084,8 +5088,9 @@ function initRosterEditor() {
       customEditInput = null;
     }
 
+    lastQuoteItemCosts = null;
+    lastSelectedRole = null;
     currentPassives = getUnitDatasetList(item, 'passive_items');
-    currentPassiveAbilityLinks = getUnitDatasetList(item, 'passive_ability_items');
     currentActives = getUnitDatasetList(item, 'active_items');
     currentAuras = getUnitDatasetList(item, 'aura_items');
     currentWeapons = getUnitDatasetList(item, 'weapon_options');
@@ -6101,15 +5106,6 @@ function initRosterEditor() {
     const baseCostValue = Number(item.getAttribute('data-base-cost-per-model') || '0');
     const rosterUnitId = item.getAttribute('data-roster-unit-id');
     const customName = item.getAttribute('data-unit-custom-name') || '';
-    const classificationData = getParsedObject(
-      item,
-      'data-unit-classification',
-      (value) => parseJsonValue(value, 'Nie udało się odczytać klasyfikacji oddziału', {}),
-    );
-
-    currentClassification =
-      classificationData && typeof classificationData === 'object' ? classificationData : {};
-
     if (nameEl) {
       nameEl.textContent = unitName;
     }
@@ -6122,7 +5118,6 @@ function initRosterEditor() {
       updateActiveItem: false,
       updateList: false,
     });
-    renderClassificationDisplay();
 
     currentCount = Number.isFinite(countValue) && countValue >= 1 ? countValue : 1;
     if (countInput) {
@@ -6137,12 +5132,6 @@ function initRosterEditor() {
       passiveItems: currentPassives,
     });
 
-    abilityCostMap = buildAbilityCostMap(
-      currentActives,
-      currentAuras,
-      currentPassives,
-      currentPassiveAbilityLinks,
-    );
     baseCostPerModel = Number.isFinite(baseCostValue) && baseCostValue >= 0 ? baseCostValue : 0;
 
     ignoreNextSave = true;
@@ -6280,9 +5269,6 @@ function initRosterEditor() {
             : defaultSummary;
         loadoutEl.textContent = `Uzbrojenie: ${summary || '-'}`;
       }
-      if (Object.prototype.hasOwnProperty.call(unitData, 'classification')) {
-        updateItemClassification(targetItem, unitData.classification || null);
-      }
       const nextPassiveItems = Object.prototype.hasOwnProperty.call(unitData, 'selected_passive_items')
         ? unitData.selected_passive_items
         : getParsedList(targetItem, 'data-selected-passives');
@@ -6298,7 +5284,10 @@ function initRosterEditor() {
         auras: Array.isArray(nextAuraItems) ? nextAuraItems : [],
       });
       if (isActiveMatch) {
+        suppressNextBadgeRefresh = true;
+        skipCostDisplayLoading = true;
         syncEditorFromItem(targetItem, { preserveAutoSave: true });
+        suppressNextBadgeRefresh = false;
       }
     };
 
@@ -6358,9 +5347,10 @@ function initRosterEditor() {
       'Nie udało się zserializować konfiguracji oddziału',
       {},
     );
+    const loadoutObj = parsedLoadout && typeof parsedLoadout === 'object' ? parsedLoadout : {};
     return {
       count: Math.max(Number(count) || 1, 1),
-      loadout: parsedLoadout && typeof parsedLoadout === 'object' ? parsedLoadout : {},
+      loadout: lastSelectedRole ? { ...loadoutObj, selected_role: lastSelectedRole } : loadoutObj,
     };
   }
 
@@ -6391,17 +5381,20 @@ function initRosterEditor() {
     badgeEl.classList.toggle('opacity-50', status === 'loading');
   }
 
-  async function fetchRosterUnitQuote(requestedRosterUnitId, quotePayload, signal) {
+  async function fetchRosterUnitQuote(requestedRosterUnitId, quotePayload, signal, includeItemCosts = true) {
     if (!rosterId || !requestedRosterUnitId) {
       throw new Error('Brak identyfikatora oddziału do wyceny');
     }
+    const body = includeItemCosts
+      ? (quotePayload || {})
+      : { ...(quotePayload || {}), include_item_costs: false };
     const response = await fetch(`/rosters/${rosterId}/units/${requestedRosterUnitId}/quote`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(quotePayload || {}),
+      body: JSON.stringify(body),
       credentials: 'same-origin',
       signal,
     });
@@ -6425,6 +5418,8 @@ function initRosterEditor() {
       total: selectedTotal,
       rosterUnitId: responseRosterUnitId || String(requestedRosterUnitId),
       loadout: payload?.loadout && typeof payload.loadout === 'object' ? payload.loadout : null,
+      itemCosts: payload?.item_costs && typeof payload.item_costs === 'object' ? payload.item_costs : null,
+      selectedRole: typeof payload?.selected_role === 'string' ? payload.selected_role : null,
     };
   }
 
@@ -6446,117 +5441,6 @@ function initRosterEditor() {
     return total;
   }
 
-  async function updateCostDisplays() {
-    if (!activeItem || !loadoutState) {
-      return null;
-    }
-    const rosterUnitId = activeItem.getAttribute('data-roster-unit-id') || '';
-    const quotePayload = serializeQuotePayloadFromState(loadoutState, currentCount);
-    setCostDisplayStatus('loading');
-    try {
-      const quote = await fetchRosterUnitQuote(rosterUnitId, quotePayload, null);
-      setCostDisplayStatus('ready');
-      return renderActiveCost(quote.total);
-    } catch (error) {
-      console.error('Nie udało się pobrać wyceny oddziału (quote)', error);
-      const total = getLastKnownItemCost(activeItem);
-      if (Number.isFinite(total)) {
-        setCostDisplayStatus('ready');
-        return renderActiveCost(total);
-      }
-      setCostDisplayStatus('error');
-      return null;
-    }
-  }
-
-  function computeUnitTotalFromState(
-    loadoutStateInput,
-    count,
-    classification,
-    abilityCosts,
-    weaponMap,
-    options = {},
-  ) {
-    if (!loadoutStateInput) {
-      return 0;
-    }
-    const safeOptions = options && typeof options === 'object' ? options : {};
-    const stateClone = cloneLoadoutState(loadoutStateInput);
-    applyClassificationToState(stateClone, classification);
-    return computeTotalCost(
-      Number(safeOptions.baseCostPerModel) || 0,
-      Math.max(Number(count) || 0, 1),
-      Array.isArray(safeOptions.weapons) ? safeOptions.weapons : [],
-      stateClone,
-      abilityCosts,
-      Array.isArray(safeOptions.passiveItems) ? safeOptions.passiveItems : [],
-      weaponMap instanceof Map ? weaponMap : null,
-    );
-  }
-
-  function computeRosterItemTotal(context, partnerContext = null) {
-    if (!ENABLE_JS_COST_FALLBACK) {
-      return null;
-    }
-    const preparedContext = prepareCostContext(context);
-    if (!preparedContext || !preparedContext.loadoutState) {
-      return null;
-    }
-    const preparedPartnerContext = prepareCostContext(partnerContext);
-
-    let classification = preparedContext.currentClassification || null;
-    let weaponMap = null;
-    const estimation = estimateCombinedClassification(preparedContext, preparedPartnerContext);
-    if (estimation) {
-      if (estimation.classification) {
-        classification = estimation.classification;
-      }
-      if (estimation.weaponMap instanceof Map) {
-        weaponMap = estimation.weaponMap;
-      }
-    }
-
-    if (!(weaponMap instanceof Map)) {
-      const stateForWeaponCosts = cloneLoadoutState(preparedContext.loadoutState);
-      applyClassificationToState(stateForWeaponCosts, classification);
-      const passiveState =
-        stateForWeaponCosts && stateForWeaponCosts.passive instanceof Map
-          ? stateForWeaponCosts.passive
-          : new Map();
-      weaponMap = buildWeaponCostMap(
-        preparedContext.weapons,
-        preparedContext.quality,
-        preparedContext.baseFlags,
-        preparedContext.passiveItems,
-        passiveState,
-        classification,
-      );
-    }
-
-    const total = computeUnitTotalFromState(
-      preparedContext.loadoutState,
-      preparedContext.count,
-      classification,
-      preparedContext.abilityCosts,
-      weaponMap,
-      {
-        baseCostPerModel: preparedContext.baseCostPerModel,
-        weapons: preparedContext.weapons,
-        passiveItems: preparedContext.passiveItems,
-      },
-    );
-
-    return {
-      total,
-      classification,
-      weaponMap,
-    };
-  }
-
-  function computeRosterItemCost(context, partnerContext = null) {
-    return computeRosterItemTotal(context, partnerContext);
-  }
-
   function refreshRosterCostBadges(options = null, cycleToken = null) {
     const normalizedOptions = options && typeof options === 'object'
       ? options
@@ -6565,6 +5449,7 @@ function initRosterEditor() {
       ? normalizedOptions.totalOverride
       : null;
     const recomputeItems = normalizedOptions.recomputeItems !== false;
+    const changedUnitId = normalizedOptions.changedUnitId || null;
     const normalizedToken = normalizeRosterRefreshCycleToken(cycleToken, nextRefreshVersion());
     if (normalizedToken.dedupeKey && normalizedToken.dedupeKey === lastRefreshRosterCostCycleToken) {
       return;
@@ -6619,6 +5504,24 @@ function initRosterEditor() {
           return;
         }
 
+        if (changedUnitId) {
+          const changedItem = rosterItems.find(
+            (item) => item.getAttribute('data-roster-unit-id') === String(changedUnitId),
+          );
+          if (changedItem) {
+            setRosterItemCostStatus(changedItem, 'loading');
+          }
+          const cachedTotal = rosterItems.reduce((sum, item) => {
+            const value = Number(item?.getAttribute?.('data-unit-cost'));
+            return Number.isFinite(value) ? sum + value : sum;
+          }, 0);
+          const decision = applyRefreshPriority(normalizedToken);
+          if (decision.apply) {
+            updateTotalSummary(cachedTotal);
+          }
+          return;
+        }
+
         let aggregatedTotal = 0;
         const refreshConcurrencyLimit = 5;
         for (let startIndex = 0; startIndex < rosterItems.length; startIndex += refreshConcurrencyLimit) {
@@ -6638,7 +5541,7 @@ function initRosterEditor() {
                 passiveItems: getUnitDatasetList(item, 'passive_items'),
               });
               const quotePayload = serializeQuotePayloadFromState(itemLoadout, count);
-              const quote = await fetchRosterUnitQuote(rosterUnitId, quotePayload, null);
+              const quote = await fetchRosterUnitQuote(rosterUnitId, quotePayload, null, false);
               return {
                 item,
                 rosterUnitId,
@@ -6689,10 +5592,7 @@ function initRosterEditor() {
             : null;
           const safeTotal = Number.isFinite(expectedSingleUnitTotal) ? expectedSingleUnitTotal : totalOverride;
           updateTotalSummary(safeTotal);
-        } else if (
-          Number.isFinite(aggregatedTotal)
-          && currentRefreshCycle > preserveServerTotalUntilRefreshCycle
-        ) {
+        } else if (Number.isFinite(aggregatedTotal)) {
           const expectedSingleUnitTotal = rosterItems.length === 1
             ? Number(rosterItems[0].getAttribute('data-unit-cost'))
             : null;
@@ -6715,89 +5615,33 @@ function initRosterEditor() {
     })();
   }
 
-
-  function applyClassificationToState(state, classification) {
-    if (!state || !(state.passive instanceof Map)) {
-      return;
-    }
-    let targetIdentifier = null;
-    let targetKey = null;
-    if (classification && typeof classification === 'object' && classification.slug) {
-      const slugText = String(classification.slug);
-      const normalized = abilityIdentifier(slugText);
-      if (normalized && CLASSIFICATION_SLUGS.has(normalized)) {
-        targetIdentifier = normalized;
-        const stripped = slugText.trim();
-        if (stripped) {
-          targetKey = stripped;
-        }
-      }
-    }
-    const passiveMap = state.passive;
-    Array.from(passiveMap.keys()).forEach((key) => {
-      const ident = passiveIdentifier(key);
-      if (!CLASSIFICATION_SLUGS.has(ident)) {
-        return;
-      }
-      if (targetIdentifier && ident === targetIdentifier && targetKey === null) {
-        targetKey = String(key);
-        passiveMap.set(key, 1);
-        return;
-      }
-      passiveMap.delete(key);
-    });
-    if (targetIdentifier) {
-      const finalKey = targetKey !== null && targetKey !== undefined ? String(targetKey) : targetIdentifier;
-      passiveMap.set(finalKey, 1);
-    }
+  function recalculateTotalFromCachedBadges() {
+    const listElement = rosterListEl || ensureRosterList();
+    if (!listElement) return;
+    const items = Array.from(listElement.querySelectorAll('[data-roster-item]'));
+    if (!items.length) return;
+    const summedTotal = items.reduce((sum, item) => {
+      const v = Number(item?.getAttribute?.('data-unit-cost'));
+      return Number.isFinite(v) ? sum + v : sum;
+    }, 0);
+    const expectedSingleUnitTotal = items.length === 1
+      ? Number(items[0].getAttribute('data-unit-cost'))
+      : null;
+    const safeTotal = Number.isFinite(expectedSingleUnitTotal) ? expectedSingleUnitTotal : summedTotal;
+    updateTotalSummary(safeTotal);
   }
+
 
   function handleStateChange() {
     const editVersion = latestEditVersion + 1;
     latestEditVersion = editVersion;
-    let precomputedWeaponMap = null;
     const activeEntry = activeItem ? getEntryElementFromItem(activeItem) : null;
     const activeId = getUnitIdFromEntry(activeEntry);
-    const quoteEndpointAvailable = Boolean(rosterId && activeId);
     if (loadoutState) {
       loadoutState.mode = 'total';
-      if (LOCAL_COST_ENGINE_ENABLED && !quoteEndpointAvailable) {
-        const activeContext = {
-          loadoutState,
-          weapons: currentWeapons,
-          passiveItems: currentPassives,
-          baseFlags: currentBaseFlags,
-          abilityCosts: abilityCostMap,
-          baseCostPerModel,
-          count: currentCount,
-          quality: currentQuality,
-          currentClassification,
-        };
-        let partnerContext = null;
-        if (activeItem) {
-          const partnerId = getPartnerId(activeId);
-          const listElement = rosterListEl || ensureRosterList();
-          if (partnerId && listElement) {
-            const partnerItem = listElement.querySelector(
-              `[data-roster-item][data-roster-unit-id="${partnerId}"]`,
-            );
-            if (partnerItem) {
-              partnerContext = buildClassificationContextFromItem(partnerItem);
-            }
-          }
-        }
-        const result = computeRosterItemTotal(activeContext, partnerContext);
-        if (result) {
-          currentClassification = result.classification || null;
-          if (result.weaponMap instanceof Map) {
-            precomputedWeaponMap = result.weaponMap;
-          }
-        }
-      }
-      applyClassificationToState(loadoutState, currentClassification);
     }
 
-    renderEditors(precomputedWeaponMap);
+    renderEditors();
     if (loadoutInput && loadoutState) {
       loadoutInput.value = serializeLoadoutState(loadoutState);
     }
@@ -6817,14 +5661,27 @@ function initRosterEditor() {
       const currentSignal = activeQuoteController.signal;
       const rosterUnitId = activeItem ? activeItem.getAttribute('data-roster-unit-id') || '' : '';
       const quotePayload = serializeQuotePayloadFromState(loadoutState, currentCount);
-      setCostDisplayStatus('loading');
+      if (skipCostDisplayLoading) {
+        skipCostDisplayLoading = false;
+      } else {
+        setCostDisplayStatus('loading');
+      }
       fetchRosterUnitQuote(rosterUnitId, quotePayload, currentSignal)
         .then((quote) => {
           if (requestVersion !== quoteRequestVersion) {
             return;
           }
+          if (quote.itemCosts && typeof quote.itemCosts === 'object') {
+            lastQuoteItemCosts = quote.itemCosts;
+          }
+          if (quote.selectedRole) {
+            lastSelectedRole = quote.selectedRole;
+          }
+          renderEditors();
           setCostDisplayStatus('ready');
           renderActiveCost(quote.total);
+          setRosterItemCostStatus(activeItem, 'ready');
+          recalculateTotalFromCachedBadges();
         })
         .catch((error) => {
           if (error && error.name === 'AbortError') {
@@ -6835,9 +5692,11 @@ function initRosterEditor() {
           if (Number.isFinite(total)) {
             setCostDisplayStatus('ready');
             renderActiveCost(total);
+            setRosterItemCostStatus(activeItem, 'ready');
             return;
           }
           setCostDisplayStatus('error');
+          setRosterItemCostStatus(activeItem, 'error');
         })
         .finally(() => {
           if (activeQuoteController && activeQuoteController.signal === currentSignal) {
@@ -6847,11 +5706,7 @@ function initRosterEditor() {
     }, 250);
     let stateChangeCycleToken = null;
     if (activeItem) {
-      const classificationSlug =
-        currentClassification && typeof currentClassification === 'object' && currentClassification.slug
-          ? String(currentClassification.slug)
-          : '';
-      const dedupeKey = [activeId, String(currentCount), classificationSlug, loadoutInput?.value || ''].join('::');
+      const dedupeKey = [activeId, String(currentCount), lastSelectedRole || '', loadoutInput?.value || ''].join('::');
       stateChangeCycleToken = {
         dedupeKey,
         version: nextRefreshVersion(editVersion),
@@ -6863,21 +5718,18 @@ function initRosterEditor() {
       invalidateCachedAttribute(activeItem, 'data-loadout');
     }
     if (activeItem) {
-      updateItemClassification(activeItem, currentClassification);
       activeItem.setAttribute('data-unit-count', String(currentCount));
       invalidateCachedAttribute(activeItem, 'data-unit-count');
-      const partnerId = getPartnerId(activeId);
-      const listElement = rosterListEl || ensureRosterList();
-      if (partnerId && listElement) {
-        const partnerItem = listElement.querySelector(
-          `[data-roster-item][data-roster-unit-id="${partnerId}"]`,
-        );
-        if (partnerItem) {
-          updateItemClassification(partnerItem, currentClassification);
-        }
-      }
     }
-    refreshRosterCostBadges({ totalOverride: null, recomputeItems: true }, stateChangeCycleToken);
+    if (suppressNextBadgeRefresh) {
+      suppressNextBadgeRefresh = false;
+    } else {
+      refreshRosterCostBadges({
+        totalOverride: null,
+        recomputeItems: true,
+        changedUnitId: activeId || null,
+      }, stateChangeCycleToken);
+    }
     if (ignoreNextSave) {
       ignoreNextSave = false;
       return;
@@ -6888,126 +5740,24 @@ function initRosterEditor() {
     }
   }
 
-function availableClassificationSlugs(flags) {
-  const result = new Set();
-  Object.keys(flags || {}).forEach((key) => {
-    const ident = passiveIdentifier(key);
-    if (CLASSIFICATION_SLUGS.has(ident)) {
-      result.add(ident);
-    }
-  });
-  return result;
-}
-
-function resolvePreviousClassificationSlug(previousClassification) {
-  if (!previousClassification) {
-    return null;
-  }
-  const slugValue =
-    typeof previousClassification === 'string'
-      ? previousClassification
-      : previousClassification && typeof previousClassification === 'object'
-        ? previousClassification.slug
-        : null;
-  if (!slugValue) {
-    return null;
-  }
-  const normalized = abilityIdentifier(String(slugValue));
-  return CLASSIFICATION_SLUGS.has(normalized) ? normalized : null;
-}
-
-function createClassificationPayload(
-  warriorTotal,
-  shooterTotal,
-  availableSlugs,
-  previousClassification = null,
-  preferredSlug = null,
-) {
-  const warrior = Math.max(Number(warriorTotal) || 0, 0);
-  const shooter = Math.max(Number(shooterTotal) || 0, 0);
-  if (warrior <= 0 && shooter <= 0) {
-    return null;
-  }
-  const previousSlug = resolvePreviousClassificationSlug(previousClassification);
-  let slug = null;
-  const normalizedPreferred = abilityIdentifier(preferredSlug || '');
-  if (normalizedPreferred && CLASSIFICATION_SLUGS.has(normalizedPreferred)) {
-    slug = normalizedPreferred;
-  } else if (warrior > shooter) {
-    slug = 'wojownik';
-  } else if (shooter > warrior) {
-    slug = 'strzelec';
-  } else {
-    slug = previousSlug || 'wojownik';
-  }
-  if (!CLASSIFICATION_SLUGS.has(slug)) {
-    slug = 'wojownik';
-  }
-  if (!slug) {
-    return null;
-  }
-  const roundedWarrior = Math.round(warrior * 100) / 100;
-  const roundedShooter = Math.round(shooter * 100) / 100;
-  const warriorPoints = Math.round(warrior);
-  const shooterPoints = Math.round(shooter);
-  const display = `Wojownik ${warriorPoints} pkt / Strzelec ${shooterPoints} pkt`;
-  return {
-    slug,
-    label: slug === 'wojownik' ? 'Wojownik' : 'Strzelec',
-    warrior_cost: roundedWarrior,
-    shooter_cost: roundedShooter,
-    display,
-  };
-}
-
-function renderEditors(precomputedWeaponMap = null) {
+function renderEditors() {
     const passiveState = loadoutState && loadoutState.passive instanceof Map ? loadoutState.passive : new Map();
-    if (precomputedWeaponMap instanceof Map) {
-      currentWeaponCostMap = precomputedWeaponMap;
-    } else {
-      currentWeaponCostMap = buildWeaponCostMap(
-        currentWeapons,
-        currentQuality,
-        currentBaseFlags,
-        currentPassives,
-        passiveState,
-        currentClassification,
+    if (lastQuoteItemCosts) {
+      const weaponCosts = lastQuoteItemCosts.weapons || {};
+      currentWeaponCostMap = new Map(
+        Object.entries(weaponCosts).map(([id, cost]) => [Number(id), Number(cost)]),
       );
+    } else {
+      currentWeaponCostMap = new Map();
     }
     const computePassiveDeltaForSlug = (slug) => {
-      if (!slug) {
+      if (!slug || !lastQuoteItemCosts) {
         return Number.NaN;
       }
-      const normalizedSlug = String(slug);
-      const evaluateTotal = (flag) => {
-        const nextState = cloneLoadoutState(loadoutState);
-        const passiveClone = nextState.passive instanceof Map ? nextState.passive : new Map();
-        passiveClone.set(normalizedSlug, flag > 0 ? 1 : 0);
-        nextState.passive = passiveClone;
-        const nextWeaponMap = buildWeaponCostMap(
-          currentWeapons,
-          currentQuality,
-          currentBaseFlags,
-          currentPassives,
-          passiveClone,
-          currentClassification,
-        );
-        return computeTotalCost(
-          baseCostPerModel,
-          currentCount,
-          currentWeapons,
-          nextState,
-          abilityCostMap,
-          currentPassives,
-          nextWeaponMap,
-        );
-      };
-      const enabledTotal = evaluateTotal(1);
-      const disabledTotal = evaluateTotal(0);
-      if (!Number.isFinite(enabledTotal) || !Number.isFinite(disabledTotal)) {
-        return Number.NaN;
-      }
-      return enabledTotal - disabledTotal;
+      const passiveDeltas = lastQuoteItemCosts.passive_deltas || {};
+      const identifier = abilityIdentifier(String(slug)) || String(slug);
+      const delta = passiveDeltas[identifier];
+      return Number.isFinite(delta) ? delta : Number.NaN;
     };
     const decoratedWeapons = Array.isArray(currentWeapons)
       ? currentWeapons.map((option) => {
@@ -7161,8 +5911,6 @@ function renderEditors(precomputedWeaponMap = null) {
         customEditInput = null;
       }
       updateCustomLabelDisplay('');
-      currentClassification = null;
-      renderClassificationDisplay();
       autoSaveEnabled = false;
       setSaveStatus('idle');
       return;
@@ -7186,9 +5934,9 @@ function renderEditors(precomputedWeaponMap = null) {
       initializeMoveForms();
       const initialItems = collectInitialRosterItems();
       hydrateInitialLockPairs();
-      refreshRosterCostBadges();
       syncInitialRosterList(initialItems);
       selectInitialRosterItem();
+      refreshRosterCostBadges();
     } catch (error) {
       resetRosterCaches();
       throw error;
@@ -7238,6 +5986,10 @@ function renderEditors(precomputedWeaponMap = null) {
 
 }
 
+// ============================================================
+// SECTION: SPELL ABILITY FORMS
+// initSpellAbilityForms — formularze zdolności zaklęć
+// ============================================================
 function initSpellAbilityForms() {
   document.querySelectorAll('[data-spell-ability-form]').forEach((form) => {
     const abilitySelect = form.querySelector('[data-ability-select]');
@@ -7428,6 +6180,10 @@ function initSpellAbilityForms() {
   });
 }
 
+// ============================================================
+// SECTION: ARMORY WEAPON TREE
+// initArmoryWeaponTree — drzewo broni w zbrojowni (filtry, sortowanie)
+// ============================================================
 function initArmoryWeaponTree() {
   const root = document.getElementById('armory-weapons-tree');
   if (!root) {
@@ -7933,6 +6689,13 @@ function initArmoryWeaponTree() {
   applyFilterAndRender();
 }
 
+// ============================================================
+// SECTION: BOOTSTRAP — DOMContentLoaded
+// Łańcuch inicjalizacji (kolejność krytyczna — patrz AGENTS.md):
+//   initAbilityPickers → initNumberPickers → initRangePickers →
+//   initWeaponPickers → initRosterEditor → initWeaponDefaults →
+//   initSpellAbilityForms → initArmoryWeaponTree → initSpellWeaponCostPreview
+// ============================================================
 document.addEventListener('DOMContentLoaded', () => {
   initAbilityPickers();
   initNumberPickers();

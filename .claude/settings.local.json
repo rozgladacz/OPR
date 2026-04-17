@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile app/services/costs.py)",
+      "Bash(python -c ':*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(python -m pytest tests/test_roster_unit_quote.py -x -q)",
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(grep -v \"^--$\")"
+    ]
+  }
+}
