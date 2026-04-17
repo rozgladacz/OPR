@@ -12,7 +12,7 @@
       "Bash(ls*)",
       "Bash(find*)",
       "Bash(rg*)",
-	  "Bash(grep *)",
+      "Bash(grep *)",
       "Bash(cat*)",
       "Bash(sed*)"
     ]

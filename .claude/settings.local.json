@@ -7,7 +7,8 @@
       "Bash(python -m pytest tests/test_roster_unit_quote.py -x -q)",
       "Bash(python -m pytest tests/ -x -q)",
       "Bash(python -m pytest tests/ -q)",
-      "Bash(grep -v \"^--$\")"
+      "Bash(grep -v \"^--$\")",
+      "Bash(python -m pytest tests/test_weapon_costs.py -v)"
     ]
   }
 }

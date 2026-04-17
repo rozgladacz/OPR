@@ -106,7 +106,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="zwinny",
         name="Zwinny",
         type="passive",
-        description="Ignoruje trudny teren.",
+        description="Ignoruje trudny i niebezpieczny teren.",
     ),
     AbilityDefinition(
         slug="niezgrabny",
@@ -596,8 +596,8 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Brutalny",
         type="weapon",
         description=(
-            "Możesz zachować wynik udanego rzutu na trafienie "
-            "jako wynik rzutu na obronę."
+            "Wynik udanego rzutu na trafienie możesz traktować "
+            "jak wynik rzutu na obronę."
         ),
     ),
     AbilityDefinition(
@@ -616,7 +616,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="unik",
         name="Unik",
         type="weapon",
-        description="Jeżeli cel jest Przyszpilony lub Wyczerpany, wykonuje podwójną liczbę ataków.",
+        description="Jeżeli cel jest Przyszpilony, wykonuje podwójną liczbę ataków.",
     ),
     AbilityDefinition(
         slug="porazenie",
@@ -627,7 +627,23 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
             "rany zadane tą bronią liczą się podwójnie."
         ),
     ),
-    
+    AbilityDefinition(
+        slug="zguba",
+        name="Zguba",
+        type="weapon",
+        description=(
+            "Zmniejsz liczbę odzyskanych ran w tej aktywacji, "
+            "o liczbę ran otrzymanych tą bronią. "
+            "Modele pokonane tą bronią nie mogą wrócić do gry."
+        ),
+    ),
+    AbilityDefinition(
+        slug="dezintegracja",
+        name="Dezintegracja",
+        type="weapon",
+        description="Naturalne 6 na trafienie ranią bez rzutu na obronę.",
+    ),
+
 ]
 
 

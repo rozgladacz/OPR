@@ -1140,19 +1140,22 @@ def _weapon_cost(
             chance += 0.5
             mult *= 1.1
         elif norm in {"impet", "impact"}:
+            chance += 0.65
             ap_mod += lookup_with_nearest(AP_LANCE, base_ap)
         elif norm in {"przebijajaca", "przebijajacy", "penetrating"}:
             mult *= lookup_with_nearest(PENETRATING_MULTIPLIER, base_ap)
+        elif norm in {"brutalny", "brutalna", "brutal"}:
+            brutal = True
         elif norm in {
-            "brutalny",
-            "brutalna",
-            "brutal",
+            "zguba",
             "bez regeneracji",
             "bez regegenracji",
             "no regen",
             "no regeneration",
         }:
-            brutal = True
+            mult *= 1.05
+        elif norm in {"dezintegracja", "disintegration"}:
+            chance += 2.9 / ap_mod - 1
         elif norm in {"niebezposredni", "indirect"}:
             mult *= 1.2
         elif norm in {"zuzywalny", "limited"}:

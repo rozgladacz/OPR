@@ -201,6 +201,31 @@ body {
   .roster-army-unit-list {
     max-height: none;
   }
+
+  /* Independent scrolling per panel on wide screens */
+  [data-roster-root] > [class*="col"] {
+    height: calc(100vh - 11rem);
+    min-height: 400px;
+  }
+
+  [data-roster-root] .card {
+    overflow: hidden;
+  }
+
+  [data-roster-root] .card-body {
+    min-height: 0;
+  }
+
+  .roster-unit-list {
+    flex: 1 1 0;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  [data-roster-editor] {
+    min-height: 0;
+    overflow-y: auto;
+  }
 }
 
 [data-roster-add-trigger] {
