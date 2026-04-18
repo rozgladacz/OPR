@@ -96,9 +96,6 @@
       <div class="card h-100">
         <div class="card-body d-flex flex-column">
           <h5 class="card-title">Jednostki w armii</h5>
-          <p class="text-muted small">
-            Wybierz jednostkę, aby dodać ją do rozpiski. Domyślnie dodawana jest typowa liczebność oddziału z podstawowym wyposażeniem.
-          </p>
           <div class="flex-grow-1 overflow-auto roster-army-unit-list">
             {% if available_units %}
             {% set show_avail_headers = available_groups | length > 1 or (available_groups | length == 1 and available_groups[0].group is not none) %}
@@ -195,7 +192,7 @@
           </div>
         </div>
         {% if roster_items %}
-          <div class="list-group roster-unit-list" data-roster-list>
+          <div class="list-group roster-unit-list" data-roster-list data-roster-id="{{ roster.id }}">
           {% for item in roster_items %}
             {% set ru = item.instance %}
             {% set is_first = loop.first %}
@@ -203,6 +200,7 @@
           <div class="list-group-item border-0 px-0 py-2" data-roster-entry>
             <div class="roster-unit-entry">
               {% if can_edit %}
+              <div class="roster-drag-handle drag-handle" aria-hidden="true">⋮⋮</div>
               <div class="roster-unit-reorder">
                 <form
                   method="post"
@@ -423,4 +421,35 @@
     </div>
   </div>
 </div>
+{% if can_edit %}
+<script src="/static/vendor/sortable.min.js"></script>
+<script>
+(function () {
+  const list = document.querySelector('[data-roster-list]');
+  if (!list || typeof Sortable === 'undefined') return;
+  const rosterId = list.dataset.rosterId;
+  list.classList.add('dnd-active');
+  Sortable.create(list, {
+    handle: '.roster-drag-handle',
+    animation: 150,
+    draggable: '[data-roster-entry]',
+    ghostClass: 'roster-entry-ghost',
+    chosenClass: 'roster-entry-chosen',
+    onEnd(evt) {
+      if (evt.oldIndex === evt.newIndex) return;
+      const entries = Array.from(list.querySelectorAll('[data-roster-entry]'));
+      const order = entries.map((el, pos) => ({
+        id: parseInt(el.querySelector('[data-roster-unit-id]').dataset.rosterUnitId, 10),
+        position: pos,
+      }));
+      fetch(`/rosters/${rosterId}/units/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order }),
+      }).catch(() => { location.reload(); });
+    },
+  });
+}());
+</script>
+{% endif %}
 {% endblock %}

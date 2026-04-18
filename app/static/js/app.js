@@ -274,6 +274,8 @@ function initAbilityPicker(root) {
     renderList();
   }
 
+  let sortableInstance = null;
+
   function renderList() {
     if (!listEl) {
       return;
@@ -428,10 +430,18 @@ function initAbilityPicker(root) {
       }
 
       const controlsWrapper = document.createElement('div');
-      controlsWrapper.className = 'd-flex flex-column flex-sm-row gap-2';
+      controlsWrapper.className = 'd-flex flex-column flex-sm-row gap-2 align-items-center';
+
+      if (typeof Sortable !== 'undefined') {
+        const handle = document.createElement('span');
+        handle.className = 'drag-handle ability-drag-handle';
+        handle.setAttribute('aria-hidden', 'true');
+        handle.textContent = '⋮⋮';
+        controlsWrapper.appendChild(handle);
+      }
 
       const reorderGroup = document.createElement('div');
-      reorderGroup.className = 'btn-group-vertical';
+      reorderGroup.className = 'btn-group-vertical ability-move-buttons';
       const moveUpBtn = document.createElement('button');
       moveUpBtn.type = 'button';
       moveUpBtn.className = 'btn btn-outline-secondary btn-sm';
@@ -471,6 +481,24 @@ function initAbilityPicker(root) {
 
       wrapper.appendChild(row);
     });
+
+    if (typeof Sortable !== 'undefined') {
+      if (sortableInstance) sortableInstance.destroy();
+      wrapper.classList.add('ability-list-dnd-active');
+      sortableInstance = Sortable.create(wrapper, {
+        handle: '.ability-drag-handle',
+        animation: 150,
+        ghostClass: 'ability-row-ghost',
+        onEnd(evt) {
+          if (evt.oldIndex === evt.newIndex) return;
+          const moved = items.splice(evt.oldIndex, 1)[0];
+          items.splice(evt.newIndex, 0, moved);
+          updateHidden();
+          renderList();
+        },
+      });
+    }
+
     listEl.appendChild(wrapper);
 
     updateSelectOptionVisibility();
@@ -2130,6 +2158,8 @@ function initWeaponPicker(root) {
     return changed;
   }
 
+  let sortableInstance = null;
+
   function renderList() {
     if (!listEl) {
       return;
@@ -2226,10 +2256,18 @@ function initWeaponPicker(root) {
       row.appendChild(primaryWrapper);
 
       const actionsWrapper = document.createElement('div');
-      actionsWrapper.className = 'd-flex flex-column flex-sm-row gap-2';
+      actionsWrapper.className = 'd-flex flex-column flex-sm-row gap-2 align-items-center';
+
+      if (typeof Sortable !== 'undefined') {
+        const handle = document.createElement('span');
+        handle.className = 'drag-handle weapon-drag-handle';
+        handle.setAttribute('aria-hidden', 'true');
+        handle.textContent = '⋮⋮';
+        actionsWrapper.appendChild(handle);
+      }
 
       const reorderGroup = document.createElement('div');
-      reorderGroup.className = 'btn-group-vertical';
+      reorderGroup.className = 'btn-group-vertical weapon-move-buttons';
       const moveUpBtn = document.createElement('button');
       moveUpBtn.type = 'button';
       moveUpBtn.className = 'btn btn-outline-secondary btn-sm';
@@ -2268,6 +2306,24 @@ function initWeaponPicker(root) {
       row.appendChild(actionsWrapper);
       wrapper.appendChild(row);
     });
+
+    if (typeof Sortable !== 'undefined') {
+      if (sortableInstance) sortableInstance.destroy();
+      wrapper.classList.add('weapon-list-dnd-active');
+      sortableInstance = Sortable.create(wrapper, {
+        handle: '.weapon-drag-handle',
+        animation: 150,
+        ghostClass: 'weapon-row-ghost',
+        onEnd(evt) {
+          if (evt.oldIndex === evt.newIndex) return;
+          const moved = items.splice(evt.oldIndex, 1)[0];
+          items.splice(evt.newIndex, 0, moved);
+          updateHidden();
+          renderList();
+        },
+      });
+    }
+
     listEl.appendChild(wrapper);
   }
 
@@ -2414,6 +2470,12 @@ function createRosterItemElement(data, options = {}) {
   outer.appendChild(entry);
 
   if (isEditable) {
+    const handle = document.createElement('div');
+    handle.className = 'roster-drag-handle drag-handle';
+    handle.setAttribute('aria-hidden', 'true');
+    handle.textContent = '⋮⋮';
+    entry.appendChild(handle);
+
     const reorder = document.createElement('div');
     reorder.className = 'roster-unit-reorder';
     entry.appendChild(reorder);

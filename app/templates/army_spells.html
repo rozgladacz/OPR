@@ -35,13 +35,14 @@
             <th style="width: 6rem;"></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody data-army-id="{{ army.id }}">
           {% for spell in spells %}
-          <tr>
+          <tr data-spell-id="{{ spell.id }}">
             <td>
               <div class="d-flex align-items-center gap-1">
-                <span>{{ loop.index }}</span>
-                <div class="btn-group btn-group-sm" role="group" aria-label="Zmiana kolejności mocy">
+                <span class="spell-drag-handle drag-handle" aria-hidden="true">⋮⋮</span>
+                <span class="spell-index">{{ loop.index }}</span>
+                <div class="btn-group btn-group-sm spell-move-buttons" role="group" aria-label="Zmiana kolejności mocy">
                   <form
                     method="post"
                     action="/armies/{{ army.id }}/spells/{{ spell.id }}/move"
@@ -229,5 +230,32 @@
 </div>
 {% else %}
 <div class="alert alert-info">Wykorzystano maksymalną liczbę mocy. Usuń istniejącą moc, aby dodać kolejną.</div>
+{% endif %}
+{% if spells %}
+<script src="/static/vendor/sortable.min.js"></script>
+<script>
+(function () {
+  const tbody = document.querySelector('tbody[data-army-id]');
+  if (!tbody || typeof Sortable === 'undefined') return;
+  const armyId = tbody.dataset.armyId;
+  tbody.classList.add('dnd-active');
+  Sortable.create(tbody, {
+    handle: '.spell-drag-handle',
+    animation: 150,
+    ghostClass: 'spell-row-ghost',
+    chosenClass: 'spell-row-chosen',
+    onEnd(evt) {
+      if (evt.oldIndex === evt.newIndex) return;
+      const rows = Array.from(tbody.querySelectorAll('tr[data-spell-id]'));
+      const order = rows.map(r => parseInt(r.dataset.spellId, 10));
+      fetch(`/armies/${armyId}/spells/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order }),
+      }).catch(() => { location.reload(); });
+    },
+  });
+}());
+</script>
 {% endif %}
 {% endblock %}

@@ -404,12 +404,13 @@
         <span class="collapse-icon">{% if group and group.collapsed %}▸{% else %}▾{% endif %}</span>
       </button>
       {% if group %}
-      <span class="group-name flex-grow-1 fw-semibold" {% if can_edit %}contenteditable="true" data-editable-group="{{ group.id }}"{% endif %}>{{ group.name }}</span>
+      <span class="group-name flex-grow-1 fw-semibold" {% if can_edit %}style="cursor:pointer" data-toggle-group{% endif %}>{{ group.name }}</span>
       {% else %}
       <span class="group-name flex-grow-1 fw-semibold text-muted">Bez grupy</span>
       {% endif %}
       <span class="badge text-bg-light unit-count">{{ group_units | length }}</span>
       {% if can_edit and group %}
+      <button class="btn btn-sm btn-outline-secondary rename-group" type="button" data-group-id="{{ group.id }}" title="Zmień nazwę grupy">✏</button>
       <button class="btn btn-sm btn-outline-danger delete-group" type="button" data-group-id="{{ group.id }}" title="Usuń grupę (jednostki trafią do &laquo;Bez grupy&raquo;)">🗑</button>
       <span class="group-drag-handle ms-1" title="Przeciągnij, aby zmienić kolejność grup" aria-hidden="true">⋮⋮</span>
       {% endif %}

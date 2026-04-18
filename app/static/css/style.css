@@ -300,6 +300,61 @@ body {
 #army-units-root.js-dnd-enabled .move-buttons-fallback { display: none !important; }
 #army-units-root:not(.js-dnd-enabled) .drag-handle { display: none; }
 
+/* ── Drag & drop — oddziały w rozpisce ───────────────────────────────── */
+.roster-drag-handle {
+  display: none;
+  cursor: grab;
+  color: #6c757d;
+  padding: 0 0.35rem;
+  align-self: center;
+  font-size: 1rem;
+  line-height: 1;
+  user-select: none;
+}
+.roster-drag-handle:active { cursor: grabbing; }
+[data-roster-list].dnd-active .roster-drag-handle { display: flex; align-items: center; }
+[data-roster-list].dnd-active .roster-unit-reorder { display: none !important; }
+[data-roster-list] .roster-entry-ghost { opacity: 0.35; background: #e7f1ff; }
+[data-roster-list] .roster-entry-chosen { background: #fff3cd; }
+
+/* ── Drag & drop — lista zaklęć ──────────────────────────────────────── */
+.spell-drag-handle {
+  display: none;
+  cursor: grab;
+  color: #6c757d;
+  padding: 0 0.25rem;
+  user-select: none;
+}
+.spell-drag-handle:active { cursor: grabbing; }
+tbody.dnd-active .spell-drag-handle { display: inline; }
+tbody.dnd-active .spell-move-buttons { display: none !important; }
+tbody .spell-row-ghost { opacity: 0.35; background: #e7f1ff !important; }
+tbody .spell-row-chosen { background: #fff3cd !important; }
+
+/* ── Drag & drop — zdolności ─────────────────────────────────────────── */
+.ability-drag-handle {
+  cursor: grab;
+  color: #6c757d;
+  padding: 0 0.25rem;
+  user-select: none;
+  flex-shrink: 0;
+}
+.ability-drag-handle:active { cursor: grabbing; }
+.ability-list-dnd-active .ability-move-buttons { display: none !important; }
+.ability-list-dnd-active .ability-row-ghost { opacity: 0.35; background: #e7f1ff; }
+
+/* ── Drag & drop — bronie jednostki ─────────────────────────────────── */
+.weapon-drag-handle {
+  cursor: grab;
+  color: #6c757d;
+  padding: 0 0.25rem;
+  user-select: none;
+  flex-shrink: 0;
+}
+.weapon-drag-handle:active { cursor: grabbing; }
+.weapon-list-dnd-active .weapon-move-buttons { display: none !important; }
+.weapon-list-dnd-active .weapon-row-ghost { opacity: 0.35; background: #e7f1ff; }
+
 /* ── Grupy w rozpisce ─────────────────────────────────────────────────── */
 .roster-group-header {
   margin-top: 1.25rem;

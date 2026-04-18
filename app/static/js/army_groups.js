@@ -124,7 +124,7 @@
 
   // ── Zwijanie ────────────────────────────────────────────────────────────
   groupsContainer.addEventListener("click", function (event) {
-    const toggle = event.target.closest(".toggle-collapse");
+    const toggle = event.target.closest(".toggle-collapse, .group-name[data-toggle-group]");
     if (!toggle) return;
     const section = toggle.closest("section.unit-group");
     if (!section) return;
@@ -145,19 +145,34 @@
     }
   });
 
-  // ── Rename grupy (contenteditable blur) ─────────────────────────────────
-  groupsContainer.addEventListener(
-    "blur",
-    function (event) {
-      const el = event.target.closest("[data-editable-group]");
-      if (!el) return;
-      const gid = el.getAttribute("data-editable-group");
-      const newName = (el.textContent || "").trim();
+  // ── Rename grupy (przycisk ✏) ────────────────────────────────────────────
+  groupsContainer.addEventListener("click", function (event) {
+    const btn = event.target.closest(".rename-group");
+    if (!btn) return;
+    const gid = btn.getAttribute("data-group-id");
+    if (!gid) return;
+    const section = btn.closest("section.unit-group");
+    const nameSpan = section && section.querySelector(".group-name[data-toggle-group]");
+    if (!nameSpan) return;
+    const currentName = nameSpan.textContent.trim();
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "form-control form-control-sm";
+    input.style.maxWidth = "18rem";
+    input.value = currentName;
+    nameSpan.replaceWith(input);
+    input.focus();
+    input.select();
+
+    function commitRename() {
+      const newName = input.value.trim();
       if (!newName) {
-        setStatus("Nazwa grupy nie może być pusta", true);
-        setTimeout(() => window.location.reload(), 1000);
+        input.replaceWith(nameSpan);
         return;
       }
+      nameSpan.textContent = newName;
+      input.replaceWith(nameSpan);
       const body = new FormData();
       body.append("name", newName);
       fetch(`/armies/${armyId}/groups/${gid}/rename`, {
@@ -175,16 +190,18 @@
           setStatus("Błąd zmiany nazwy", true);
           setTimeout(() => window.location.reload(), 1000);
         });
-    },
-    true
-  );
+    }
 
-  // Entera traktujemy jako zakończenie edycji nazwy (blur).
-  groupsContainer.addEventListener("keydown", function (event) {
-    if (event.key !== "Enter") return;
-    if (!event.target.matches("[data-editable-group]")) return;
-    event.preventDefault();
-    event.target.blur();
+    function onKeydown(e) {
+      if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+      if (e.key === "Escape") {
+        input.removeEventListener("blur", commitRename);
+        input.removeEventListener("keydown", onKeydown);
+        input.replaceWith(nameSpan);
+      }
+    }
+    input.addEventListener("blur", commitRename);
+    input.addEventListener("keydown", onKeydown);
   });
 
   // ── Usuwanie grupy ──────────────────────────────────────────────────────

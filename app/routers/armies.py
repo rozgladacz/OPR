@@ -2210,6 +2210,41 @@ def update_army_spell(
     )
 
 
+@router.post("/{army_id}/spells/reorder")
+def reorder_army_spells(
+    army_id: int,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    _ensure_army_edit_access(army, current_user)
+
+    order = payload.get("order") if isinstance(payload, dict) else None
+    if not isinstance(order, list):
+        raise HTTPException(status_code=400, detail="Nieprawidłowa kolejność")
+
+    spells = list(
+        db.execute(
+            select(models.ArmySpell)
+            .where(models.ArmySpell.army_id == army.id)
+            .order_by(models.ArmySpell.position, models.ArmySpell.id)
+        )
+        .scalars()
+        .all()
+    )
+    spell_map = {s.id: s for s in spells}
+    ordered = [spell_map[sid] for sid in order if sid in spell_map]
+    ordered_ids = {s.id for s in ordered}
+    remaining = [s for s in spells if s.id not in ordered_ids]
+    merged = ordered + remaining
+    _resequence_army_units(merged)
+    db.commit()
+    return JSONResponse({"ok": True})
+
+
 @router.post("/{army_id}/spells/{spell_id}/move")
 def move_army_spell(
     army_id: int,
