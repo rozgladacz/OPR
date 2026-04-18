@@ -137,57 +137,45 @@
     {% endif %}
   </div>
 </div>
-<div class="table-responsive">
-  <table class="table table-striped align-middle">
-    <thead>
-    <tr>
-      <th class="text-center" style="width: 1%;">Kolejność</th>
-      <th>Nazwa</th>
-      <th>Statystyki</th>
-      <th class="d-none d-xl-table-cell">Zdolności pasywne</th>
-      <th class="d-none d-xxl-table-cell">Zdolności aktywne</th>
-      <th class="d-none d-xxl-table-cell">Aury</th>
-      <th>Domyślne uzbrojenie</th>
-      <th>Koszt</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for item in units %}
-    <tr>
-      <td class="align-middle text-center">
+{# Macro: renderuje jeden wiersz <tr> jednostki — używany wewnątrz każdej sekcji grupy. #}
+{% macro unit_row(item, loop_first, loop_last, can_edit, army) %}
+    <tr class="unit-row" data-unit-id="{{ item.instance.id }}">
+      <td class="align-middle text-center unit-order-cell">
         {% if can_edit %}
         <div class="d-flex flex-column gap-1 align-items-center justify-content-center">
-          <form
-            method="post"
-            action="/armies/{{ army.id }}/units/{{ item.instance.id }}/move"
-            class="m-0"
-          >
-            <input type="hidden" name="direction" value="up" />
-            <button
-              class="btn btn-outline-secondary btn-sm"
-              type="submit"
-              {% if loop.first %}disabled{% endif %}
-              aria-label="Przesuń jednostkę w górę"
+          <span class="drag-handle" title="Przeciągnij, aby zmienić kolejność lub grupę" aria-hidden="true">⋮⋮</span>
+          <div class="move-buttons-fallback d-flex flex-column gap-1">
+            <form
+              method="post"
+              action="/armies/{{ army.id }}/units/{{ item.instance.id }}/move"
+              class="m-0"
             >
-              ↑
-            </button>
-          </form>
-          <form
-            method="post"
-            action="/armies/{{ army.id }}/units/{{ item.instance.id }}/move"
-            class="m-0"
-          >
-            <input type="hidden" name="direction" value="down" />
-            <button
-              class="btn btn-outline-secondary btn-sm"
-              type="submit"
-              {% if loop.last %}disabled{% endif %}
-              aria-label="Przesuń jednostkę w dół"
+              <input type="hidden" name="direction" value="up" />
+              <button
+                class="btn btn-outline-secondary btn-sm"
+                type="submit"
+                {% if loop_first %}disabled{% endif %}
+                aria-label="Przesuń jednostkę w górę"
+              >
+                ↑
+              </button>
+            </form>
+            <form
+              method="post"
+              action="/armies/{{ army.id }}/units/{{ item.instance.id }}/move"
+              class="m-0"
             >
-              ↓
-            </button>
-          </form>
+              <input type="hidden" name="direction" value="down" />
+              <button
+                class="btn btn-outline-secondary btn-sm"
+                type="submit"
+                {% if loop_last %}disabled{% endif %}
+                aria-label="Przesuń jednostkę w dół"
+              >
+                ↓
+              </button>
+            </form>
+          </div>
         </div>
         {% else %}
         <span class="text-muted small">-</span>
@@ -375,11 +363,77 @@
         {% endif %}
       </td>
     </tr>
-    {% else %}
-    <tr><td colspan="8" class="text-muted">Brak jednostek</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+{% endmacro %}
+
+{% macro group_table_head() %}
+    <thead>
+    <tr>
+      <th class="text-center unit-order-col" style="width: 1%;">Kolejność</th>
+      <th>Nazwa</th>
+      <th>Statystyki</th>
+      <th class="d-none d-xl-table-cell">Zdolności pasywne</th>
+      <th class="d-none d-xxl-table-cell">Zdolności aktywne</th>
+      <th class="d-none d-xxl-table-cell">Aury</th>
+      <th>Domyślne uzbrojenie</th>
+      <th>Koszt</th>
+      <th></th>
+    </tr>
+  </thead>
+{% endmacro %}
+
+<div id="army-units-root" data-army-id="{{ army.id }}" data-can-edit="{{ 'true' if can_edit else 'false' }}">
+  {% if can_edit %}
+  <div class="d-flex flex-wrap gap-2 align-items-end mb-3" id="add-group-bar">
+    <div class="flex-grow-1" style="max-width: 320px;">
+      <label class="form-label small mb-1" for="new-group-name">Dodaj grupę jednostek</label>
+      <input class="form-control form-control-sm" id="new-group-name" placeholder="np. Bohaterowie" maxlength="120" />
+    </div>
+    <button class="btn btn-outline-primary btn-sm" type="button" id="btn-add-group">+ Dodaj grupę</button>
+    <div class="text-muted small ms-2 d-none d-md-block" id="reorder-status" aria-live="polite"></div>
+  </div>
+  {% endif %}
+
+  <div id="army-groups-container">
+  {% if unit_groups %}
+  {% for entry in unit_groups %}
+  {% set group = entry.group %}
+  {% set group_units = entry.units %}
+  <section class="unit-group card mb-3" data-group-id="{{ group.id if group else '' }}" data-group-collapsed="{{ 'true' if group and group.collapsed else 'false' }}">
+    <header class="unit-group-header card-header d-flex align-items-center gap-2">
+      <button class="btn btn-sm btn-link p-0 toggle-collapse" type="button" aria-label="Zwiń/rozwiń grupę">
+        <span class="collapse-icon">{% if group and group.collapsed %}▸{% else %}▾{% endif %}</span>
+      </button>
+      {% if group %}
+      <span class="group-name flex-grow-1 fw-semibold" {% if can_edit %}contenteditable="true" data-editable-group="{{ group.id }}"{% endif %}>{{ group.name }}</span>
+      {% else %}
+      <span class="group-name flex-grow-1 fw-semibold text-muted">Bez grupy</span>
+      {% endif %}
+      <span class="badge text-bg-light unit-count">{{ group_units | length }}</span>
+      {% if can_edit and group %}
+      <button class="btn btn-sm btn-outline-danger delete-group" type="button" data-group-id="{{ group.id }}" title="Usuń grupę (jednostki trafią do &laquo;Bez grupy&raquo;)">🗑</button>
+      <span class="group-drag-handle ms-1" title="Przeciągnij, aby zmienić kolejność grup" aria-hidden="true">⋮⋮</span>
+      {% endif %}
+    </header>
+    <div class="unit-group-body {% if group and group.collapsed %}d-none{% endif %}">
+      <div class="table-responsive">
+        <table class="table table-striped align-middle mb-0">
+          {{ group_table_head() }}
+          <tbody class="unit-group-list" data-group-id="{{ group.id if group else '' }}">
+            {% for item in group_units %}
+              {{ unit_row(item, loop.first, loop.last, can_edit, army) }}
+            {% else %}
+              <tr class="empty-placeholder"><td colspan="9" class="text-muted small text-center">Przeciągnij tu jednostki…</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  {% endfor %}
+  {% else %}
+    <div class="text-muted">Brak jednostek</div>
+  {% endif %}
+  </div>
 </div>
 
 {% if can_edit %}
@@ -635,5 +689,9 @@
     </form>
   </div>
 </div>
+{% endif %}
+{% if can_edit %}
+<script src="/static/vendor/sortable.min.js"></script>
+<script src="/static/js/army_groups.js"></script>
 {% endif %}
 {% endblock %}

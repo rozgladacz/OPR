@@ -234,6 +234,11 @@ class Army(TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="ArmySpell.position",
     )
+    unit_groups: Mapped[List["UnitGroup"]] = relationship(
+        back_populates="army",
+        cascade="all, delete-orphan",
+        order_by="UnitGroup.position",
+    )
 
 
 class ArmySpell(TimestampMixin, Base):
@@ -297,6 +302,22 @@ class ArmySpell(TimestampMixin, Base):
         }
 
 
+class UnitGroup(TimestampMixin, Base):
+    __tablename__ = "unit_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    army_id: Mapped[int] = mapped_column(ForeignKey("armies.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    collapsed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    army: Mapped["Army"] = relationship(back_populates="unit_groups")
+    units: Mapped[List["Unit"]] = relationship(
+        back_populates="group",
+        order_by=lambda: (Unit.position, Unit.id),
+    )
+
+
 class Unit(TimestampMixin, Base):
     __tablename__ = "units"
 
@@ -312,8 +333,12 @@ class Unit(TimestampMixin, Base):
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     typical_models: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    group_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("unit_groups.id"), nullable=True
+    )
 
     army: Mapped[Army] = relationship(back_populates="units")
+    group: Mapped[Optional["UnitGroup"]] = relationship(back_populates="units")
     owner: Mapped[Optional[User]] = relationship()
     default_weapon: Mapped[Optional[Weapon]] = relationship(back_populates="units", foreign_keys=[default_weapon_id])
     weapon_links: Mapped[List["UnitWeapon"]] = relationship(

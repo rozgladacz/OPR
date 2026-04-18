@@ -101,8 +101,8 @@
           </p>
           <div class="flex-grow-1 overflow-auto roster-army-unit-list">
             {% if available_units %}
-            <div class="list-group">
-              {% for entry in available_units %}
+            {% set show_avail_headers = available_groups | length > 1 or (available_groups | length == 1 and available_groups[0].group is not none) %}
+            {% macro unit_card(entry) %}
               {% set unit = entry.unit %}
               <form method="post" action="/rosters/{{ roster.id }}/units/add" class="list-group-item p-0 border-0">
                 <input type="hidden" name="unit_id" value="{{ unit.id }}" />
@@ -142,8 +142,34 @@
                   <div class="text-muted small mt-2">Domyślne uzbrojenie: {{ entry.default_summary }}</div>
                 </div>
               </form>
+            {% endmacro %}
+            {% if show_avail_headers %}
+              {% for section in available_groups %}
+              <div class="avail-group mb-2">
+                <button
+                  class="btn btn-sm btn-outline-secondary w-100 text-start d-flex justify-content-between align-items-center avail-group-toggle"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#avail-group-{{ loop.index }}"
+                  aria-expanded="{{ 'false' if section.group and section.group.collapsed else 'true' }}"
+                >
+                  <span class="fw-semibold">{% if section.group %}{{ section.group.name }}{% else %}Bez grupy{% endif %}</span>
+                  <span class="badge text-bg-secondary ms-2">{{ section.units | length }}</span>
+                </button>
+                <div class="collapse {% if not section.group or not section.group.collapsed %}show{% endif %}" id="avail-group-{{ loop.index }}">
+                  <div class="list-group mt-1">
+                    {% for entry in section.units %}{{ unit_card(entry) }}{% endfor %}
+                  </div>
+                </div>
+              </div>
               {% endfor %}
-            </div>
+            {% else %}
+              <div class="list-group">
+                {% for section in available_groups %}
+                {% for entry in section.units %}{{ unit_card(entry) }}{% endfor %}
+                {% endfor %}
+              </div>
+            {% endif %}
             {% else %}
             <div class="alert alert-info mb-0">Brak jednostek w wybranej armii.</div>
             {% endif %}
@@ -171,7 +197,9 @@
         {% if roster_items %}
           <div class="list-group roster-unit-list" data-roster-list>
           {% for item in roster_items %}
-          {% set ru = item.instance %}
+            {% set ru = item.instance %}
+            {% set is_first = loop.first %}
+            {% set is_last = loop.last %}
           <div class="list-group-item border-0 px-0 py-2" data-roster-entry>
             <div class="roster-unit-entry">
               {% if can_edit %}
@@ -187,7 +215,7 @@
                     type="submit"
                     data-roster-move
                     aria-label="Przesuń jednostkę w górę"
-                    {% if loop.first %}disabled{% endif %}
+                    {% if is_first %}disabled{% endif %}
                   >
                     ↑
                   </button>
@@ -203,7 +231,7 @@
                     type="submit"
                     data-roster-move
                     aria-label="Przesuń jednostkę w dół"
-                    {% if loop.last %}disabled{% endif %}
+                    {% if is_last %}disabled{% endif %}
                   >
                     ↓
                   </button>

@@ -25,6 +25,7 @@ from ..db import get_db
 from ..paths import TEMPLATES_DIR
 from ..security import get_current_user
 from ..services import ability_registry, costs, utils
+from ..services.roster_grouping import group_available_units, group_roster_items
 from ..services.rules import unit_is_hero
 
 logger = logging.getLogger(__name__)
@@ -408,7 +409,7 @@ def edit_roster(
     roster_stmt = (
         select(models.Roster)
         .options(
-            selectinload(models.Roster.army),
+            selectinload(models.Roster.army).selectinload(models.Army.unit_groups),
             selectinload(models.Roster.roster_unit_pairs),
             selectinload(models.Roster.roster_units).options(
                 selectinload(models.RosterUnit.unit).options(*_unit_eager_options())
@@ -587,6 +588,9 @@ def edit_roster(
     can_edit = current_user.is_admin or roster.owner_id == current_user.id
     can_delete = can_edit
 
+    roster_groups = group_roster_items(roster_items, roster.army)
+    available_groups = group_available_units(available_unit_options, roster.army)
+
     return templates.TemplateResponse(
         "roster_edit.html",
         {
@@ -594,7 +598,9 @@ def edit_roster(
             "user": current_user,
             "roster": roster,
             "available_units": available_unit_options,
+            "available_groups": available_groups,
             "roster_items": roster_items,
+            "roster_groups": roster_groups,
             "non_hero_unit_count": non_hero_unit_count,
             "total_cost": total_cost,
             "error": None,

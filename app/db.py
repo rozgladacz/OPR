@@ -358,6 +358,14 @@ def _migrate_schema() -> None:
                         "ALTER TABLE units ADD COLUMN typical_models INTEGER NOT NULL DEFAULT 1"
                     )
                 )
+            if "group_id" not in column_names:
+                logger.info("Adding group_id column to units table")
+                connection.execute(
+                    text(
+                        "ALTER TABLE units ADD COLUMN group_id INTEGER "
+                        "REFERENCES unit_groups(id)"
+                    )
+                )
 
         if "roster_units" in table_names:
             columns = inspector.get_columns("roster_units")

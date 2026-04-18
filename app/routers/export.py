@@ -24,6 +24,7 @@ from ..paths import TEMPLATES_DIR
 from ..pdf_font_data import PDF_FONT_DATA
 from ..security import get_current_user
 from ..services import costs, utils
+from ..services.roster_grouping import group_roster_items
 from .rosters import (
     _classification_map,
     _ensure_roster_view_access,
@@ -155,7 +156,10 @@ def _load_roster_for_export(db: Session, roster_id: int) -> models.Roster | None
                     selectinload(models.Unit.army),
                 )
             ),
-            selectinload(models.Roster.army).selectinload(models.Army.spells),
+            selectinload(models.Roster.army).options(
+                selectinload(models.Army.spells),
+                selectinload(models.Army.unit_groups),
+            ),
         )
     )
     return db.scalars(stmt).one_or_none()
@@ -205,6 +209,7 @@ def roster_print(
 
     total_cost, _ = costs.recalculate_roster_costs(roster)
     roster_items = _export_roster_unit_entries(db, roster)
+    roster_groups = group_roster_items(roster_items, roster.army)
     total_cost_rounded = utils.round_points(total_cost)
     spell_entries = _army_spell_entries(roster, roster_items)
     army_rules = _army_rule_labels(getattr(roster, "army", None))
@@ -215,6 +220,7 @@ def roster_print(
             "user": current_user,
             "roster": roster,
             "roster_items": roster_items,
+            "roster_groups": roster_groups,
             "total_cost": total_cost,
             "total_cost_rounded": total_cost_rounded,
             "generated_at": datetime.utcnow(),

@@ -326,6 +326,32 @@ def _move_unit_in_sequence(
     return False
 
 
+def _group_units_by_group(
+    groups: list[models.UnitGroup],
+    units: list[models.Unit],
+) -> list[tuple[models.UnitGroup | None, list[models.Unit]]]:
+    """Return [(group or None, units)] ordered by group position then unit position.
+
+    Empty groups are included. Units whose ``group_id`` does not match any existing
+    group (dangling reference) are treated as ungrouped.
+    """
+
+    ordered_groups = sorted(groups, key=lambda g: (g.position, g.id))
+    valid_ids = {g.id for g in ordered_groups}
+    buckets: dict[int | None, list[models.Unit]] = {g.id: [] for g in ordered_groups}
+    buckets[None] = []
+    for unit in sorted(units, key=lambda u: (u.position, u.id)):
+        key = unit.group_id if unit.group_id in valid_ids else None
+        buckets[key].append(unit)
+
+    result: list[tuple[models.UnitGroup | None, list[models.Unit]]] = [
+        (group, buckets[group.id]) for group in ordered_groups
+    ]
+    if buckets[None] or not ordered_groups:
+        result.append((None, buckets[None]))
+    return result
+
+
 def _get_default_ruleset(db: Session) -> models.RuleSet | None:
     return (
         db.execute(select(models.RuleSet).order_by(models.RuleSet.id))
@@ -374,6 +400,7 @@ def _load_army_detail(db: Session, army_id: int) -> models.Army | None:
                 ),
                 selectinload(models.Army.weapons),
                 selectinload(models.Army.spells).selectinload(models.ArmySpell.weapon),
+                selectinload(models.Army.unit_groups),
             )
             .where(models.Army.id == army_id)
         )
@@ -2332,29 +2359,285 @@ def move_army_unit(
     if normalized_direction not in {"up", "down"}:
         raise HTTPException(status_code=400, detail="Nieprawidłowy kierunek")
 
-    units = (
+    target = db.get(models.Unit, unit_id)
+    if not target or target.army_id != army.id:
+        raise HTTPException(status_code=404)
+
+    siblings = (
         db.execute(
             select(models.Unit)
-            .where(models.Unit.army_id == army.id)
+            .where(
+                models.Unit.army_id == army.id,
+                models.Unit.group_id.is_(target.group_id)
+                if target.group_id is None
+                else (models.Unit.group_id == target.group_id),
+            )
             .order_by(models.Unit.position, models.Unit.id)
         )
         .scalars()
         .all()
     )
 
-    try:
-        target = next(item for item in units if item.id == unit_id)
-    except StopIteration:
-        raise HTTPException(status_code=404)
-
-    moved = _move_unit_in_sequence(units, target.id, normalized_direction)
+    moved = _move_unit_in_sequence(siblings, target.id, normalized_direction)
     if not moved:
         return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
 
-    _resequence_army_units(units)
+    _resequence_army_units(siblings)
     db.commit()
 
     return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Unit groups: CRUD + bulk reorder
+# ---------------------------------------------------------------------------
+
+
+def _load_army_for_group_action(
+    army_id: int, db: Session, user: models.User
+) -> models.Army:
+    army = db.get(models.Army, army_id)
+    if not army:
+        raise HTTPException(status_code=404)
+    _ensure_army_edit_access(army, user)
+    return army
+
+
+def _next_group_position(db: Session, army: models.Army) -> int:
+    max_position = db.execute(
+        select(func.max(models.UnitGroup.position)).where(
+            models.UnitGroup.army_id == army.id
+        )
+    ).scalar()
+    return int(max_position) + 1 if max_position is not None else 0
+
+
+@router.post("/{army_id}/groups")
+def create_unit_group(
+    army_id: int,
+    request: Request,
+    name: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = _load_army_for_group_action(army_id, db, current_user)
+    cleaned = (name or "").strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Nazwa grupy nie może być pusta")
+    cleaned = cleaned[:120]
+
+    group = models.UnitGroup(
+        army_id=army.id,
+        name=cleaned,
+        position=_next_group_position(db, army),
+        collapsed=False,
+    )
+    db.add(group)
+    db.commit()
+    db.refresh(group)
+
+    if "application/json" in (request.headers.get("accept") or ""):
+        return JSONResponse(
+            {
+                "ok": True,
+                "group": {
+                    "id": group.id,
+                    "name": group.name,
+                    "position": group.position,
+                    "collapsed": group.collapsed,
+                },
+            }
+        )
+    return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
+
+
+@router.post("/{army_id}/groups/{group_id}/rename")
+def rename_unit_group(
+    army_id: int,
+    group_id: int,
+    request: Request,
+    name: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = _load_army_for_group_action(army_id, db, current_user)
+    group = db.get(models.UnitGroup, group_id)
+    if not group or group.army_id != army.id:
+        raise HTTPException(status_code=404)
+    cleaned = (name or "").strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Nazwa grupy nie może być pusta")
+    group.name = cleaned[:120]
+    db.commit()
+
+    if "application/json" in (request.headers.get("accept") or ""):
+        return JSONResponse({"ok": True, "name": group.name})
+    return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
+
+
+@router.post("/{army_id}/groups/{group_id}/delete")
+def delete_unit_group(
+    army_id: int,
+    group_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = _load_army_for_group_action(army_id, db, current_user)
+    group = db.get(models.UnitGroup, group_id)
+    if not group or group.army_id != army.id:
+        raise HTTPException(status_code=404)
+
+    # Push units from the deleted group to the "ungrouped" bucket, preserving
+    # order by appending them after existing ungrouped units.
+    ungrouped = (
+        db.execute(
+            select(models.Unit)
+            .where(
+                models.Unit.army_id == army.id,
+                models.Unit.group_id.is_(None),
+            )
+            .order_by(models.Unit.position, models.Unit.id)
+        )
+        .scalars()
+        .all()
+    )
+    from_deleted = sorted(
+        list(group.units), key=lambda u: (u.position, u.id)
+    )
+    for unit in from_deleted:
+        unit.group_id = None
+    combined = ungrouped + from_deleted
+    _resequence_army_units(combined)
+
+    db.delete(group)
+    db.flush()
+
+    remaining_groups = (
+        db.execute(
+            select(models.UnitGroup)
+            .where(models.UnitGroup.army_id == army.id)
+            .order_by(models.UnitGroup.position, models.UnitGroup.id)
+        )
+        .scalars()
+        .all()
+    )
+    for index, grp in enumerate(remaining_groups):
+        grp.position = index
+    db.commit()
+
+    if "application/json" in (request.headers.get("accept") or ""):
+        return JSONResponse({"ok": True})
+    return RedirectResponse(url=f"/armies/{army_id}", status_code=303)
+
+
+@router.post("/{army_id}/groups/{group_id}/toggle")
+def toggle_unit_group(
+    army_id: int,
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = _load_army_for_group_action(army_id, db, current_user)
+    group = db.get(models.UnitGroup, group_id)
+    if not group or group.army_id != army.id:
+        raise HTTPException(status_code=404)
+    group.collapsed = not group.collapsed
+    db.commit()
+    return JSONResponse({"ok": True, "collapsed": group.collapsed})
+
+
+@router.post("/{army_id}/reorder")
+def reorder_army_units(
+    army_id: int,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    army = _load_army_for_group_action(army_id, db, current_user)
+
+    groups_payload = payload.get("groups") or []
+    group_order = payload.get("group_order") or []
+    if not isinstance(groups_payload, list) or not isinstance(group_order, list):
+        raise HTTPException(status_code=400, detail="Nieprawidłowy format danych")
+
+    all_units = (
+        db.execute(
+            select(models.Unit).where(models.Unit.army_id == army.id)
+        )
+        .scalars()
+        .all()
+    )
+    all_groups = (
+        db.execute(
+            select(models.UnitGroup).where(models.UnitGroup.army_id == army.id)
+        )
+        .scalars()
+        .all()
+    )
+    units_by_id = {u.id: u for u in all_units}
+    groups_by_id = {g.id: g for g in all_groups}
+
+    # Validate: every unit exactly once, every bucket id valid (or null).
+    seen_units: set[int] = set()
+    for bucket in groups_payload:
+        if not isinstance(bucket, dict):
+            raise HTTPException(status_code=400, detail="Nieprawidłowy bucket")
+        raw_gid = bucket.get("id")
+        if raw_gid is not None:
+            if not isinstance(raw_gid, int) or raw_gid not in groups_by_id:
+                raise HTTPException(status_code=400, detail="Nieznana grupa")
+        unit_ids = bucket.get("unit_ids") or []
+        if not isinstance(unit_ids, list):
+            raise HTTPException(status_code=400, detail="unit_ids musi być listą")
+        for uid in unit_ids:
+            if not isinstance(uid, int) or uid not in units_by_id:
+                raise HTTPException(status_code=400, detail=f"Nieznana jednostka {uid}")
+            if uid in seen_units:
+                raise HTTPException(status_code=400, detail=f"Duplikat jednostki {uid}")
+            seen_units.add(uid)
+
+    if seen_units != set(units_by_id.keys()):
+        raise HTTPException(
+            status_code=400,
+            detail="Lista jednostek musi obejmować dokładnie wszystkie jednostki armii",
+        )
+
+    # Validate group_order: must cover every group at least; null allowed.
+    seen_groups: set[int] = set()
+    for raw_gid in group_order:
+        if raw_gid is None:
+            continue
+        if not isinstance(raw_gid, int) or raw_gid not in groups_by_id:
+            raise HTTPException(status_code=400, detail="Nieznana grupa w kolejności")
+        if raw_gid in seen_groups:
+            raise HTTPException(status_code=400, detail="Duplikat grupy w kolejności")
+        seen_groups.add(raw_gid)
+    if seen_groups != set(groups_by_id.keys()):
+        raise HTTPException(
+            status_code=400,
+            detail="Kolejność grup musi obejmować wszystkie grupy",
+        )
+
+    # Apply: unit group + position (ciągły indeks wewnątrz bucketu).
+    for bucket in groups_payload:
+        raw_gid = bucket.get("id")
+        unit_ids = bucket.get("unit_ids") or []
+        for index, uid in enumerate(unit_ids):
+            unit = units_by_id[uid]
+            unit.group_id = raw_gid
+            unit.position = index
+
+    # Apply: group positions (skip nulls).
+    position_counter = 0
+    for raw_gid in group_order:
+        if raw_gid is None:
+            continue
+        groups_by_id[raw_gid].position = position_counter
+        position_counter += 1
+
+    db.commit()
+    return JSONResponse({"ok": True})
 
 
 @router.get("/{army_id}/units/{unit_id}/edit", response_class=HTMLResponse)
@@ -2810,6 +3093,7 @@ def _render_army_edit(
     aura_definitions = ability_registry.definition_payload(db, "aura")
 
     units = []
+    units_by_id: dict[int, dict] = {}
     for unit in army.units:
         passive_items = [item for item in _passive_payload(unit) if item]
         active_items = ability_registry.unit_ability_payload(unit, "active")
@@ -2823,22 +3107,32 @@ def _render_army_edit(
             weapon_summary = "-"
         cost_per_model = costs.unit_total_cost(unit)
         typical_models = unit.typical_model_count
-        units.append(
-            {
-                "instance": unit,
-                "cost": costs.unit_typical_total_cost(
-                    unit,
-                    typical_models,
-                    per_model=cost_per_model,
-                ),
-                "cost_per_model": cost_per_model,
-                "typical_models": typical_models,
-                "passive_items": passive_items,
-                "active_items": active_items,
-                "aura_items": aura_items,
-                "weapon_summary": weapon_summary,
-            }
+        unit_entry = {
+            "instance": unit,
+            "cost": costs.unit_typical_total_cost(
+                unit,
+                typical_models,
+                per_model=cost_per_model,
+            ),
+            "cost_per_model": cost_per_model,
+            "typical_models": typical_models,
+            "passive_items": passive_items,
+            "active_items": active_items,
+            "aura_items": aura_items,
+            "weapon_summary": weapon_summary,
+        }
+        units.append(unit_entry)
+        units_by_id[unit.id] = unit_entry
+
+    unit_groups = [
+        {
+            "group": group,
+            "units": [units_by_id[u.id] for u in group_units if u.id in units_by_id],
+        }
+        for group, group_units in _group_units_by_group(
+            list(army.unit_groups), list(army.units)
         )
+    ]
 
     if selected_armory_id is None:
         selected_armory_id = army.armory_id
@@ -2852,6 +3146,7 @@ def _render_army_edit(
             "user": current_user,
             "army": army,
             "units": units,
+            "unit_groups": unit_groups,
             "weapons": weapons,
             "weapon_tree": weapon_tree,
             "weapon_choices": weapon_choices,

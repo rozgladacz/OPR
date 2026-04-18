@@ -268,3 +268,50 @@ body {
     page-break-inside: avoid;
   }
 }
+
+/* ── Grupy jednostek w edycji armii ───────────────────────────────────── */
+#army-units-root .unit-group { overflow: hidden; }
+#army-units-root .unit-group-header { user-select: none; cursor: default; }
+#army-units-root .group-name[contenteditable="true"] {
+  outline: none;
+  cursor: text;
+  border-bottom: 1px dashed transparent;
+}
+#army-units-root .group-name[contenteditable="true"]:hover,
+#army-units-root .group-name[contenteditable="true"]:focus {
+  border-bottom-color: #6c757d;
+}
+#army-units-root .drag-handle,
+#army-units-root .group-drag-handle {
+  cursor: grab;
+  color: #6c757d;
+  font-weight: bold;
+  letter-spacing: 1px;
+  padding: 0 0.25rem;
+}
+#army-units-root .drag-handle:active,
+#army-units-root .group-drag-handle:active { cursor: grabbing; }
+#army-units-root .toggle-collapse { text-decoration: none; color: #495057; }
+#army-units-root tr.unit-row-ghost { opacity: 0.35; background: #e7f1ff; }
+#army-units-root tr.unit-row-chosen { background: #fff3cd; }
+#army-units-root section.unit-group-ghost { opacity: 0.4; }
+#army-units-root tr.empty-placeholder td { font-style: italic; }
+/* Gdy JS drag&drop jest aktywny, chowamy przyciski ↑/↓ — drag wystarcza. */
+#army-units-root.js-dnd-enabled .move-buttons-fallback { display: none !important; }
+#army-units-root:not(.js-dnd-enabled) .drag-handle { display: none; }
+
+/* ── Grupy w rozpisce ─────────────────────────────────────────────────── */
+.roster-group-header {
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  background: #f1f3f5;
+  border-left: 4px solid #0d6efd;
+  font-weight: 600;
+}
+.roster-print .roster-group-header {
+  margin-top: 1rem;
+  background: transparent;
+  border-left-width: 6px;
+  font-size: 1.1rem;
+}
