@@ -247,6 +247,7 @@
     onEnd(evt) {
       if (evt.oldIndex === evt.newIndex) return;
       const rows = Array.from(tbody.querySelectorAll('tr[data-spell-id]'));
+      rows.forEach((r, i) => { const idx = r.querySelector('.spell-index'); if (idx) idx.textContent = i + 1; });
       const order = rows.map(r => parseInt(r.dataset.spellId, 10));
       fetch(`/armies/${armyId}/spells/reorder`, {
         method: 'POST',

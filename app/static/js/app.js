@@ -6350,7 +6350,7 @@ function initArmoryWeaponTree() {
         )
       : [];
     if (!nodeState.has(hydrated.id) && hydrated.children.length) {
-      nodeState.set(hydrated.id, { expanded: true });
+      nodeState.set(hydrated.id, { expanded: false });
     }
     return hydrated;
   };
@@ -6752,6 +6752,200 @@ function initArmoryWeaponTree() {
 }
 
 // ============================================================
+// SECTION: WEAPON INHERITANCE PANEL
+// initWeaponInheritancePanel — collapsible panel on armory weapon edit
+// form with a hierarchical tree picker (one section per ancestor armory).
+// Updates hidden inputs inherit_armory_id / inherit_parent_weapon_id.
+// ============================================================
+function initWeaponInheritancePanel() {
+  document.querySelectorAll('[data-inheritance-panel]').forEach((panel) => {
+    const toggle = panel.querySelector('[data-inheritance-toggle]');
+    const body = panel.querySelector('[data-inheritance-body]');
+    const armorySelect = panel.querySelector('[data-inheritance-armory-select]');
+    const treeWrapper = panel.querySelector('[data-inheritance-tree-wrapper]');
+    const treeContainer = panel.querySelector('[data-inheritance-tree]');
+    const armoryInput = panel.querySelector('[data-inheritance-armory-value]');
+    const weaponInput = panel.querySelector('[data-inheritance-weapon-value]');
+    const chevron = panel.querySelector('[data-inheritance-chevron]');
+    if (!body || !armorySelect || !treeContainer) {
+      return;
+    }
+
+    let options = [];
+    try {
+      options = JSON.parse(panel.dataset.inheritanceOptions || '[]');
+    } catch (_) {
+      options = [];
+    }
+
+    let current = null;
+    try {
+      current = panel.dataset.currentInheritance
+        ? JSON.parse(panel.dataset.currentInheritance)
+        : null;
+    } catch (_) {
+      current = null;
+    }
+
+    let selectedArmoryId = current ? String(current.armory_id) : '';
+    let selectedWeaponId = current ? String(current.weapon_id) : '';
+    const collapsedWeapons = new Set();
+
+    options.forEach((entry) => {
+      const opt = document.createElement('option');
+      opt.value = String(entry.armory_id);
+      opt.textContent = entry.armory_name + (entry.is_current ? ' (bieżąca)' : '');
+      armorySelect.appendChild(opt);
+    });
+    armorySelect.value = selectedArmoryId || '';
+
+    function applySelection() {
+      if (armoryInput) armoryInput.value = selectedArmoryId || '';
+      if (weaponInput) weaponInput.value = selectedWeaponId || '';
+    }
+    applySelection();
+
+    function currentEntry() {
+      return options.find((e) => String(e.armory_id) === selectedArmoryId) || null;
+    }
+
+    function createWeaponNode(weapon, depth) {
+      const li = document.createElement('li');
+      li.style.listStyle = 'none';
+      const row = document.createElement('div');
+      row.className = 'd-flex align-items-center gap-1 py-1';
+      row.style.paddingLeft = `${depth * 1.25}rem`;
+
+      const hasChildren = Array.isArray(weapon.children) && weapon.children.length > 0;
+      const isCollapsed = collapsedWeapons.has(String(weapon.id));
+
+      if (hasChildren) {
+        const chevBtn = document.createElement('button');
+        chevBtn.type = 'button';
+        chevBtn.className = 'btn btn-link btn-sm p-0 text-muted flex-shrink-0';
+        chevBtn.style.lineHeight = '1';
+        chevBtn.style.width = '1.1rem';
+        chevBtn.setAttribute('aria-label', isCollapsed ? 'Rozwiń' : 'Zwiń');
+        chevBtn.textContent = isCollapsed ? '▸' : '▾';
+        chevBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (collapsedWeapons.has(String(weapon.id))) {
+            collapsedWeapons.delete(String(weapon.id));
+          } else {
+            collapsedWeapons.add(String(weapon.id));
+          }
+          renderTree();
+        });
+        row.appendChild(chevBtn);
+      } else {
+        const spacer = document.createElement('span');
+        spacer.style.width = '1.1rem';
+        spacer.style.flexShrink = '0';
+        spacer.setAttribute('aria-hidden', 'true');
+        row.appendChild(spacer);
+      }
+
+      const isSelected = selectedWeaponId === String(weapon.id);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `btn btn-sm text-start flex-grow-1 ${isSelected ? 'btn-primary' : 'btn-outline-secondary'}`;
+      btn.textContent = weapon.name || `#${weapon.id}`;
+      btn.addEventListener('click', () => {
+        if (isSelected) {
+          selectedWeaponId = '';
+        } else {
+          selectedWeaponId = String(weapon.id);
+        }
+        applySelection();
+        renderTree();
+      });
+      row.appendChild(btn);
+      li.appendChild(row);
+
+      if (hasChildren && !isCollapsed) {
+        const ul = document.createElement('ul');
+        ul.className = 'ps-0 mb-0';
+        weapon.children.forEach((child) => ul.appendChild(createWeaponNode(child, depth + 1)));
+        li.appendChild(ul);
+      }
+      return li;
+    }
+
+    function renderTree() {
+      treeContainer.innerHTML = '';
+      const entry = currentEntry();
+      if (!entry) {
+        if (treeWrapper) treeWrapper.classList.add('d-none');
+        return;
+      }
+      if (treeWrapper) treeWrapper.classList.remove('d-none');
+      const weapons = Array.isArray(entry.weapons) ? entry.weapons : [];
+      if (!weapons.length) {
+        const empty = document.createElement('div');
+        empty.className = 'text-muted small';
+        empty.textContent = 'Brak broni w tej zbrojowni.';
+        treeContainer.appendChild(empty);
+        return;
+      }
+      const ul = document.createElement('ul');
+      ul.className = 'ps-0 mb-0';
+      weapons.forEach((w) => ul.appendChild(createWeaponNode(w, 0)));
+      treeContainer.appendChild(ul);
+    }
+
+    function initCollapsed(weapons) {
+      (Array.isArray(weapons) ? weapons : []).forEach((w) => {
+        if (Array.isArray(w.children) && w.children.length) {
+          collapsedWeapons.add(String(w.id));
+          initCollapsed(w.children);
+        }
+      });
+    }
+    options.forEach((entry) => initCollapsed(entry.weapons));
+
+    if (selectedWeaponId) {
+      const entry = currentEntry();
+      if (entry) {
+        const expandPath = (weapons) => {
+          for (const w of weapons) {
+            if (String(w.id) === selectedWeaponId) return true;
+            if (Array.isArray(w.children) && expandPath(w.children)) {
+              collapsedWeapons.delete(String(w.id));
+              return true;
+            }
+          }
+          return false;
+        };
+        expandPath(entry.weapons || []);
+      }
+    }
+
+    armorySelect.addEventListener('change', () => {
+      selectedArmoryId = armorySelect.value || '';
+      selectedWeaponId = '';
+      applySelection();
+      renderTree();
+    });
+
+    if (toggle && body) {
+      let treeInitialized = false;
+      toggle.addEventListener('click', () => {
+        const expanded = toggle.getAttribute('aria-expanded') === 'true';
+        const next = !expanded;
+        toggle.setAttribute('aria-expanded', next ? 'true' : 'false');
+        body.classList.toggle('d-none', !next);
+        if (chevron) chevron.textContent = next ? '▾' : '▸';
+        if (next && !treeInitialized) {
+          treeInitialized = true;
+          renderTree();
+        }
+      });
+    }
+  });
+}
+
+
+// ============================================================
 // SECTION: BOOTSTRAP — DOMContentLoaded
 // Łańcuch inicjalizacji (kolejność krytyczna — patrz AGENTS.md):
 //   initAbilityPickers → initNumberPickers → initRangePickers →
@@ -6768,4 +6962,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initSpellAbilityForms();
   initArmoryWeaponTree();
   initSpellWeaponCostPreview();
+  initWeaponInheritancePanel();
 });

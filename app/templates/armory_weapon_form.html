@@ -7,21 +7,6 @@
     <div class="card">
       <div class="card-body">
         <h5 class="card-title">{% if weapon %}Edycja broni{% else %}Nowa broń{% endif %}</h5>
-        {% if armory.parent %}
-        <div class="alert alert-info">
-          Ten wariant dziedziczy wartości z listy bazowej
-          {% if weapon and weapon.parent %}
-          <a
-            class="alert-link"
-            href="/armories/{{ weapon.parent.armory_id }}/weapons/{{ weapon.parent.id }}/edit"
-          >
-            {{ weapon.parent.effective_name }}
-          </a>
-          z Zbrojowni „{{ weapon.parent.armory.name }}”
-          {% endif %}. Wprowadź nowe wartości,
-          aby je nadpisać – pozostawienie wartości zgodnych z bazą spowoduje korzystanie z oryginału.
-        </div>
-        {% endif %}
         {% if error %}
         <div class="alert alert-danger">{{ error }}</div>
         {% endif %}
@@ -31,6 +16,52 @@
           {% if army %}data-army-id="{{ army.id }}"{% endif %}
           {% if parent_defaults %}data-defaults='{{ parent_defaults | tojson }}'{% endif %}
         >
+          {% if weapon and inheritance_options is defined %}
+          <div
+            class="card mb-3 inheritance-panel"
+            data-inheritance-panel
+            data-inheritance-options='{{ inheritance_options | tojson }}'
+            {% if current_inheritance %}data-current-inheritance='{{ current_inheritance | tojson }}'{% endif %}
+          >
+            <div
+              class="card-header d-flex justify-content-between align-items-center"
+              role="button"
+              data-inheritance-toggle
+              aria-expanded="false"
+              style="cursor: pointer;"
+            >
+              <div>
+                {% if weapon.parent %}
+                Dziedziczy po
+                <strong>{{ weapon.parent.effective_name }}</strong>
+                ze zbrojowni „{{ weapon.parent.armory.name }}”.
+                {% else %}
+                Broń niezależna – brak dziedziczenia.
+                {% endif %}
+                <small class="text-muted d-block">Kliknij, aby zarządzać dziedziczeniem.</small>
+              </div>
+              <span data-inheritance-chevron aria-hidden="true">▸</span>
+            </div>
+            <div class="card-body d-none" data-inheritance-body>
+              <div class="mb-2">
+                <label class="form-label" for="inherit-armory-select">Zbrojownia rodzica</label>
+                <select class="form-select" id="inherit-armory-select" data-inheritance-armory-select>
+                  <option value="">— brak dziedziczenia —</option>
+                </select>
+              </div>
+              <div data-inheritance-tree-wrapper class="d-none">
+                <label class="form-label">Broń rodzica</label>
+                <div class="border rounded p-2" data-inheritance-tree></div>
+              </div>
+              <input type="hidden" name="inherit_armory_id" data-inheritance-armory-value />
+              <input type="hidden" name="inherit_parent_weapon_id" data-inheritance-weapon-value />
+              <div class="form-text mt-2">
+                Wybór broni z dalszego przodka zostanie automatycznie zmapowany na jej lokalny odpowiednik w bezpośrednim rodzicu zbrojowni.
+                Ustawienie „brak dziedziczenia” zmaterializuje bieżące wartości w tej broni.
+              </div>
+            </div>
+          </div>
+          {% endif %}
           <div class="mb-3">
             <label class="form-label" for="name">Nazwa</label>
             <input class="form-control" id="name" name="name" value="{{ form_values.name }}" required />
