@@ -438,6 +438,9 @@ def _weapon_tree_payload(weapons: list[models.Weapon]) -> dict[str, object]:
             "path_text": "",
             "range_value": range_value,
             "category": category,
+            "attacks": weapon.display_attacks,
+            "ap": weapon.effective_ap,
+            "abilities": [{"raw": t} for t in costs.split_traits(weapon.effective_tags)],
             "is_leaf": True,
         }
 

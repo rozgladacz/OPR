@@ -1647,6 +1647,9 @@ function initWeaponPicker(root) {
             : pathLabels.join(' / '),
         category,
         range_value: Number.isFinite(rangeValue) ? rangeValue : 0,
+        attacks: node.attacks !== undefined && node.attacks !== null ? node.attacks : null,
+        ap: node.ap !== undefined && node.ap !== null ? node.ap : null,
+        abilities: Array.isArray(node.abilities) ? node.abilities : [],
         is_leaf: isLeaf,
       };
       weaponMap.set(String(id), { ...meta });
@@ -1742,6 +1745,9 @@ function initWeaponPicker(root) {
             : pathLabels.join(' / '),
         category,
         range_value: Number.isFinite(rangeValue) ? rangeValue : 0,
+        attacks: entry.attacks !== undefined && entry.attacks !== null ? entry.attacks : null,
+        ap: entry.ap !== undefined && entry.ap !== null ? entry.ap : null,
+        abilities: Array.isArray(entry.abilities) ? entry.abilities : [],
         is_leaf: entry.is_leaf !== undefined ? Boolean(entry.is_leaf) : true,
       });
     });
@@ -2196,6 +2202,20 @@ function initWeaponPicker(root) {
       nameRow.appendChild(rangeBadge);
 
       nameWrapper.appendChild(nameRow);
+
+      const weaponStats = weaponMap.get(String(item.weapon_id));
+      const rangeDisplay = Number(item.range_value) > 0 ? `${item.range_value}"` : 'Wręcz';
+      const attacksDisplay = weaponStats?.attacks !== null && weaponStats?.attacks !== undefined
+        ? weaponStats.attacks : '-';
+      const apDisplay = weaponStats?.ap !== null && weaponStats?.ap !== undefined
+        ? weaponStats.ap : 0;
+      const abilitiesDisplay = Array.isArray(weaponStats?.abilities) && weaponStats.abilities.length
+        ? weaponStats.abilities.map((a) => a.label || a.raw || a.slug || '').filter(Boolean).join(', ')
+        : 'Brak cech';
+      const statsLine = document.createElement('div');
+      statsLine.className = 'text-muted small mt-1';
+      statsLine.textContent = `Zasięg: ${rangeDisplay} • Ataki: ${attacksDisplay} • AP: ${apDisplay} • Cechy: ${abilitiesDisplay}`;
+      nameWrapper.appendChild(statsLine);
 
       const defaultGroup = document.createElement('div');
       defaultGroup.className = 'd-flex align-items-center gap-2 weapon-default-group';
