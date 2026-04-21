@@ -325,6 +325,7 @@ def _render_armory_detail(
             "can_edit": can_edit,
             "can_delete": can_delete,
             "parent_chain": list(reversed(parent_chain)),
+            "parent_options": _eligible_new_parents(db, armory, current_user) if can_edit else [],
             "form_values": _weapon_form_values(None),
             "error": error,
             "warning": warning,
@@ -496,16 +497,12 @@ def _sort_weapon_nodes(nodes: list[dict]) -> None:
         _sort_weapon_nodes(n["children"])
 
 
-def _build_inheritance_options(
+def _build_weapon_tree_options_for_chain(
     db: Session,
-    armory: models.Armory,
-    weapon: models.Weapon | None,
+    chain: list[models.Armory],
+    current_armory: models.Armory,
+    excluded_ids: set[int],
 ) -> list[dict]:
-    chain = _armory_ancestor_chain(armory)
-    excluded_ids: set[int] = set()
-    if weapon is not None and weapon.id is not None:
-        excluded_ids = set(_weapon_chain_ids(db, weapon))
-
     options: list[dict] = []
     for arm in chain:
         weapons = (
@@ -527,7 +524,7 @@ def _build_inheritance_options(
 
         node_map: dict[int, dict] = {}
         for w in weapons:
-            if arm.id == armory.id and w.id in excluded_ids:
+            if arm.id == current_armory.id and w.id in excluded_ids:
                 continue
             node_map[w.id] = {
                 "id": w.id,
@@ -586,11 +583,40 @@ def _build_inheritance_options(
             {
                 "armory_id": arm.id,
                 "armory_name": arm.name,
-                "is_current": arm.id == armory.id,
+                "is_current": arm.id == current_armory.id,
                 "weapons": roots,
             }
         )
     return options
+
+
+def _build_inheritance_options(
+    db: Session,
+    armory: models.Armory,
+    weapon: models.Weapon | None,
+) -> list[dict]:
+    excluded_ids: set[int] = set()
+    if weapon is not None and weapon.id is not None:
+        excluded_ids = set(_weapon_chain_ids(db, weapon))
+    return _build_weapon_tree_options_for_chain(
+        db, _armory_ancestor_chain(armory), armory, excluded_ids
+    )
+
+
+def _armory_descendant_chain(armory: models.Armory) -> list[models.Armory]:
+    chain: list[models.Armory] = []
+    stack: list[models.Armory] = list(armory.variants)
+    while stack:
+        variant = stack.pop(0)
+        chain.append(variant)
+        stack.extend(variant.variants)
+    return chain
+
+
+def _build_import_options(db: Session, armory: models.Armory) -> list[dict]:
+    return _build_weapon_tree_options_for_chain(
+        db, _armory_descendant_chain(armory), armory, set()
+    )
 
 
 def _current_inheritance(weapon: models.Weapon | None) -> dict | None:
@@ -601,6 +627,84 @@ def _current_inheritance(weapon: models.Weapon | None) -> dict | None:
         "armory_id": parent.armory_id,
         "weapon_id": parent.id,
     }
+
+
+def _materialize_weapon(weapon: models.Weapon) -> None:
+    if weapon.parent is None:
+        return
+    materialized_name = weapon.effective_name
+    materialized_range = weapon.effective_range
+    materialized_attacks = float(weapon.effective_attacks)
+    materialized_ap = int(weapon.effective_ap)
+    materialized_tags = weapon.effective_tags
+    materialized_notes = weapon.effective_notes
+    if weapon.name is None:
+        weapon.name = materialized_name
+    if weapon.range is None:
+        weapon.range = materialized_range
+    if weapon.attacks is None:
+        weapon.attacks = materialized_attacks
+    if weapon.ap is None:
+        weapon.ap = materialized_ap
+    if weapon.tags is None and materialized_tags is not None:
+        weapon.tags = materialized_tags
+    if weapon.notes is None and materialized_notes is not None:
+        weapon.notes = materialized_notes
+    weapon.parent_id = None
+
+
+def _apply_inheritance_selection(
+    db: Session,
+    armory: models.Armory,
+    weapon: models.Weapon,
+    inherit_parent_weapon_id: str,
+) -> bool:
+    inherit_selected_raw = (inherit_parent_weapon_id or "").strip()
+    if inherit_selected_raw == "":
+        if weapon.parent is not None:
+            _materialize_weapon(weapon)
+            return True
+        return False
+    try:
+        selected_id = int(inherit_selected_raw)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Nieprawidłowe ID broni-rodzica.")
+    if weapon.id is not None and selected_id == weapon.id:
+        raise HTTPException(status_code=400, detail="Broń nie może dziedziczyć po samej sobie.")
+    selected = db.get(models.Weapon, selected_id)
+    if selected is None:
+        raise HTTPException(status_code=404, detail="Wybrana broń-rodzic nie istnieje.")
+    allowed_armory_ids = {arm.id for arm in _armory_ancestor_chain(armory)}
+    if selected.armory_id not in allowed_armory_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Wybrana broń musi pochodzić z łańcucha dziedziczenia zbrojowni.",
+        )
+    if weapon.id is not None:
+        descendant_ids = set(_weapon_chain_ids(db, weapon))
+        if selected.id in descendant_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="Wybrana broń jest potomkiem edytowanej broni – powstałby cykl.",
+            )
+    resolved = _resolve_local_parent_for_variant(db, armory, selected)
+    if weapon.id is not None and resolved.id == weapon.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Nie można ustawić wybranej broni jako rodzica (cykl lokalny).",
+        )
+    if resolved.armory_id not in {armory.id, armory.parent_id}:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Nie udało się znaleźć lokalnego odpowiednika wybranej broni "
+                "w bieżącej zbrojowni lub jej bezpośrednim rodzicu."
+            ),
+        )
+    if weapon.parent_id != resolved.id:
+        weapon.parent_id = resolved.id
+        return True
+    return False
 
 
 def _weapon_chain_ids(db: Session, weapon: models.Weapon) -> list[int]:
@@ -720,14 +824,34 @@ def _parent_chain(armory: models.Armory) -> list[models.Armory]:
     return chain
 
 
+def _collect_armory_descendant_ids(armory: models.Armory) -> set[int]:
+    return {arm.id for arm in _armory_descendant_chain(armory)}
+
+
+def _eligible_new_parents(
+    db: Session, armory: models.Armory, user: models.User
+) -> list[models.Armory]:
+    query = select(models.Armory).order_by(models.Armory.name)
+    if not user.is_admin:
+        query = query.where(
+            or_(models.Armory.owner_id == user.id, models.Armory.owner_id.is_(None))
+        )
+    candidates = db.execute(query).scalars().all()
+    excluded = _collect_armory_descendant_ids(armory) | {armory.id}
+    return [arm for arm in candidates if arm.id not in excluded]
+
+
 def _sync_descendant_variants(
     db: Session,
     armory: models.Armory,
     protected_weapon_ids: set[int] | None = None,
+    skip_armory_ids: set[int] | None = None,
 ) -> None:
     stack: list[models.Armory] = list(armory.variants)
     while stack:
         variant = stack.pop()
+        if skip_armory_ids and variant.id in skip_armory_ids:
+            continue
         utils.ensure_armory_variant_sync(
             db,
             variant,
@@ -907,6 +1031,7 @@ def rename_armory(
                 "can_edit": True,
                 "can_delete": not armory.variants and not armory.armies,
                 "parent_chain": list(reversed(_parent_chain(armory))),
+                "parent_options": _eligible_new_parents(db, armory, current_user),
                 "form_values": _weapon_form_values(None),
                 "error": "Nazwa zbrojowni jest wymagana.",
                 "warning": None,
@@ -914,6 +1039,68 @@ def rename_armory(
         )
 
     armory.name = cleaned_name
+    db.commit()
+    return RedirectResponse(url=f"/armories/{armory.id}", status_code=303)
+
+
+@router.post("/{armory_id}/change-parent")
+def change_armory_parent(
+    armory_id: int,
+    request: Request,
+    new_parent_id: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    armory = _get_armory(db, armory_id)
+    _ensure_armory_edit_access(armory, current_user)
+
+    cleaned = (new_parent_id or "").strip()
+    new_parent: models.Armory | None = None
+    if cleaned:
+        try:
+            new_parent_int = int(cleaned)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Nieprawidłowe ID rodzica.")
+        if new_parent_int == armory.id:
+            raise HTTPException(status_code=400, detail="Zbrojownia nie może być swoim rodzicem.")
+        new_parent = db.get(models.Armory, new_parent_int)
+        if new_parent is None:
+            raise HTTPException(status_code=404, detail="Wybrany rodzic nie istnieje.")
+        _ensure_armory_view_access(new_parent, current_user)
+        if new_parent.id in _collect_armory_descendant_ids(armory):
+            raise HTTPException(
+                status_code=400,
+                detail="Nie można ustawić potomka jako rodzica (cykl).",
+            )
+
+    new_chain_ids: set[int] = set()
+    if new_parent is not None:
+        new_chain_ids = {new_parent.id} | {a.id for a in _parent_chain(new_parent)}
+
+    armory_weapons = (
+        db.execute(
+            select(models.Weapon).where(
+                models.Weapon.armory_id == armory.id,
+                models.Weapon.army_id.is_(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for weapon in armory_weapons:
+        if weapon.parent_id is None or weapon.parent is None:
+            continue
+        parent_armory_id = weapon.parent.armory_id
+        if parent_armory_id not in new_chain_ids:
+            _materialize_weapon(weapon)
+            _update_weapon_cost(weapon)
+
+    armory.parent_id = new_parent.id if new_parent is not None else None
+    db.flush()
+
+    if new_parent is not None:
+        utils.ensure_armory_variant_sync(db, armory)
+    _sync_descendant_variants(db, armory)
     db.commit()
     return RedirectResponse(url=f"/armories/{armory.id}", status_code=303)
 
@@ -1098,6 +1285,8 @@ def new_weapon_form(
             "range_options": RANGE_OPTIONS,
             "parent_defaults": None,
             "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+            "inheritance_options": _build_inheritance_options(db, armory, None),
+            "current_inheritance": None,
 
             "error": None,
         },
@@ -1116,6 +1305,8 @@ def create_weapon(
     abilities: str | None = Form(None),
 
     notes: str | None = Form(None),
+    inherit_parent_weapon_id: str = Form(""),
+    inherit_armory_id: str = Form(""),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user()),
 ):
@@ -1147,6 +1338,8 @@ def create_weapon(
                 "range_options": RANGE_OPTIONS,
                 "parent_defaults": None,
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+                "inheritance_options": _build_inheritance_options(db, armory, None),
+                "current_inheritance": None,
                 "error": "Nazwa broni jest wymagana.",
             },
         )
@@ -1172,6 +1365,8 @@ def create_weapon(
                     "abilities": ability_items,
                 },
                 "weapon_abilities": WEAPON_DEFINITION_PAYLOAD,
+                "inheritance_options": _build_inheritance_options(db, armory, None),
+                "current_inheritance": None,
                 "error": str(exc),
             },
         )
@@ -1196,12 +1391,148 @@ def create_weapon(
 
         notes=(notes or "").strip() or None,
     )
-    weapon.cached_cost = costs.weapon_cost(weapon)
     db.add(weapon)
     db.flush()
-    _sync_descendant_variants(db, armory)
+
+    _apply_inheritance_selection(db, armory, weapon, inherit_parent_weapon_id)
+    if weapon.parent is not None:
+        parent = weapon.parent
+        if weapon.name == parent.effective_name:
+            weapon.name = None
+        if weapon.range == parent.effective_range:
+            weapon.range = None
+        if weapon.attacks is not None and math.isclose(
+            weapon.attacks, parent.effective_attacks, rel_tol=1e-9, abs_tol=1e-9
+        ):
+            weapon.attacks = None
+        if weapon.ap is not None and weapon.ap == parent.effective_ap:
+            weapon.ap = None
+        inherited_tags = parent.effective_tags or ""
+        if (weapon.tags or "") == inherited_tags:
+            weapon.tags = None
+        if weapon.notes == parent.effective_notes:
+            weapon.notes = None
+
+    _update_weapon_cost(weapon)
+    db.flush()
+    _sync_descendant_variants(db, armory, protected_weapon_ids={weapon.id})
     db.commit()
     return RedirectResponse(url=f"/armories/{armory.id}", status_code=303)
+
+
+@router.get("/{armory_id}/weapons/import", response_class=HTMLResponse)
+def import_weapon_form(
+    armory_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    armory = _get_armory(db, armory_id)
+    _ensure_armory_edit_access(armory, current_user)
+
+    return templates.TemplateResponse(
+        "armory_weapon_import.html",
+        {
+            "request": request,
+            "user": current_user,
+            "armory": armory,
+            "import_options": _build_import_options(db, armory),
+            "error": None,
+        },
+    )
+
+
+@router.post("/{armory_id}/weapons/import")
+def import_weapon(
+    armory_id: int,
+    request: Request,
+    source_weapon_id: str = Form(""),
+    source_armory_id: str = Form(""),
+    set_as_parent: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user()),
+):
+    armory = _get_armory(db, armory_id)
+    _ensure_armory_edit_access(armory, current_user)
+
+    def _render_error(message: str) -> HTMLResponse:
+        return templates.TemplateResponse(
+            "armory_weapon_import.html",
+            {
+                "request": request,
+                "user": current_user,
+                "armory": armory,
+                "import_options": _build_import_options(db, armory),
+                "error": message,
+            },
+            status_code=400,
+        )
+
+    try:
+        src_id = int((source_weapon_id or "").strip())
+    except ValueError:
+        return _render_error("Wybierz broń do zaimportowania.")
+
+    source = db.get(models.Weapon, src_id)
+    if source is None or source.army_id is not None:
+        return _render_error("Wybrana broń nie istnieje.")
+
+    descendant_ids = {arm.id for arm in _armory_descendant_chain(armory)}
+    if source.armory_id not in descendant_ids:
+        return _render_error("Broń musi pochodzić z podrzędnej zbrojowni.")
+
+    promote = _parse_bool(set_as_parent)
+
+    new_weapon = models.Weapon(
+        armory=armory,
+        owner_id=armory.owner_id,
+        name=source.effective_name,
+        range=source.effective_range,
+        attacks=float(source.effective_attacks),
+        ap=int(source.effective_ap),
+        tags=source.effective_tags,
+        notes=source.effective_notes,
+    )
+    db.add(new_weapon)
+    db.flush()
+
+    if promote:
+        source.parent_id = new_weapon.id
+        for field in OVERRIDABLE_FIELDS:
+            src_value = getattr(source, field)
+            parent_value = getattr(new_weapon, field)
+            if field == "attacks":
+                if src_value is not None and math.isclose(
+                    float(src_value), float(parent_value), rel_tol=1e-9, abs_tol=1e-9
+                ):
+                    source.attacks = None
+                continue
+            if src_value == parent_value:
+                setattr(source, field, None)
+        _update_weapon_cost(source)
+
+    _update_weapon_cost(new_weapon)
+    db.flush()
+    _sync_descendant_variants(
+        db,
+        armory,
+        protected_weapon_ids={new_weapon.id, source.id} if promote else {new_weapon.id},
+        skip_armory_ids={source.armory_id} if promote else None,
+    )
+    if promote:
+        db.flush()
+        source_armory = db.get(models.Armory, source.armory_id)
+        if source_armory and source_armory.parent_id is not None:
+            local_parent = _resolve_local_parent_for_variant(
+                db, db.get(models.Armory, source_armory.parent_id), new_weapon
+            )
+            if local_parent is not None:
+                source.parent_id = local_parent.id
+        db.flush()
+    db.commit()
+    return RedirectResponse(
+        url=f"/armories/{armory.id}/weapons/{new_weapon.id}/edit", status_code=303
+    )
 
 
 def _get_weapon(db: Session, armory: models.Armory, weapon_id: int) -> models.Weapon:
@@ -1473,69 +1804,9 @@ def update_weapon(
             url=f"/armories/{armory.id}/weapons/{new_weapon.id}/edit", status_code=303
         )
 
-    inherit_selected_raw = (inherit_parent_weapon_id or "").strip()
-    inheritance_changed = False
-    if inherit_selected_raw == "":
-        if weapon.parent is not None:
-            materialized_name = weapon.effective_name
-            materialized_range = weapon.effective_range
-            materialized_attacks = float(weapon.effective_attacks)
-            materialized_ap = int(weapon.effective_ap)
-            materialized_tags = weapon.effective_tags
-            materialized_notes = weapon.effective_notes
-            if weapon.name is None:
-                weapon.name = materialized_name
-            if weapon.range is None:
-                weapon.range = materialized_range
-            if weapon.attacks is None:
-                weapon.attacks = materialized_attacks
-            if weapon.ap is None:
-                weapon.ap = materialized_ap
-            if weapon.tags is None and materialized_tags is not None:
-                weapon.tags = materialized_tags
-            if weapon.notes is None and materialized_notes is not None:
-                weapon.notes = materialized_notes
-            weapon.parent_id = None
-            inheritance_changed = True
-    else:
-        try:
-            selected_id = int(inherit_selected_raw)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Nieprawidłowe ID broni-rodzica.")
-        if selected_id == weapon.id:
-            raise HTTPException(status_code=400, detail="Broń nie może dziedziczyć po samej sobie.")
-        selected = db.get(models.Weapon, selected_id)
-        if selected is None:
-            raise HTTPException(status_code=404, detail="Wybrana broń-rodzic nie istnieje.")
-        allowed_armory_ids = {arm.id for arm in _armory_ancestor_chain(armory)}
-        if selected.armory_id not in allowed_armory_ids:
-            raise HTTPException(
-                status_code=400,
-                detail="Wybrana broń musi pochodzić z łańcucha dziedziczenia zbrojowni.",
-            )
-        descendant_ids = set(_weapon_chain_ids(db, weapon))
-        if selected.id in descendant_ids:
-            raise HTTPException(
-                status_code=400,
-                detail="Wybrana broń jest potomkiem edytowanej broni – powstałby cykl.",
-            )
-        resolved = _resolve_local_parent_for_variant(db, armory, selected)
-        if resolved.id == weapon.id:
-            raise HTTPException(
-                status_code=400,
-                detail="Nie można ustawić wybranej broni jako rodzica (cykl lokalny).",
-            )
-        if resolved.armory_id not in {armory.id, armory.parent_id}:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Nie udało się znaleźć lokalnego odpowiednika wybranej broni "
-                    "w bieżącej zbrojowni lub jej bezpośrednim rodzicu."
-                ),
-            )
-        if weapon.parent_id != resolved.id:
-            weapon.parent_id = resolved.id
-            inheritance_changed = True
+    inheritance_changed = _apply_inheritance_selection(
+        db, armory, weapon, inherit_parent_weapon_id
+    )
 
     if weapon.parent:
         parent = weapon.parent

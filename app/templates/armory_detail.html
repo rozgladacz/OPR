@@ -89,6 +89,29 @@
           </form>
         </div>
       </div>
+      {% if can_edit %}
+      <hr class="my-4" />
+      <form class="mb-0" method="post" action="/armories/{{ armory.id }}/change-parent">
+        <h5 class="card-title">Zmień rodzica zbrojowni</h5>
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-8">
+            <label class="form-label" for="new-parent-id">Nowy rodzic</label>
+            <select class="form-select" id="new-parent-id" name="new_parent_id">
+              <option value="">— brak (baza) —</option>
+              {% for candidate in parent_options %}
+              <option value="{{ candidate.id }}"{% if armory.parent_id == candidate.id %} selected{% endif %}>{{ candidate.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-sm-4">
+            <button class="btn btn-outline-warning w-100" type="submit">Zmień rodzica</button>
+          </div>
+        </div>
+        <div class="form-text">
+          Broń dziedzicząca z dotychczasowego rodzica, której nie ma w nowym łańcuchu, zostanie zmaterializowana.
+        </div>
+      </form>
+      {% endif %}
       {% if can_delete %}
       <hr class="my-4" />
       <form method="post" action="/armories/{{ armory.id }}/delete" onsubmit="return confirm('Usunąć zbrojownię? Tej operacji nie można cofnąć.');">

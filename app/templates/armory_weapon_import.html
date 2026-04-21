@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Importuj broń - OPR{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-10 col-lg-10 col-xl-9 col-xxl-8">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Importuj broń z podrzędnej zbrojowni</h5>
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        {% if import_options %}
+        <form method="post">
+          <div
+            class="card mb-3"
+            data-import-panel
+            data-import-options='{{ import_options | tojson }}'
+          >
+            <div class="card-body">
+              <div class="mb-2">
+                <label class="form-label" for="import-armory-select">Zbrojownia podrzędna</label>
+                <select class="form-select" id="import-armory-select" data-import-armory-select>
+                  <option value="">— wybierz —</option>
+                </select>
+              </div>
+              <div data-import-tree-wrapper class="d-none">
+                <label class="form-label">Broń do zaimportowania</label>
+                <div class="border rounded p-2" data-import-tree></div>
+              </div>
+              <input type="hidden" name="source_armory_id" data-import-armory-value />
+              <input type="hidden" name="source_weapon_id" data-import-weapon-value />
+            </div>
+          </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="set-as-parent" name="set_as_parent" value="1" checked />
+            <label class="form-check-label" for="set-as-parent">
+              Ustaw jako rodzic – oryginał w podrzędnej zbrojowni będzie dziedziczył po nowej broni.
+            </label>
+          </div>
+          <div class="d-flex flex-wrap justify-content-end gap-2">
+            <a class="btn btn-secondary" href="/armories/{{ armory.id }}/weapons/new">Anuluj</a>
+            <button class="btn btn-primary" type="submit">Importuj</button>
+          </div>
+        </form>
+        {% else %}
+        <div class="alert alert-info">
+          Ta zbrojownia nie ma podrzędnych zbrojowni, z których można zaimportować broń.
+        </div>
+        <a class="btn btn-secondary" href="/armories/{{ armory.id }}/weapons/new">Wróć</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

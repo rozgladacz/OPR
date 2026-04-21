@@ -3808,6 +3808,7 @@ function initRosterEditor() {
   let activeQuoteController = null;
   let quoteRequestVersion = 0;
   let lastQuoteItemCosts = null;
+  const unitItemCostsCache = new Map();
   let lastSelectedRole = null;
   let skipCostDisplayLoading = false;
 
@@ -5150,7 +5151,7 @@ function initRosterEditor() {
       customEditInput = null;
     }
 
-    lastQuoteItemCosts = null;
+    lastQuoteItemCosts = unitItemCostsCache.get(item.getAttribute('data-roster-unit-id')) || null;
     lastSelectedRole = null;
     currentPassives = getUnitDatasetList(item, 'passive_items');
     currentActives = getUnitDatasetList(item, 'active_items');
@@ -5735,6 +5736,9 @@ function initRosterEditor() {
           }
           if (quote.itemCosts && typeof quote.itemCosts === 'object') {
             lastQuoteItemCosts = quote.itemCosts;
+            if (rosterUnitId) {
+              unitItemCostsCache.set(rosterUnitId, quote.itemCosts);
+            }
           }
           if (quote.selectedRole) {
             lastSelectedRole = quote.selectedRole;
@@ -6757,35 +6761,34 @@ function initArmoryWeaponTree() {
 // form with a hierarchical tree picker (one section per ancestor armory).
 // Updates hidden inputs inherit_armory_id / inherit_parent_weapon_id.
 // ============================================================
-function initWeaponInheritancePanel() {
-  document.querySelectorAll('[data-inheritance-panel]').forEach((panel) => {
-    const toggle = panel.querySelector('[data-inheritance-toggle]');
-    const body = panel.querySelector('[data-inheritance-body]');
-    const armorySelect = panel.querySelector('[data-inheritance-armory-select]');
-    const treeWrapper = panel.querySelector('[data-inheritance-tree-wrapper]');
-    const treeContainer = panel.querySelector('[data-inheritance-tree]');
-    const armoryInput = panel.querySelector('[data-inheritance-armory-value]');
-    const weaponInput = panel.querySelector('[data-inheritance-weapon-value]');
-    const chevron = panel.querySelector('[data-inheritance-chevron]');
-    if (!body || !armorySelect || !treeContainer) {
-      return;
-    }
+function initWeaponTreePickerPanel(panel, cfg) {
+  const toggle = cfg.toggleAttr ? panel.querySelector(`[${cfg.toggleAttr}]`) : null;
+  const body = cfg.bodyAttr ? panel.querySelector(`[${cfg.bodyAttr}]`) : panel;
+  const armorySelect = panel.querySelector(`[${cfg.armorySelectAttr}]`);
+  const treeWrapper = panel.querySelector(`[${cfg.treeWrapperAttr}]`);
+  const treeContainer = panel.querySelector(`[${cfg.treeAttr}]`);
+  const armoryInput = panel.querySelector(`[${cfg.armoryValueAttr}]`);
+  const weaponInput = panel.querySelector(`[${cfg.weaponValueAttr}]`);
+  const chevron = cfg.chevronAttr ? panel.querySelector(`[${cfg.chevronAttr}]`) : null;
+  if (!armorySelect || !treeContainer) {
+    return;
+  }
 
-    let options = [];
-    try {
-      options = JSON.parse(panel.dataset.inheritanceOptions || '[]');
-    } catch (_) {
-      options = [];
-    }
+  let options = [];
+  try {
+    options = JSON.parse(panel.dataset[cfg.optionsDataKey] || '[]');
+  } catch (_) {
+    options = [];
+  }
 
-    let current = null;
-    try {
-      current = panel.dataset.currentInheritance
-        ? JSON.parse(panel.dataset.currentInheritance)
-        : null;
-    } catch (_) {
-      current = null;
-    }
+  let current = null;
+  try {
+    current = cfg.currentDataKey && panel.dataset[cfg.currentDataKey]
+      ? JSON.parse(panel.dataset[cfg.currentDataKey])
+      : null;
+  } catch (_) {
+    current = null;
+  }
 
     let selectedArmoryId = current ? String(current.armory_id) : '';
     let selectedWeaponId = current ? String(current.weapon_id) : '';
@@ -6940,7 +6943,48 @@ function initWeaponInheritancePanel() {
           renderTree();
         }
       });
+    } else {
+      renderTree();
     }
+}
+
+const INHERITANCE_PANEL_CFG = {
+  panelAttr: 'data-inheritance-panel',
+  toggleAttr: 'data-inheritance-toggle',
+  bodyAttr: 'data-inheritance-body',
+  armorySelectAttr: 'data-inheritance-armory-select',
+  treeWrapperAttr: 'data-inheritance-tree-wrapper',
+  treeAttr: 'data-inheritance-tree',
+  armoryValueAttr: 'data-inheritance-armory-value',
+  weaponValueAttr: 'data-inheritance-weapon-value',
+  chevronAttr: 'data-inheritance-chevron',
+  optionsDataKey: 'inheritanceOptions',
+  currentDataKey: 'currentInheritance',
+};
+
+const IMPORT_PANEL_CFG = {
+  panelAttr: 'data-import-panel',
+  toggleAttr: null,
+  bodyAttr: null,
+  armorySelectAttr: 'data-import-armory-select',
+  treeWrapperAttr: 'data-import-tree-wrapper',
+  treeAttr: 'data-import-tree',
+  armoryValueAttr: 'data-import-armory-value',
+  weaponValueAttr: 'data-import-weapon-value',
+  chevronAttr: null,
+  optionsDataKey: 'importOptions',
+  currentDataKey: null,
+};
+
+function initWeaponInheritancePanel() {
+  document.querySelectorAll(`[${INHERITANCE_PANEL_CFG.panelAttr}]`).forEach((panel) => {
+    initWeaponTreePickerPanel(panel, INHERITANCE_PANEL_CFG);
+  });
+}
+
+function initWeaponImportPanel() {
+  document.querySelectorAll(`[${IMPORT_PANEL_CFG.panelAttr}]`).forEach((panel) => {
+    initWeaponTreePickerPanel(panel, IMPORT_PANEL_CFG);
   });
 }
 
@@ -6963,4 +7007,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initArmoryWeaponTree();
   initSpellWeaponCostPreview();
   initWeaponInheritancePanel();
+  initWeaponImportPanel();
 });
