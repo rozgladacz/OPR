@@ -19,7 +19,8 @@
       "Bash(python3 -c \"import sys; body=sys.stdin.read\\(\\); start=body.find\\('Traceback'\\); print\\(body[start:start+3000] if start>=0 else body[:3000]\\)\")",
       "Bash(python -W all -c ' *)",
       "Bash(curl -sv -c /tmp/opr_cookies.txt -b /tmp/opr_cookies.txt \"http://localhost:8000/rosters/11\" -L)",
-      "Bash(curl -s -c /tmp/opr_cookies.txt -b /tmp/opr_cookies.txt \"http://localhost:8000/rosters/10\" -L -w \"\\\\nHTTP:%{http_code}\")"
+      "Bash(curl -s -c /tmp/opr_cookies.txt -b /tmp/opr_cookies.txt \"http://localhost:8000/rosters/10\" -L -w \"\\\\nHTTP:%{http_code}\")",
+      "Bash(python -m pytest tests/ -v -x)"
     ]
   }
 }

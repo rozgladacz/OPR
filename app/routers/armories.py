@@ -703,6 +703,14 @@ def _apply_inheritance_selection(
         )
     if weapon.parent_id != resolved.id:
         weapon.parent_id = resolved.id
+        disabled_entry = db.execute(
+            select(models.ArmoryDisabledWeapon).where(
+                models.ArmoryDisabledWeapon.armory_id == armory.id,
+                models.ArmoryDisabledWeapon.weapon_id == resolved.id,
+            )
+        ).scalar_one_or_none()
+        if disabled_entry is not None:
+            db.delete(disabled_entry)
         return True
     return False
 

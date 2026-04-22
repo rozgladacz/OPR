@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..data import abilities as ability_catalog
+from . import costs as _costs
 
 LONG_RANGE_AURA_SLUG = "aura_12"
 ABILITY_NAME_MAX_LENGTH = 60
@@ -212,6 +213,10 @@ def definition_payload(session: Session, ability_type: str) -> list[dict]:
             entry["value_kind"] = "passive"
         ability = ability_by_slug.get(definition.slug)
         entry["ability_id"] = ability.id if ability else None
+        if ability and ability.cost_hint is not None:
+            entry["cost_hint"] = float(ability.cost_hint)
+        else:
+            entry["cost_hint"] = _costs.ability_cost_from_name(definition.name or "")
         payload.append(entry)
         if definition.slug == "aura":
             long_range_entry = dict(entry)
@@ -317,6 +322,10 @@ def unit_ability_payload(unit: models.Unit, ability_type: str) -> list[dict]:
             value,
             ability.description if ability else None,
         )
+        if ability and ability.cost_hint is not None:
+            item_cost = float(ability.cost_hint)
+        else:
+            item_cost = _costs.ability_cost_from_name(ability.name or "", value)
         items.append(
             {
                 "ability_id": ability.id,
@@ -327,6 +336,7 @@ def unit_ability_payload(unit: models.Unit, ability_type: str) -> list[dict]:
                 "custom_name": custom_name,
                 "description": description,
                 "is_default": bool(is_default) if is_default is not None else False,
+                "cost": item_cost,
             }
         )
     return items

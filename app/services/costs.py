@@ -738,14 +738,7 @@ def passive_cost(
     if slug == "zwiadowca":
         return 2.0 * tou
     if slug == "odwody":
-        ability_slugs = set()
-        for ability in abilities or []:
-            identifier = ability_identifier(ability)
-            if identifier:
-                ability_slugs.add(identifier)
-        if ability_slugs & {"rezerwa", "zwiadowca", "zasadzka"}:
-            return 0
-        return -2.5 * tou
+        return 0
     if slug == "szybki":
         return 1.0 * tou
     if slug == "wolny":
@@ -927,7 +920,7 @@ def ability_cost_components_from_name(
             if ability_set & options:
                 multiplier = value
         base_result = capacity * multiplier
-    if desc.startswith("otwarty_transport") or desc.startswith("platforma_strzelecka"):
+    if desc.startswith("otwarty transport") or desc.startswith("platforma strzelecka"):
         capacity = extract_number(value or name)
         multiplier = 1.0
         for options, value in TRANSPORT_MULTIPLIERS:
@@ -1102,6 +1095,8 @@ def _weapon_cost(
         mult *= 0.6
     if "zasadzka" in unit_set and not melee:
         mult *= 0.6
+    if "odwody" in unit_set and not (unit_set & {"rezerwa", "zwiadowca", "zasadzka"}):
+        mult *= 0.75
 
     assault = False
     overcharge = False

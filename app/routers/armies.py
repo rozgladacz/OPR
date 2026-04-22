@@ -441,6 +441,7 @@ def _weapon_tree_payload(weapons: list[models.Weapon]) -> dict[str, object]:
             "attacks": weapon.display_attacks,
             "ap": weapon.effective_ap,
             "abilities": [{"raw": t} for t in costs.split_traits(weapon.effective_tags)],
+            "cost": float(weapon.effective_cached_cost) if weapon.effective_cached_cost is not None else costs.weapon_cost(weapon),
             "is_leaf": True,
         }
 
@@ -548,6 +549,10 @@ def _weapon_tree_payload(weapons: list[models.Weapon]) -> dict[str, object]:
                 "path_text": node["path_text"],
                 "range_value": node.get("range_value", 0),
                 "category": node.get("category"),
+                "attacks": node.get("attacks"),
+                "ap": node.get("ap"),
+                "abilities": node.get("abilities", []),
+                "cost": node.get("cost", 0.0),
                 "is_leaf": is_leaf,
             }
         )
@@ -731,12 +736,21 @@ def _spell_page_context(
 def _passive_payload(unit: models.Unit | None) -> list[dict]:
     flags = unit.flags if unit else None
     payload = utils.passive_flags_to_payload(flags)
+    quality = getattr(unit, "quality", 4) or 4
+    defense = getattr(unit, "defense", 4) or 4
+    toughness = getattr(unit, "toughness", 1) or 1
     result: list[dict] = []
     for item in payload:
         if not item:
             continue
         if _is_hidden_trait(item.get("slug")):
             continue
+        item = dict(item)
+        name = item.get("label") or item.get("slug") or ""
+        value = item.get("value")
+        item["cost"] = costs.ability_cost_from_name(
+            name, value, quality=quality, defense=defense, toughness=toughness
+        )
         result.append(item)
     return result
 

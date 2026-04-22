@@ -162,6 +162,7 @@ function initAbilityPicker(root) {
       is_default: isDefault,
       is_mandatory: isMandatory,
       description: entry.description || descriptionFor({ slug }),
+      cost: entry.cost !== undefined ? entry.cost : undefined,
     };
   }
 
@@ -296,29 +297,37 @@ function initAbilityPicker(root) {
       row.className = 'border rounded p-2 d-flex flex-wrap align-items-center gap-2';
 
       const labelWrapper = document.createElement('div');
-      labelWrapper.className = 'flex-grow-1 d-flex flex-column gap-2';
+      labelWrapper.className = 'flex-grow-1 d-flex flex-column gap-1';
       const baseLabel = item.base_label || item.label || item.raw || item.slug;
       const desc = descriptionFor(item);
-      const labelText = document.createElement('div');
+
+      const nameRow = document.createElement('div');
+      nameRow.className = 'd-flex align-items-baseline gap-2 flex-wrap';
+      const labelText = document.createElement('span');
       labelText.textContent = formatAbilityDisplayLabel(baseLabel, item.custom_name) || baseLabel;
       if (desc) {
         labelText.title = desc;
       }
-      labelWrapper.appendChild(labelText);
+      nameRow.appendChild(labelText);
+
+      const itemDef = getDefinition(item.slug);
+      const itemCost = item.cost !== undefined ? item.cost : itemDef?.cost_hint;
+      if (itemCost !== null && itemCost !== undefined) {
+        const costSpan = document.createElement('span');
+        costSpan.className = 'text-muted small';
+        costSpan.textContent = `+${formatPoints(itemCost)} pkt`;
+        nameRow.appendChild(costSpan);
+      }
+
+      labelWrapper.appendChild(nameRow);
 
       if (allowCustomName) {
-        const inputWrapper = document.createElement('div');
-        inputWrapper.className = 'd-flex flex-column';
-        const inputLabel = document.createElement('label');
-        inputLabel.className = 'form-label mb-1 small text-muted';
         const inputId = `ability-picker-name-${index}-${Math.random().toString(16).slice(2)}`;
-        inputLabel.setAttribute('for', inputId);
-        inputLabel.textContent = 'Nazwa własna (opcjonalnie)';
         const nameInput = document.createElement('input');
         nameInput.type = 'text';
         nameInput.className = 'form-control form-control-sm';
         nameInput.id = inputId;
-        nameInput.placeholder = 'Np. Medyk';
+        nameInput.placeholder = 'Nazwa własna (opcjonalnie)';
         nameInput.maxLength = ABILITY_NAME_MAX_LENGTH;
         nameInput.value = item.custom_name || '';
         const applyValue = (value) => {
@@ -343,9 +352,7 @@ function initAbilityPicker(root) {
             nameInput.blur();
           }
         });
-        inputWrapper.appendChild(inputLabel);
-        inputWrapper.appendChild(nameInput);
-        labelWrapper.appendChild(inputWrapper);
+        labelWrapper.appendChild(nameInput);
       }
 
       row.appendChild(labelWrapper);
@@ -1650,6 +1657,7 @@ function initWeaponPicker(root) {
         attacks: node.attacks !== undefined && node.attacks !== null ? node.attacks : null,
         ap: node.ap !== undefined && node.ap !== null ? node.ap : null,
         abilities: Array.isArray(node.abilities) ? node.abilities : [],
+        cost: typeof node.cost === 'number' ? node.cost : null,
         is_leaf: isLeaf,
       };
       weaponMap.set(String(id), { ...meta });
@@ -1748,6 +1756,7 @@ function initWeaponPicker(root) {
         attacks: entry.attacks !== undefined && entry.attacks !== null ? entry.attacks : null,
         ap: entry.ap !== undefined && entry.ap !== null ? entry.ap : null,
         abilities: Array.isArray(entry.abilities) ? entry.abilities : [],
+        cost: typeof entry.cost === 'number' ? entry.cost : null,
         is_leaf: entry.is_leaf !== undefined ? Boolean(entry.is_leaf) : true,
       });
     });
@@ -2182,7 +2191,7 @@ function initWeaponPicker(root) {
     wrapper.className = 'd-flex flex-column gap-2';
     items.forEach((item, index) => {
       const row = document.createElement('div');
-      row.className = 'border rounded p-2 d-flex flex-wrap align-items-center gap-2';
+      row.className = 'border rounded p-2 d-flex align-items-start gap-2';
 
       const nameWrapper = document.createElement('div');
       nameWrapper.className = 'flex-grow-1 d-flex flex-column';
@@ -2204,7 +2213,6 @@ function initWeaponPicker(root) {
       nameWrapper.appendChild(nameRow);
 
       const weaponStats = weaponMap.get(String(item.weapon_id));
-      const rangeDisplay = Number(item.range_value) > 0 ? `${item.range_value}"` : 'Wręcz';
       const attacksDisplay = weaponStats?.attacks !== null && weaponStats?.attacks !== undefined
         ? weaponStats.attacks : '-';
       const apDisplay = weaponStats?.ap !== null && weaponStats?.ap !== undefined
@@ -2212,9 +2220,15 @@ function initWeaponPicker(root) {
       const abilitiesDisplay = Array.isArray(weaponStats?.abilities) && weaponStats.abilities.length
         ? weaponStats.abilities.map((a) => a.label || a.raw || a.slug || '').filter(Boolean).join(', ')
         : 'Brak cech';
+      const costDisplay = weaponStats?.cost !== null && weaponStats?.cost !== undefined
+        ? `${formatPoints(weaponStats.cost)} pkt` : null;
       const statsLine = document.createElement('div');
       statsLine.className = 'text-muted small mt-1';
-      statsLine.textContent = `Zasięg: ${rangeDisplay} • Ataki: ${attacksDisplay} • AP: ${apDisplay} • Cechy: ${abilitiesDisplay}`;
+      let statsText = `Ataki: ${attacksDisplay} • AP: ${apDisplay} • Cechy: ${abilitiesDisplay}`;
+      if (costDisplay) {
+        statsText += ` • Koszt: ${costDisplay}`;
+      }
+      statsLine.textContent = statsText;
       nameWrapper.appendChild(statsLine);
 
       const defaultGroup = document.createElement('div');
@@ -2272,8 +2286,11 @@ function initWeaponPicker(root) {
       primaryWrapper.appendChild(primaryLabel);
 
       row.appendChild(nameWrapper);
-      row.appendChild(defaultGroup);
-      row.appendChild(primaryWrapper);
+
+      const controlsWrapper = document.createElement('div');
+      controlsWrapper.className = 'd-flex flex-wrap align-items-center gap-2 flex-shrink-0';
+      controlsWrapper.appendChild(defaultGroup);
+      controlsWrapper.appendChild(primaryWrapper);
 
       const actionsWrapper = document.createElement('div');
       actionsWrapper.className = 'd-flex flex-column flex-sm-row gap-2 align-items-center';
@@ -2323,7 +2340,8 @@ function initWeaponPicker(root) {
       });
       actionsWrapper.appendChild(removeBtn);
 
-      row.appendChild(actionsWrapper);
+      controlsWrapper.appendChild(actionsWrapper);
+      row.appendChild(controlsWrapper);
       wrapper.appendChild(row);
     });
 
