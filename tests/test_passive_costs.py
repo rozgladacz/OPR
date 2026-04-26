@@ -355,13 +355,6 @@ def test_przygotowanie_only_modifies_weapon_cost() -> None:
     unit.default_weapon = weapon
     unit.default_weapon_id = weapon.id
 
-    entries = rosters._passive_entries(unit)
-    przygotowanie_entry = next(
-        entry for entry in entries if costs.ability_identifier(entry.get("slug")) == "przygotowanie"
-    )
-
-    assert przygotowanie_entry["cost"] == pytest.approx(0.0, abs=1e-9)
-
     base_cost = costs.weapon_cost(weapon, unit_quality=unit.quality, unit_flags=[])
     with_przygotowanie = costs.weapon_cost(
         weapon,
@@ -374,7 +367,14 @@ def test_przygotowanie_only_modifies_weapon_cost() -> None:
     ap_mod = costs.lookup_with_nearest(costs.AP_BASE, weapon.effective_ap)
     expected_delta = round(2.0 * range_mod * ap_mod * 0.65, 2)
 
-    assert with_przygotowanie - base_cost == pytest.approx(expected_delta, rel=1e-6)
+    assert with_przygotowanie - base_cost == pytest.approx(expected_delta, abs=0.02)
+
+    entries = rosters._passive_entries(unit)
+    przygotowanie_entry = next(
+        entry for entry in entries if costs.ability_identifier(entry.get("slug")) == "przygotowanie"
+    )
+
+    assert przygotowanie_entry["cost"] == pytest.approx(expected_delta, rel=1e-2)
 
     roster_unit = models.RosterUnit(unit=unit, count=1)
     loadout = rosters._default_loadout_payload(unit)

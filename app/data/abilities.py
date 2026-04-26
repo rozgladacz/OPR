@@ -152,6 +152,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Wykonuje jeden test przegrupowania mniej.",
     ),
     AbilityDefinition(
+        slug="niestrudzony",
+        name="Niestrudzony",
+        type="passive",
+        description="Może wykonywać tę samą akcję wielokrotnie w rundzie.",
+    ),
+    AbilityDefinition(
         slug="ucieczka",
         name="Ucieczka",
         type="passive",
@@ -175,7 +181,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         slug="przygotowanie",
         name="Przygotowanie",
         type="passive",
-        description="Jeżeli model się nie poruszył naturalne 6 dają dodatkowe zwykłe trafienie.",
+        description="Jeżeli jest Ufortyfikowany, +1 do rzutów na trafienie.",
     ),
     AbilityDefinition(
         slug="kontra",
@@ -614,7 +620,7 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
     ),
     AbilityDefinition(
         slug="unik",
-        name="Unik",
+        name="Przewidywalny",
         type="weapon",
         description="Jeżeli cel jest Przyszpilony, wykonuje podwójną liczbę ataków.",
     ),

@@ -910,8 +910,6 @@ def ability_cost_components_from_name(
             total_with += weapon_cost(weapon, int(quality), traits_with)
             total_without += weapon_cost(weapon, int(quality), traits_without)
         weapon_delta = total_with - total_without
-        if slug == "przygotowanie":
-            weapon_delta = 0.0
 
     if desc.startswith("transport"):
         capacity = extract_number(value or name)
@@ -1051,7 +1049,7 @@ def _weapon_cost(
     unit_traits: Sequence[str],
     allow_assault_extra: bool = True,
 ) -> float:
-    chance = 6.65
+    chance = 7.0
     attacks = float(attacks if attacks is not None else 1.0)
     attacks = max(attacks, 0.0)
     base_ap = int(ap or 0)
@@ -1075,8 +1073,12 @@ def _weapon_cost(
 
     if melee and "furia" in unit_set:
         chance += 0.65
-    if not melee and "przygotowanie" in unit_set:
-        chance += 0.65
+    if "przygotowanie" in unit_set:
+        chance += 0.2 if "niestrudzony" in unit_set else 0.65
+    if "niestrudzony" in unit_set:
+        mult *= 1.5
+    if "straznik" in unit_set and not melee:
+        mult *= 1.5
     if "szpica" in unit_set:
         chance += 0.5
     if "ostrozny" in unit_set:
@@ -1101,6 +1103,7 @@ def _weapon_cost(
     assault = False
     overcharge = False
     brutal = False
+    has_namierzanie = False
 
     for trait in weapon_traits:
         norm = normalize_name(trait)
@@ -1132,7 +1135,7 @@ def _weapon_cost(
         elif norm in {"lanca", "lance"}:
             chance += 0.65
         elif norm in {"namierzanie", "lock on"}:
-            chance += 0.5
+            has_namierzanie = True
             mult *= 1.1
         elif norm in {"impet", "impact"}:
             chance += 0.65
@@ -1169,7 +1172,7 @@ def _weapon_cost(
             overcharge = True
         elif norm in {"burzaca"}:
             mult *= 1.5
-        elif norm in {"unik"}:
+        elif norm in {"unik", "przewidywalny"}:
             mult *= 1.2
         elif melee and norm in {"porazenie"}:
             mult *= 1.1
@@ -1177,10 +1180,12 @@ def _weapon_cost(
     if waagh_penalty:
         ap_mod = max(ap_mod - waagh_penalty, 0.0)
 
+    if not has_namierzanie:
+        chance -= 0.6 if not melee else 0.3
     range_mod = max(range_mod + range_bonus - range_penalty, 0.0)
     chance = max(chance - q, 0.9)
     if brutal:
-        chance += ((7 - q) * (6 - q)) / 20.0
+        chance += ((7 - q) * (6 - q) ** 2) / 50.0
     cost = attacks * 2.0 * range_mod * chance * ap_mod * mult
 
     if overcharge and (not assault or range_value != 0):

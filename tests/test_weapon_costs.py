@@ -120,7 +120,7 @@ def test_brutalny_uses_quality_scaled_hit_chance_bonus(quality: int) -> None:
 
     range_mod = costs.lookup_with_nearest(costs.RANGE_TABLE, 24)
     ap_mod = costs.lookup_with_nearest(costs.AP_BASE, 1)
-    brutal_bonus = ((7 - quality) * (6 - quality)) / 20.0
+    brutal_bonus = ((7 - quality) * (6 - quality) ** 2) / 50.0
     expected_delta = 2 * 2.0 * range_mod * brutal_bonus * ap_mod
 
     assert brutal_cost - base_cost == pytest.approx(expected_delta, abs=0.02)
