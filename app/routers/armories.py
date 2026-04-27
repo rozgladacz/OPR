@@ -683,6 +683,8 @@ def _apply_inheritance_selection(
             status_code=400,
             detail="Wybrana broń musi pochodzić z łańcucha dziedziczenia zbrojowni.",
         )
+    if weapon.parent_id is not None and weapon.parent_id == selected_id:
+        return False
     if weapon.id is not None:
         descendant_ids = set(_weapon_chain_ids(db, weapon))
         if selected.id in descendant_ids:
