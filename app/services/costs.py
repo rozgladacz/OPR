@@ -67,6 +67,7 @@ WAAGH_AP_MODIFIER = {-1: 0.01, 0: 0.02, 1: 0.05, 2: 0.04, 3: 0.04, 4: 0.03, 5: 0
 BLAST_MULTIPLIER = {2: 1.9, 3: 2.7, 6: 4.3}
 DEADLY_MULTIPLIER = {2: 1.8, 3: 2.5, 6: 3.8}
 OVERCHARGE_MULTIPLIER = 1.05
+BRUTALNY_AP_COST = {-1: 0.0, 0: 0.01, 1: 0.02, 2: 0.1, 3: 0.2, 4: 0.3, 5: 0.4}
 
 TRANSPORT_MULTIPLIERS = [
     ({"samolot"}, 3.5),
@@ -781,6 +782,8 @@ def passive_cost(
         return -0.25 * tou
         
     if aura:
+        if slug == "niestrudzony":
+            return 8.0
         if slug in {"nieustraszony", "ucieczka", "stracency"}:
             return 1.5 * tou
         if slug == "delikatny":
@@ -1102,7 +1105,7 @@ def _weapon_cost(
 
     assault = False
     overcharge = False
-    brutal = False
+    finezja = False
     has_namierzanie = False
 
     for trait in weapon_traits:
@@ -1142,8 +1145,10 @@ def _weapon_cost(
             ap_mod += lookup_with_nearest(AP_LANCE, base_ap)
         elif norm in {"przebijajaca", "przebijajacy", "penetrating"}:
             mult *= lookup_with_nearest(PENETRATING_MULTIPLIER, base_ap)
+        elif norm in {"finezja"}:
+            finezja = True
         elif norm in {"brutalny", "brutalna", "brutal"}:
-            brutal = True
+            ap_mod += lookup_with_nearest(BRUTALNY_AP_COST, base_ap)
         elif norm in {
             "zguba",
             "bez regeneracji",
@@ -1184,7 +1189,7 @@ def _weapon_cost(
         chance -= 0.6 if not melee else 0.3
     range_mod = max(range_mod + range_bonus - range_penalty, 0.0)
     chance = max(chance - q, 0.9)
-    if brutal:
+    if finezja:
         chance += ((7 - q) * (6 - q) ** 2) / 50.0
     cost = attacks * 2.0 * range_mod * chance * ap_mod * mult
 

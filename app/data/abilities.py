@@ -598,13 +598,19 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         description="Można nią wykonywać ataki wręcz.",
     ),
     AbilityDefinition(
-        slug="brutalny",
-        name="Brutalny",
+        slug="finezja",
+        name="Finezja",
         type="weapon",
         description=(
             "Wynik udanego rzutu na trafienie możesz traktować "
             "jak wynik rzutu na obronę."
         ),
+    ),
+    AbilityDefinition(
+        slug="brutalny",
+        name="Brutalny",
+        type="weapon",
+        description="W teście obrony nie ma automatycznych sukcesów.",
     ),
     AbilityDefinition(
         slug="podkrecenie",

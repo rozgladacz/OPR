@@ -228,6 +228,7 @@ def _resolve_local_parent_for_variant(
     db: Session,
     armory: models.Armory,
     weapon: models.Weapon,
+    exclude_weapon_id: int | None = None,
 ) -> models.Weapon:
     if weapon.armory_id == armory.id:
         return weapon
@@ -240,15 +241,17 @@ def _resolve_local_parent_for_variant(
             break
         visited.add(current_id)
 
-        local_candidate = (
-            db.execute(
-                select(models.Weapon)
-                .where(
-                    models.Weapon.armory_id == armory.id,
-                    models.Weapon.parent_id == current_id,
-                )
-                .order_by(models.Weapon.id.asc())
+        stmt = (
+            select(models.Weapon)
+            .where(
+                models.Weapon.armory_id == armory.id,
+                models.Weapon.parent_id == current_id,
             )
+        )
+        if exclude_weapon_id is not None:
+            stmt = stmt.where(models.Weapon.id != exclude_weapon_id)
+        local_candidate = (
+            db.execute(stmt.order_by(models.Weapon.id.asc()))
             .scalars()
             .first()
         )
@@ -687,7 +690,9 @@ def _apply_inheritance_selection(
                 status_code=400,
                 detail="Wybrana broń jest potomkiem edytowanej broni – powstałby cykl.",
             )
-    resolved = _resolve_local_parent_for_variant(db, armory, selected)
+    resolved = _resolve_local_parent_for_variant(
+        db, armory, selected, exclude_weapon_id=weapon.id
+    )
     if weapon.id is not None and resolved.id == weapon.id:
         raise HTTPException(
             status_code=400,

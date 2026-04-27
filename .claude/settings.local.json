@@ -22,7 +22,8 @@
       "Bash(curl -s -c /tmp/opr_cookies.txt -b /tmp/opr_cookies.txt \"http://localhost:8000/rosters/10\" -L -w \"\\\\nHTTP:%{http_code}\")",
       "Bash(python -m pytest tests/ -v -x)",
       "Bash(.venv/Scripts/python -m pytest tests/test_weapon_costs.py tests/test_passive_costs.py tests/test_active_costs.py tests/test_ability_custom_names.py -v)",
-      "Bash(.venv/Scripts/python -m pytest tests/ -v --ignore=tests/test_quote_update_concurrency_stability.py)"
+      "Bash(.venv/Scripts/python -m pytest tests/ -v --ignore=tests/test_quote_update_concurrency_stability.py)",
+      "Bash(.venv/Scripts/python -m pytest tests/ --ignore=tests/test_quote_update_concurrency_stability.py -v)"
     ]
   }
 }
