@@ -5984,12 +5984,81 @@ function renderEditors() {
     }
   }
 
+  // Fire an immediate save for a unit that is about to lose focus before its
+  // debounce timer has elapsed. Bypasses submitChanges (and its version checks)
+  // because the departing unit is no longer active — we just want the data on
+  // the server and all list-item updates (badge, title, loadout, abilities)
+  // reflected via applyServerUpdate when the response arrives.
+  function _fireDepartingSave(departingItem) {
+    if (!form || !departingItem) return;
+    const action = form.getAttribute('action');
+    if (!action) return;
+    const departingUnitId = departingItem.getAttribute('data-roster-unit-id') || '';
+    const savePayload = new FormData(form);
+    savePayload.set('count', String(currentCount));
+    if (customNameInput) savePayload.set('custom_name', customNameInput.value.trim());
+    if (loadoutInput) savePayload.set('loadout_json', loadoutInput.value || '{}');
+    fetch(action, {
+      method: 'POST',
+      body: savePayload,
+      headers: { Accept: 'application/json' },
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!data) return;
+        // Locate the departing unit's data from the server response.
+        // The response may include lock-pair siblings in `data.units` — we must
+        // NOT pass those to applyServerUpdate, because if a sibling happens to
+        // be the currently-active unit, applyServerUpdate would call
+        // syncEditorFromItem on it and overwrite the user's in-progress edits
+        // with stale server state (ghost weapons / wrong loadout).
+        const allUnits = Array.isArray(data.units) ? [...data.units] : [];
+        if (data.unit) allUnits.push(data.unit);
+        const departingData = departingUnitId
+          ? (allUnits.find((u) => u && String(u.id) === departingUnitId) ?? null)
+          : (data.unit ?? null);
+        // Apply update for the departing unit only — omit `units` so sibling
+        // data is never processed and the active editor is left untouched.
+        applyServerUpdate({
+          unit: departingData,
+          total_cost: data.total_cost,
+          lock_pairs: data.lock_pairs,
+          roster: data.roster,
+        });
+        // applyServerUpdate updates badge content but not the loading class;
+        // explicitly clear it so the badge doesn't stay semi-transparent.
+        if (departingUnitId) {
+          const targetItem = root.querySelector(
+            `[data-roster-item][data-roster-unit-id="${departingUnitId}"]`,
+          );
+          if (targetItem) setRosterItemCostStatus(targetItem, 'ready');
+        }
+      })
+      .catch((error) => {
+        console.error('Nie udało się zapisać oddziału przy zmianie', error);
+      });
+  }
+
   function selectItem(item, options = {}) {
     const { preserveAutoSave = false } = options;
     if (!preserveAutoSave && activeItem === item) {
       return;
     }
-    cancelPendingSave();
+    // Flush unsaved edits for the departing unit before switching.
+    // cancelPendingSave would destroy the timer without firing the save.
+    if (saveTimer !== null && isEditable && autoSaveEnabled && form && activeItem) {
+      window.clearTimeout(saveTimer);
+      saveTimer = null;
+      _fireDepartingSave(activeItem);
+    } else {
+      cancelPendingSave();
+    }
+    // Badge may be stuck in 'loading' (set by changedUnitId refresh but quote
+    // timer was cancelled). Restore to 'ready' — full refresh will correct the
+    // cost value later.
+    if (activeItem) {
+      setRosterItemCostStatus(activeItem, 'ready');
+    }
     if (activeItem) {
       activeItem.classList.remove('active');
     }
