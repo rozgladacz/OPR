@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+# WAŻNE – notacja calowa w opisach zdolności
+# Opisy używają znaku U+201D (prawy cudzysłów „") jako symbolu cala, np. 12" czy 30".
+# Jest to zwykły znak Unicode wewnątrz stringa – NIE kończy on stringa w Pythonie,
+# ponieważ delimitery stringów to zwykłe proste cudzysłowy ASCII U+0022 (").
+# Przy edycji tego pliku należy korzystać ze skryptu Python (read/write),
+# a NIE z narzędzi tekstowych, które mogą zamienić ASCII " na typograficzne „" –
+# taka zamiana psuje składnię Pythona (SyntaxError: invalid character U+201D).
+
 from dataclasses import dataclass
 from typing import Iterable, List, Sequence
 import re
@@ -125,9 +133,11 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Samolot",
         type="passive",
         description=(
-            "Wysoki. Podczas ruchu ignoruje teren i musi przemieścić się 30”-36” się w jednej linii. Nie blokuje ruchu ani widzenia innych jednostek."
-            "Nie może być przyszpilony, kontrolować punktów, szarżować, ani być celem szarży lub broni Niebezpośredniej. "
-            "Jednostki strzelające do niego mają -12” zasięgu i -1 do trafienia."
+            "Wysoki. Jako pierwszą akcję musi wykonać ruch i musi przemieścić się 30–36” w jednej linii. "
+            "Nie może być przyszpilony, kontrolować punktów, szarżować, ani być celem szarży. "
+            "Nie blokuje ruchu ani widzenia innych jednostek, a podczas ruchu ignoruje teren. "
+            "Ma osłonę a jednostki strzelające do niego mają -12” zasięgu. "
+            "Nie może być atakowany bronią Niebezpośrednią."
         ),
     ),
     AbilityDefinition(
@@ -150,6 +160,12 @@ ABILITY_DEFINITIONS: List[AbilityDefinition] = [
         name="Nieustraszony",
         type="passive",
         description="Wykonuje jeden test przegrupowania mniej.",
+    ),
+    AbilityDefinition(
+        slug="niestrudzony",
+        name="Niestrudzony",
+        type="passive",
+        description="Może wykonywać tę samą akcję wielokrotnie w rundzie.",
     ),
     AbilityDefinition(
         slug="niestrudzony",

@@ -398,6 +398,30 @@ def test_instynkt_aura_and_order_costs() -> None:
     assert costs.passive_cost("instynkt", 10, True) == pytest.approx(10)
 
 
+def test_zwrot_passive_cost() -> None:
+    assert costs.passive_cost("zwrot", 1.0) == pytest.approx(-1.0)
+    assert costs.passive_cost("zwrot", 3.0) == pytest.approx(-3.0)
+
+
+def test_przygotowanie_ignored_for_samolot() -> None:
+    weapon = models.Weapon(range='24"', attacks=1.0, ap=0, armory_id=1)
+    cost_normal = costs.weapon_cost(weapon, unit_quality=4, unit_flags=["Przygotowanie"])
+    cost_samolot = costs.weapon_cost(weapon, unit_quality=4, unit_flags=["Przygotowanie", "Samolot"])
+    cost_base = costs.weapon_cost(weapon, unit_quality=4, unit_flags=[])
+    assert cost_normal > cost_base
+    assert cost_samolot == pytest.approx(cost_base, abs=0.02)
+
+
+def test_niestrudzony_ignored_for_samolot() -> None:
+    weapon = models.Weapon(range='24"', attacks=1.0, ap=0, armory_id=1)
+    cost_normal = costs.weapon_cost(weapon, unit_quality=4, unit_flags=["Niestrudzony"])
+    cost_samolot = costs.weapon_cost(weapon, unit_quality=4, unit_flags=["Niestrudzony", "Samolot"])
+    cost_base = costs.weapon_cost(weapon, unit_quality=4, unit_flags=[])
+    assert cost_normal > cost_base
+    assert cost_samolot == pytest.approx(cost_base, abs=0.02)
+
+
+
 def test_dywersant_aura_cost() -> None:
     assert costs.passive_cost("dywersant", 8, True) == pytest.approx(10)
 

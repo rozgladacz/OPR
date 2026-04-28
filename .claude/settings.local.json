@@ -25,7 +25,13 @@
       "Bash(.venv/Scripts/python -m pytest tests/ -v --ignore=tests/test_quote_update_concurrency_stability.py)",
       "Bash(.venv/Scripts/python -m pytest tests/ --ignore=tests/test_quote_update_concurrency_stability.py -v)",
       "Bash(python -m pytest tests/ -q --no-header)",
-      "Bash(python _profile_quote.py)"
+      "Bash(python _profile_quote.py)",
+      "Bash(.venv/Scripts/python -m pytest tests/ --ignore=tests/test_quote_update_concurrency_stability.py -q)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_weapon_costs.py -q)",
+      "Bash(.venv/Scripts/python -c \"from app.data import abilities\")",
+      "Bash(python -u -c ' *)",
+      "Bash(.venv/Scripts/python -c \"from app.data import abilities; print\\('OK'\\)\")",
+      "Bash(.venv/Scripts/python -c ' *)"
     ]
   }
 }

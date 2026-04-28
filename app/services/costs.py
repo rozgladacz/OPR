@@ -789,7 +789,7 @@ def passive_cost(
     if slug == "roj":
         return 0.25 * tou
     if slug == "zwrot":
-        return -0.25 * tou
+        return -1.0 * tou
         
     if aura:
         if slug == "niestrudzony":
@@ -1086,9 +1086,9 @@ def _weapon_cost(
 
     if melee and "furia" in unit_set:
         chance += 0.65
-    if "przygotowanie" in unit_set:
+    if "przygotowanie" in unit_set and "samolot" not in unit_set:
         chance += 0.2 if "niestrudzony" in unit_set else 0.65
-    if "niestrudzony" in unit_set:
+    if "niestrudzony" in unit_set and "samolot" not in unit_set:
         mult *= 1.5
     if "straznik" in unit_set and not melee:
         mult *= 1.5
