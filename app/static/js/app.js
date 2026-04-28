@@ -5742,7 +5742,10 @@ function initRosterEditor() {
       loadoutState.mode = 'total';
     }
 
-    renderEditors();
+    // Batched via RAF — coalesces rapid edits into a single DOM rebuild.
+    // loadoutInput.value below is still synced synchronously so the next
+    // edit reads the latest serialized state.
+    scheduleRender();
     if (loadoutInput && loadoutState) {
       loadoutInput.value = serializeLoadoutState(loadoutState);
     }
@@ -5807,7 +5810,11 @@ function initRosterEditor() {
             activeQuoteController = null;
           }
         });
-    }, 250);
+    }, 400);
+    // 400ms debounce: typical burst-edit cadence is ~150-300ms between clicks.
+    // At 250ms most burst series fire 1-2 quote requests; at 400ms only one
+    // quote fires after the burst settles. Users don't perceive the extra
+    // 150ms because they're already waiting for network round-trip.
     let stateChangeCycleToken = null;
     if (activeItem) {
       const dedupeKey = [activeId, String(currentCount), lastSelectedRole || '', loadoutInput?.value || ''].join('::');
@@ -5842,6 +5849,21 @@ function initRosterEditor() {
       setSaveStatus('dirty');
       scheduleSave(editVersion);
     }
+  }
+
+  // RAF-batched wrapper for renderEditors. Multiple state changes within a
+  // single animation frame coalesce into one DOM rebuild — eliminates jank
+  // when the user rapidly clicks +/- on count or weapon counters.
+  // The synchronous renderEditors() call from quote .then() bypasses this
+  // because it must reflect freshly-arrived server data immediately.
+  let renderScheduled = false;
+  function scheduleRender() {
+    if (renderScheduled) return;
+    renderScheduled = true;
+    window.requestAnimationFrame(() => {
+      renderScheduled = false;
+      renderEditors();
+    });
   }
 
 function renderEditors() {

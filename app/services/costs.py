@@ -522,6 +522,10 @@ def _ascii_letters(value: str) -> str:
     return "".join(result)
 
 
+# Pure string normalization — heavily reused by ability_identifier and many
+# direct call sites. Caching avoids re-running NFKD + regex passes on the
+# repeating set of ability/weapon names per request.
+@lru_cache(maxsize=4096)
 def normalize_name(text: str | None) -> str:
     if not text:
         return ""
@@ -696,6 +700,12 @@ def normalize_range_value(value: str | int | float | None) -> int:
     return int(round(numeric))
 
 
+# Pure function called ~18,700 times per quote (profiled on Leman Russ).
+# Inputs are always small strings or None, output depends only on module-level
+# ability_catalog constants — perfect candidate for process-wide memoization.
+# Cache size 4096 covers the realistic universe of distinct ability text seen
+# across all armies; LRU eviction protects memory if that assumption breaks.
+@lru_cache(maxsize=4096)
 def ability_identifier(text: str | None) -> str:
     if text is None:
         return ""
@@ -2048,7 +2058,18 @@ def roster_unit_role_totals(
             "ranged": round(ranged_total, 2),
         }
 
+    # Memoize per (sorted traits) — _passive_entries does an expensive
+    # ability_cost_components_from_name call per passive (~0.5-2ms each).
+    # warrior/strzelec usually differ by exactly one trait, so the inputs to
+    # most ability cost computations are identical → cache hit on the second
+    # role.  Cleared at end of roster_unit_role_totals via local closure.
+    _passive_entries_cache: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+
     def _passive_entries(current_traits: Sequence[str]) -> list[dict[str, Any]]:
+        key = tuple(sorted(str(t) for t in current_traits))
+        cached = _passive_entries_cache.get(key)
+        if cached is not None:
+            return cached
         entries: list[dict[str, Any]] = []
         for entry in passive_state.payload:
             slug = str(entry.get("slug") or "").strip()
@@ -2073,6 +2094,7 @@ def roster_unit_role_totals(
                     "cost": float(components.base),
                 }
             )
+        _passive_entries_cache[key] = entries
         return entries
 
     passive_defaults, _ = _passive_flag_maps(passive_state)
@@ -2083,18 +2105,56 @@ def roster_unit_role_totals(
                 return passive_defaults[key]
         return None
 
-    def _ability_cost_map(current_traits: Sequence[str]) -> tuple[dict[int, float], float, float]:
+    # Pre-sort and pre-filter ability links ONCE — used by every
+    # _ability_cost_map invocation and several role-independent loops below.
+    _sorted_ability_links: list[models.UnitAbility] = [
+        link for link in getattr(unit, "abilities", []) if link.ability
+    ]
+    _sorted_ability_links.sort(
+        key=lambda link: (
+            getattr(link, "position", 0),
+            getattr(link, "id", 0) or 0,
+        )
+    )
+
+    # Role-independent precompute (was previously rebuilt twice — once per
+    # warrior/strzelec invocation of _compute_total — with an O(N²) inner
+    # `next(...)` lookup per ability that hammered profiles on units with
+    # many abilities).  Replaces `ability_id_to_ident` + the `next(...)` link
+    # lookup loop inside _compute_total.
+    _ability_id_to_ident: dict[int, str] = {}
+    _link_by_ability_id: dict[int, models.UnitAbility] = {}
+    _base_active_set_precomputed: set[str] = set()
+    for _link in _sorted_ability_links:
+        _ability = _link.ability
+        _ability_id_raw = getattr(_ability, "id", None)
+        if _ability_id_raw is None:
+            continue
+        _ability_id_int = int(_ability_id_raw)
+        _link_by_ability_id[_ability_id_int] = _link
+        _ident = ability_identifier(getattr(_ability, "slug", None) or _ability.name)
+        if not _ident:
+            continue
+        _ability_id_to_ident[_ability_id_int] = _ident
+        if _ability_link_is_default(_link):
+            _base_active_set_precomputed.add(_ident)
+
+    # Memoized like _passive_entries — same trait-fingerprint key.
+    _ability_cost_map_cache: dict[
+        tuple[str, ...], tuple[dict[int, float], float, float]
+    ] = {}
+
+    def _ability_cost_map(
+        current_traits: Sequence[str],
+    ) -> tuple[dict[int, float], float, float]:
+        key = tuple(sorted(str(t) for t in current_traits))
+        cached = _ability_cost_map_cache.get(key)
+        if cached is not None:
+            return cached
         ability_map: dict[int, float] = {}
         passive_total = 0.0
         active_total = 0.0
-        links = [link for link in getattr(unit, "abilities", []) if link.ability]
-        links.sort(
-            key=lambda link: (
-                getattr(link, "position", 0),
-                getattr(link, "id", 0) or 0,
-            )
-        )
-        for link in links:
+        for link in _sorted_ability_links:
             ability = link.ability
             cost_value = ability_cost(
                 link,
@@ -2108,10 +2168,19 @@ def roster_unit_role_totals(
             else:
                 ability_map[ability.id] = cost_value
                 active_total += cost_value
-        return ability_map, passive_total, active_total
+        result = (ability_map, passive_total, active_total)
+        _ability_cost_map_cache[key] = result
+        return result
 
     # Pre-compute weapon components once (role-independent: role slug is stripped)
     _shared_weapon_components = _weapon_components_map(base_traits)
+
+    # Selected_active_set is also role-independent (depends only on
+    # active_counts/aura_counts which are part of the loadout, not the role).
+    _selected_active_set_precomputed: set[str] = set()
+    for _aid, _ident in _ability_id_to_ident.items():
+        if active_counts.get(_aid, 0) > 0 or aura_counts.get(_aid, 0) > 0:
+            _selected_active_set_precomputed.add(_ident)
 
     def _compute_total(current_traits: Sequence[str], selected_role: str) -> float:
         ability_map, passive_total, _ = _ability_cost_map(current_traits)
@@ -2141,33 +2210,10 @@ def roster_unit_role_totals(
                 continue
             total += cost_value * _to_total(stored_count, ability=True)
 
-        ability_id_to_ident: dict[int, str] = {}
-        for link in getattr(unit, "abilities", []) or []:
-            ability = getattr(link, "ability", None)
-            if ability is None or ability.id is None:
-                continue
-            ident = ability_identifier(getattr(ability, "slug", None) or ability.name)
-            if ident:
-                ability_id_to_ident[int(ability.id)] = ident
-
-        base_active_set: set[str] = set()
-        selected_active_set: set[str] = set()
-        for ability_id, ident in ability_id_to_ident.items():
-            if not ident:
-                continue
-            link = next(
-                (
-                    item
-                    for item in getattr(unit, "abilities", []) or []
-                    if getattr(item, "ability", None)
-                    and getattr(getattr(item, "ability", None), "id", None) == ability_id
-                ),
-                None,
-            )
-            if link is not None and _ability_link_is_default(link):
-                base_active_set.add(ident)
-            if active_counts.get(ability_id, 0) > 0 or aura_counts.get(ability_id, 0) > 0:
-                selected_active_set.add(ident)
+        # Reuse role-independent precomputes (was: rebuilt every call with
+        # an O(N²) next(...) lookup over unit.abilities).
+        base_active_set = _base_active_set_precomputed
+        selected_active_set = _selected_active_set_precomputed
 
         def _is_odwody_blocked(active_set: set[str]) -> bool:
             return bool({"rezerwa", "zwiadowca", "zasadzka"} & active_set)
@@ -2221,6 +2267,9 @@ def roster_unit_role_totals(
             if diff == 0:
                 continue
             cost_value = float(entry.get("cost") or 0.0)
+            # Compute identifier ONCE per entry — was previously called twice
+            # (lines `ident = ...` and `passive_ident = ...`) which doubled
+            # ability_identifier hits in the inner loop.
             ident = ability_identifier(str(slug))
             is_dynamic_transport = ident in {
                 "transport",
@@ -2244,8 +2293,7 @@ def roster_unit_role_totals(
             passive_entry_diff = selected_cost - default_cost
             if passive_entry_diff == 0:
                 continue
-            passive_ident = ability_identifier(str(slug))
-            is_unit_wide_binary_passive = passive_ident not in {
+            is_unit_wide_binary_passive = ident not in {
                 "transport",
                 "otwarty_transport",
                 "platforma_strzelecka",

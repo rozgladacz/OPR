@@ -2794,16 +2794,18 @@ def _roster_unit_export_data(
         for entry in selected_auras
         if entry
     ]
+    # Single quote call services both totals_map (when not pre-supplied)
+    # and selected_total. Previous version called _internal_roster_unit_quote
+    # twice with identical args — wasted ~40-80ms per unit on exports.
+    quote = _internal_roster_unit_quote(roster_unit, loadout)
     totals_map: Mapping[str, float]
     if isinstance(totals, Mapping):
         totals_map = totals
     else:
-        quote = _internal_roster_unit_quote(roster_unit, loadout)
         totals_map = {
             "wojownik": float(quote.get("warrior_total") or 0.0),
             "strzelec": float(quote.get("shooter_total") or 0.0),
         }
-    quote = _internal_roster_unit_quote(roster_unit, loadout)
     total_value = float(quote.get("selected_total") or 0.0)
     rounded_total = utils.round_points(total_value)
 
