@@ -438,10 +438,13 @@
     onEnd(evt) {
       if (evt.oldIndex === evt.newIndex) return;
       const entries = Array.from(list.querySelectorAll('[data-roster-entry]'));
-      const order = entries.map((el, pos) => ({
-        id: parseInt(el.querySelector('[data-roster-unit-id]').dataset.rosterUnitId, 10),
-        position: pos,
-      }));
+      const order = entries
+        .map((el) => {
+          const item = el.querySelector('[data-roster-unit-id]');
+          return item ? parseInt(item.dataset.rosterUnitId, 10) : null;
+        })
+        .filter((id) => id);
+      if (!order.length) return;
       fetch(`/rosters/${rosterId}/units/reorder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -1728,15 +1728,6 @@ def _selected_passive_entries(
             continue
         if slug_value in seen_slugs or (identifier and identifier in seen_identifiers):
             continue
-        selected.append(
-            {
-                "slug": slug_value,
-                "label": slug_value,
-                "description": "",
-                "selected": True,
-                "count": 1,
-            }
-        )
         seen_slugs.add(slug_value)
         if identifier:
             seen_identifiers.add(identifier)
@@ -1890,30 +1881,7 @@ def _selected_ability_entries(
     for key, value in counts.items():
         if key in seen or value <= 0:
             continue
-        ability_id_str, variant = _split_ability_loadout_key(key)
-        ability_id_value: Any = ability_id_str
-        try:
-            ability_id_value = int(ability_id_str)
-        except (TypeError, ValueError):
-            try:
-                ability_id_value = int(float(ability_id_str))
-            except (TypeError, ValueError):
-                ability_id_value = ability_id_str
-        fallback = {
-            "ability_id": ability_id_value,
-            "label": str(key),
-            "description": "",
-            "count": value,
-            "value": variant,
-            "loadout_key": key,
-        }
-        custom_name = name_map.get(str(key))
-        if isinstance(custom_name, str):
-            normalized = custom_name.strip()
-            if normalized:
-                fallback["custom_name"] = normalized
-
-        selected.append(fallback)
+        seen.add(key)
 
     return selected
 
