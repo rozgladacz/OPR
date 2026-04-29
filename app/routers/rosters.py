@@ -2636,6 +2636,7 @@ def _loadout_weapon_details(
             continue
         details.append(
             {
+                "weapon_id": option.get("id"),
                 "name": option.get("name") or "Broń",
                 "count": total_count,
                 "range": option.get("range"),

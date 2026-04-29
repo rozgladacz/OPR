@@ -31,7 +31,11 @@
       "Bash(.venv/Scripts/python -c \"from app.data import abilities\")",
       "Bash(python -u -c ' *)",
       "Bash(.venv/Scripts/python -c \"from app.data import abilities; print\\('OK'\\)\")",
-      "Bash(.venv/Scripts/python -c ' *)"
+      "Bash(.venv/Scripts/python -c ' *)",
+      "Bash(python)",
+      "Bash(curl -s -c /tmp/opr_cookies.txt -X POST http://localhost:8000/auth/login -d \"username=admin&password=admin\" -L -o /dev/null -w \"%{http_code}\\\\n\")",
+      "Bash(curl -s -b /tmp/opr_cookies.txt http://localhost:8000/rosters/3/battle-state -o /tmp/battle.html -w \"GET battle-state -> %{http_code}, size: %{size_download}\\\\n\")",
+      "Read(//tmp/**)"
     ]
   }
 }

@@ -230,6 +230,46 @@ def roster_print(
     )
 
 
+@router.get("/{roster_id}/battle-state", response_class=HTMLResponse)
+def roster_battle_state(
+    roster_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_current_user(optional=True)),
+):
+    if not current_user:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    roster = _load_roster_for_export(db, roster_id)
+    if not roster:
+        raise HTTPException(status_code=404)
+    _ensure_roster_view_access(roster, current_user)
+
+    total_cost, _ = costs.recalculate_roster_costs(roster)
+    roster_items = _export_roster_unit_entries(db, roster)
+    for entry in roster_items:
+        for weapon in entry.get("weapon_details", []) or []:
+            weapon["range_int"] = costs.normalize_range_value(weapon.get("range"))
+            traits_raw = weapon.get("traits") or ""
+            weapon["traits_list"] = [
+                t.strip() for t in traits_raw.split(",") if t and t.strip()
+            ]
+    roster_groups = group_roster_items(roster_items, roster.army)
+    army_rules = _army_rule_labels(getattr(roster, "army", None))
+    return templates.TemplateResponse(
+        "roster_battle_state.html",
+        {
+            "request": request,
+            "user": current_user,
+            "roster": roster,
+            "roster_items": roster_items,
+            "roster_groups": roster_groups,
+            "total_cost_rounded": utils.round_points(total_cost),
+            "generated_at": datetime.utcnow(),
+            "army_rules": army_rules,
+        },
+    )
+
+
 @router.get("/{roster_id}/export/lista", response_class=HTMLResponse)
 def roster_export_list(
     roster_id: int,
