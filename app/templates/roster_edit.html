@@ -17,12 +17,12 @@
     </button>
   </div>
   <div class="d-flex align-items-center gap-2 flex-wrap">
+    <a class="btn btn-success" href="/rosters/{{ roster.id }}/battle-state" target="_blank">Stan bitewny</a>
+    <a class="btn btn-outline-secondary" href="/rosters/{{ roster.id }}/print" target="_blank">Widok statyczny</a>
+    <a class="btn btn-outline-secondary" href="/rosters/{{ roster.id }}/export/lista" target="_blank">Widok listy</a>
+    <a class="btn btn-outline-secondary" href="/rosters/{{ roster.id }}/pdf">Pobierz PDF</a>
+    <a class="btn btn-outline-secondary" href="/export/xlsx/{{ roster.id }}">Eksport XLSX</a>
     <a class="btn btn-outline-secondary" href="/rosters">Wróć</a>
-    <a class="btn btn-success" href="/rosters/{{ roster.id }}/print" target="_blank">Widok do druku</a>
-    <a class="btn btn-warning" href="/rosters/{{ roster.id }}/battle-state" target="_blank">Stan bitewny</a>
-    <a class="btn btn-outline-success" href="/rosters/{{ roster.id }}/pdf">Pobierz PDF</a>
-    <a class="btn btn-outline-success" href="/rosters/{{ roster.id }}/export/lista" target="_blank">Styl: lista</a>
-    <a class="btn btn-outline-success" href="/export/xlsx/{{ roster.id }}">Eksport XLSX</a>
   </div>
 </div>
 

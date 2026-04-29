@@ -2643,6 +2643,7 @@ def _loadout_weapon_details(
                 "attacks": option.get("attacks"),
                 "ap": option.get("ap"),
                 "traits": option.get("traits"),
+                "is_primary": bool(option.get("is_primary", False)),
             }
         )
     return details
@@ -2792,6 +2793,20 @@ def _roster_unit_export_data(
         elif unit_cache is not None and cache_key is not None:
             unit_cache.setdefault(cache_key, {})["default_summary"] = default_summary
 
+    def _build_descs(entries: list[dict]) -> dict[str, str]:
+        result: dict[str, str] = {}
+        for entry in entries:
+            if not entry:
+                continue
+            lbl = _ability_label_with_count(entry)
+            desc = str(entry.get("description") or "").strip()
+            if lbl and desc:
+                result[lbl] = desc
+                base_lbl = str(entry.get("label") or "").strip()
+                if base_lbl and base_lbl not in result:
+                    result[base_lbl] = desc
+        return result
+
     return {
         "instance": roster_unit,
         "unit": unit,
@@ -2804,6 +2819,8 @@ def _roster_unit_export_data(
         "passive_labels": [label for label in passive_labels if label],
         "active_labels": [label for label in active_labels if label],
         "aura_labels": [label for label in aura_labels if label],
+        "active_descs": _build_descs(selected_actives),
+        "aura_descs": _build_descs(selected_auras),
         "weapon_details": weapon_details,
         "weapon_summary": weapon_summary,
         "default_summary": default_summary,

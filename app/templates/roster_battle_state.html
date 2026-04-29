@@ -121,6 +121,20 @@
     font-weight: 700;
     font-size: 1rem;
   }
+  .battle-state .ability-tip {
+    cursor: help;
+    text-decoration: underline dotted;
+  }
+  .battle-state .toggle-ability {
+    cursor: pointer;
+  }
+  .battle-state .toggle-ability.is-struck {
+    text-decoration: line-through;
+    opacity: 0.5;
+  }
+  .battle-state .weapon-label-wrap {
+    flex: 1 1 100%;
+  }
   .battle-state .battle-toolbar {
     position: sticky;
     top: 0;
@@ -147,19 +161,27 @@
     </div>
     <div class="d-flex align-items-center gap-2 flex-wrap">
       <a class="btn btn-outline-secondary btn-sm" href="/rosters/{{ roster.id }}">Wróć do rozpiski</a>
+      <button class="btn btn-outline-info btn-sm" type="button" data-battle-end-round>
+        Zakończ rundę <span data-round-number>1</span>
+      </button>
       <button class="btn btn-danger btn-sm" type="button" data-battle-reset>
-        Zakończ starcie / przywróć stan początkowy
+        Zakończ starcie / przywróć stan
       </button>
     </div>
   </div>
 
   <div class="battle-header">
     <div>Armia: {{ roster.army.name if roster.army else '---' }}</div>
-    <div>Suma: {{ total_cost_rounded }} pkt | Wygenerowano: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC</div>
-    {% if army_rules %}
-    <div>Zasady armii: {{ army_rules | join(', ') }}</div>
+    {% if army_rules_detail %}
+    <div>Zasady armii: {% for rule in army_rules_detail %}<span{% if rule.description %} data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="{{ rule.description | e }}" class="ability-tip"{% endif %}>{{ rule.label }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</div>
     {% endif %}
   </div>
+
+  {% macro ability_span(label, toggleable=false) %}
+    {%- set key = label.split('(')[0].split(' ×')[0].strip() -%}
+    {%- set desc = ability_descriptions.get(label) or ability_descriptions.get(key) or '' -%}
+    <span{% if desc and toggleable %} class="ability-tip toggle-ability"{% elif desc %} class="ability-tip"{% elif toggleable %} class="toggle-ability"{% endif %}{% if desc %} data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="{{ desc | e }}"{% endif %}{% if toggleable %} data-ability-toggle="{{ label | e }}"{% endif %}>{{ label }}</span>
+  {%- endmacro %}
 
   <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 row-cols-xxl-4 g-3" data-battle-section>
     {% for item in roster_items %}
@@ -169,6 +191,7 @@
            data-battle-unit
            data-roster-unit-id="{{ item.instance.id }}"
            data-initial-models="{{ unit_count }}"
+           data-toughness="{{ item.toughness or 1 }}"
            data-weapons-json='{{ item.weapon_details | tojson | e }}'>
         <div class="card-body">
           <div class="unit-header d-flex justify-content-between align-items-start gap-2">
@@ -177,21 +200,46 @@
               {% if item.custom_name %}
               <div class="text-muted small">{{ item.unit_name }}</div>
               {% endif %}
-              <div class="mt-2 d-flex align-items-center gap-1">
-                <span class="small text-muted">Modele:</span>
-                <button class="btn btn-outline-secondary btn-sm counter-btn" type="button" data-models-decrement>−</button>
-                <span class="counter-value" data-models-value>{{ unit_count }}</span>
-                <span class="text-muted small">/ {{ unit_count }}</span>
-                <button class="btn btn-outline-secondary btn-sm counter-btn" type="button" data-models-increment>+</button>
+              {% if unit_count > 1 or item.show_wounds %}
+              <div class="mt-2 d-flex align-items-center gap-1 flex-wrap">
+                {% if unit_count > 1 %}
+                <span class="d-inline-flex align-items-center gap-1 flex-shrink-0">
+                  <span class="small text-muted">Modele:</span>
+                  <button class="btn btn-outline-secondary btn-sm counter-btn" type="button" data-models-decrement>−</button>
+                  <span class="counter-value" data-models-value>{{ unit_count }}</span>
+                  <span class="text-muted small">/ {{ unit_count }}</span>
+                  <button class="btn btn-outline-secondary btn-sm counter-btn" type="button" data-models-increment>+</button>
+                </span>
+                {% endif %}
+                {% if item.show_wounds %}
+                <span class="d-inline-flex align-items-center gap-1 flex-shrink-0 {{ 'ms-2' if unit_count > 1 else '' }}">
+                  <span class="small text-muted">Rany:</span>
+                  <button class="btn btn-outline-secondary btn-sm counter-btn" type="button" data-wounds-decrement>−</button>
+                  <span class="counter-value text-danger" data-wounds-value>0</span>
+                  <span class="text-muted small">/ <span data-wounds-max>{{ unit_count * (item.toughness or 1) }}</span></span>
+                  <button class="btn btn-outline-secondary btn-sm counter-btn" type="button" data-wounds-increment>+</button>
+                </span>
+                {% endif %}
+              </div>
+              {% endif %}
+            </div>
+            <div class="d-flex flex-column gap-1 align-items-end">
+              <div class="btn-group btn-group-sm" role="group">
+                <button class="btn btn-outline-primary" type="button" data-status-toggle="activated"
+                        data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Aktywowany">★</button>
+                <button class="btn btn-outline-success" type="button" data-status-toggle="entrenched"
+                        data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Okopany">⛏</button>
+                <button class="btn btn-outline-warning" type="button" data-status-toggle="pinned"
+                        data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Przyszpilony">📌</button>
+                <button class="btn btn-outline-secondary" type="button" data-status-toggle="fatigued"
+                        data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Wyczerpany">💤</button>
+                <button class="btn btn-outline-danger" type="button" data-defeated-toggle
+                        data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Pokonany">✕</button>
               </div>
             </div>
-            <button class="btn btn-outline-danger btn-sm" type="button" data-defeated-toggle>
-              <span data-defeated-label-active>Pokonany</span>
-              <span data-defeated-label-inactive class="d-none">Przywróć</span>
-            </button>
           </div>
 
-          <div class="defeated-banner">★ Pokonany ★</div>
+          <div class="defeated-banner">✕ Pokonany ✕</div>
 
           <div class="stat-grid mt-3">
             <div class="stat-box">
@@ -212,13 +260,13 @@
           <div class="mt-2">
             <div class="section-title">Zdolności</div>
             {% if item.passive_labels %}
-            <div class="ability-line"><strong>Pasywne:</strong> {{ item.passive_labels | join(', ') }}</div>
+            <div class="ability-line"><strong>Pasywne:</strong> {% for lbl in item.passive_labels %}{{ ability_span(lbl) }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
             {% endif %}
             {% if item.active_labels %}
-            <div class="ability-line"><strong>Aktywne:</strong> {{ item.active_labels | join(', ') }}</div>
+            <div class="ability-line"><strong>Aktywne:</strong> {% for lbl in item.active_labels %}{{ ability_span(lbl, toggleable=true) }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
             {% endif %}
             {% if item.aura_labels %}
-            <div class="ability-line"><strong>Aury:</strong> {{ item.aura_labels | join(', ') }}</div>
+            <div class="ability-line"><strong>Aury:</strong> {% for lbl in item.aura_labels %}{{ ability_span(lbl, toggleable=true) }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
             {% endif %}
           </div>
           {% endif %}
@@ -246,5 +294,6 @@
   </div>
 </div>
 
+<script>window._abilityDescriptions = {{ ability_descriptions | tojson }};</script>
 <script src="{{ url_for('static', path='js/battle_state.js') }}"></script>
 {% endblock %}

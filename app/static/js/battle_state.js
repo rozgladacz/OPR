@@ -5,11 +5,20 @@
   const MELEE_ASSAULT_TRAITS = new Set(["szturmowy", "szturmowa", "assault"]);
   const UNWIELDY_TRAITS = new Set(["nieporeczna", "unwieldy"]);
 
+  // Status buttons config: key → {selector, btn color} — order matches template
+  const STATUS_CONFIGS = [
+    { key: "activated", selector: '[data-status-toggle="activated"]', color: "primary"   },
+    { key: "entrenched",selector: '[data-status-toggle="entrenched"]',color: "success"   },
+    { key: "pinned",    selector: '[data-status-toggle="pinned"]',    color: "warning"   },
+    { key: "fatigued",  selector: '[data-status-toggle="fatigued"]',  color: "secondary" },
+    { key: "defeated",  selector: "[data-defeated-toggle]",           color: "danger"    },
+  ];
+
   function normalizeSlug(value) {
     if (value == null) return "";
     let text = String(value).trim().toLowerCase();
     if (text.normalize) {
-      text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      text = text.normalize("NFD").replace(/[̀-ͯ]/g, "");
     }
     return text;
   }
@@ -34,14 +43,32 @@
     return Number.isFinite(num) ? num : 0;
   }
 
+  function isMelee(weapon) {
+    return parseRangeInt(weapon) === 0;
+  }
+
   function traitsList(weapon) {
     if (Array.isArray(weapon.traits_list)) return weapon.traits_list;
     const raw = weapon.traits;
     if (!raw) return [];
-    return String(raw)
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
+    return String(raw).split(",").map((t) => t.trim()).filter(Boolean);
+  }
+
+  function traitBaseName(trait) {
+    return trait.split("(")[0].trim();
+  }
+
+  function makeTooltipSpan(text, suffix) {
+    const descs = window._abilityDescriptions;
+    const desc = (descs && (descs[text] || descs[traitBaseName(text)])) || "";
+    const s = document.createElement("span");
+    s.textContent = text + (suffix || "");
+    if (desc) {
+      s.dataset.bsToggle = "tooltip";
+      s.dataset.bsPlacement = "top";
+      s.dataset.bsTitle = desc;
+    }
+    return s;
   }
 
   function storageKey(rosterId) {
@@ -54,7 +81,6 @@
       if (!raw) return null;
       return JSON.parse(raw);
     } catch (e) {
-      console.warn("battle_state: failed to load state", e);
       return null;
     }
   }
@@ -62,27 +88,24 @@
   function saveState(rosterId, state) {
     try {
       window.localStorage.setItem(storageKey(rosterId), JSON.stringify(state));
-    } catch (e) {
-      console.warn("battle_state: failed to save state", e);
-    }
+    } catch (e) { /* noop */ }
   }
 
   function clearState(rosterId) {
     try {
       window.localStorage.removeItem(storageKey(rosterId));
-    } catch (e) {
-      /* noop */
-    }
+    } catch (e) { /* noop */ }
+  }
+
+  function weaponKey(weapon, idx) {
+    if (weapon.weapon_id != null) return "w" + weapon.weapon_id;
+    return "i" + idx;
   }
 
   function unitInitialState(card) {
     const initialModels = parseInt(card.dataset.initialModels || "0", 10) || 0;
     let weapons = [];
-    try {
-      weapons = JSON.parse(card.dataset.weaponsJson || "[]") || [];
-    } catch (e) {
-      weapons = [];
-    }
+    try { weapons = JSON.parse(card.dataset.weaponsJson || "[]") || []; } catch (e) { weapons = []; }
     const weaponCounts = {};
     weapons.forEach((w, idx) => {
       const key = weaponKey(w, idx);
@@ -91,38 +114,32 @@
     });
     return {
       defeated: false,
+      pinned: false,
+      fatigued: false,
+      entrenched: false,
+      activated: false,
       activeModels: initialModels,
+      woundsRemaining: 0,
       weapons: weaponCounts,
       mode: "equipment",
+      struckAbilities: [],
     };
   }
 
-  function weaponKey(weapon, idx) {
-    if (weapon.weapon_id != null) return "w" + weapon.weapon_id;
-    return "i" + idx;
-  }
-
   function getCards() {
-    return Array.prototype.slice.call(
-      document.querySelectorAll("[data-battle-unit]")
-    );
+    return Array.prototype.slice.call(document.querySelectorAll("[data-battle-unit]"));
   }
 
   function buildModeToolbar(card, weapons) {
     const toolbar = card.querySelector("[data-mode-toolbar]");
     if (!toolbar) return;
-    // Remove dynamic range buttons (keep equipment + melee)
-    toolbar
-      .querySelectorAll("[data-mode^='ranged:']")
-      .forEach((b) => b.remove());
-
+    toolbar.querySelectorAll("[data-mode^='ranged:']").forEach((b) => b.remove());
     const ranges = new Set();
     weapons.forEach((w) => {
       const r = parseRangeInt(w);
       if (r > 0) ranges.add(r);
     });
-    const sorted = Array.from(ranges).sort((a, b) => a - b);
-    sorted.forEach((r) => {
+    Array.from(ranges).sort((a, b) => a - b).forEach((r) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "btn btn-outline-secondary";
@@ -164,7 +181,6 @@
       const activeCount = entry.activeCount || 0;
       const attacksPer = parseFloat(w.attacks);
       const a = Number.isFinite(attacksPer) ? attacksPer : 1;
-      // Always strip assault traits from grouping key and display
       const traits = traitsList(w).filter((t) => !isAssaultTrait(t));
       const ap = w.ap == null ? 0 : parseInt(w.ap, 10) || 0;
       const traitKey = traits.map(normalizeSlug).sort().join("|");
@@ -187,49 +203,58 @@
     return value.toFixed(1);
   }
 
-  function formatAp(ap) {
-    return "AP" + ap;
+  function disposeTooltipsIn(container) {
+    if (typeof bootstrap === "undefined" || !bootstrap.Tooltip) return;
+    container.querySelectorAll("[data-bs-toggle='tooltip']").forEach(function (el) {
+      const inst = bootstrap.Tooltip.getInstance(el);
+      if (inst) inst.dispose();
+    });
   }
 
   function renderUnit(card, unitState) {
     const weapons = parseWeaponsCached(card);
+    const toughness = parseInt(card.dataset.toughness || "1", 10) || 1;
 
-    // Header counters
+    // Model counter
     const modelsValue = card.querySelector("[data-models-value]");
     if (modelsValue) modelsValue.textContent = unitState.activeModels;
 
-    // Defeated state
-    if (unitState.defeated) {
-      card.classList.add("is-defeated");
-      const lblA = card.querySelector("[data-defeated-label-active]");
-      const lblI = card.querySelector("[data-defeated-label-inactive]");
-      if (lblA) lblA.classList.add("d-none");
-      if (lblI) lblI.classList.remove("d-none");
-    } else {
-      card.classList.remove("is-defeated");
-      const lblA = card.querySelector("[data-defeated-label-active]");
-      const lblI = card.querySelector("[data-defeated-label-inactive]");
-      if (lblA) lblA.classList.remove("d-none");
-      if (lblI) lblI.classList.add("d-none");
-    }
+    // Wounds counter
+    const woundsValue = card.querySelector("[data-wounds-value]");
+    const woundsMax = card.querySelector("[data-wounds-max]");
+    if (woundsValue) woundsValue.textContent = unitState.woundsRemaining;
+    if (woundsMax) woundsMax.textContent = unitState.activeModels * toughness;
 
-    // Mode toolbar buttons (active state)
+    // Status buttons
+    STATUS_CONFIGS.forEach(({ key, selector, color }) => {
+      const btn = card.querySelector(selector);
+      if (!btn) return;
+      const isActive = key === "defeated" ? !!unitState.defeated : !!unitState[key];
+      if (isActive) {
+        btn.classList.remove("btn-outline-" + color);
+        btn.classList.add("btn-" + color, "active");
+      } else {
+        btn.classList.remove("btn-" + color, "active");
+        btn.classList.add("btn-outline-" + color);
+      }
+    });
+
+    card.classList.toggle("is-defeated", !!unitState.defeated);
+
+    // Mode toolbar active state
     const toolbar = card.querySelector("[data-mode-toolbar]");
     if (toolbar) {
       toolbar.querySelectorAll("[data-mode]").forEach((btn) => {
-        if (btn.dataset.mode === unitState.mode) {
-          btn.classList.add("active");
-        } else {
-          btn.classList.remove("active");
-        }
+        btn.classList.toggle("active", btn.dataset.mode === unitState.mode);
       });
     }
 
-    // Render weapon list
     const list = card.querySelector("[data-weapon-list]");
     const summary = card.querySelector("[data-attack-summary]");
     if (!list || !summary) return;
 
+    disposeTooltipsIn(list);
+    disposeTooltipsIn(summary);
     list.innerHTML = "";
     summary.innerHTML = "";
 
@@ -251,8 +276,7 @@
         line.dataset.active = entry.activeCount > 0 ? "1" : "0";
 
         const labelWrap = document.createElement("div");
-        labelWrap.className = "d-flex align-items-center gap-1 flex-grow-1";
-        labelWrap.style.flex = "1 1 100%";
+        labelWrap.className = "weapon-label-wrap d-flex align-items-center gap-1";
 
         const dec = document.createElement("button");
         dec.type = "button";
@@ -276,22 +300,31 @@
 
         const labelText = document.createElement("span");
         labelText.className = "weapon-label ms-2";
-        labelText.textContent = w.name || "Broń";
+        labelText.textContent = (w.is_primary ? "⚑ " : "") + (w.name || "Broń");
+        const rangeDisp = parseRangeInt(w) || "wręcz";
+        const trDisp = w.traits || "-";
+        labelText.dataset.bsToggle = "tooltip";
+        labelText.dataset.bsPlacement = "top";
+        labelText.dataset.bsTitle = "Ataki: " + (w.attacks ?? "-") + " | Zasięg: " + rangeDisp + " | AP: " + (w.ap ?? "-") + " | Cechy: " + trDisp;
 
-        labelWrap.appendChild(dec);
-        labelWrap.appendChild(valueSpan);
-        labelWrap.appendChild(initialSpan);
-        labelWrap.appendChild(inc);
-        labelWrap.appendChild(labelText);
+        [dec, valueSpan, initialSpan, inc, labelText].forEach((el) => labelWrap.appendChild(el));
 
         const stats = document.createElement("span");
         stats.className = "weapon-stats";
         const range = parseRangeInt(w);
-        const attacks = w.attacks == null || w.attacks === "" ? "-" : w.attacks;
+        const attacks = w.attacks == null ? "-" : w.attacks;
         const ap = w.ap == null ? "-" : w.ap;
-        const tr = (w.traits || "-") || "-";
-        stats.textContent =
-          "Ataki: " + attacks + " | Zasięg: " + (range || "wręcz") + " | AP: " + ap + " | Cechy: " + tr;
+        stats.appendChild(document.createTextNode(
+          "Ataki: " + attacks + " | Zasięg: " + (range || "wręcz") + " | AP: " + ap + " | Cechy: "
+        ));
+        const traits = traitsList(w);
+        if (traits.length === 0) {
+          stats.appendChild(document.createTextNode("-"));
+        } else {
+          traits.forEach(function (trait, i) {
+            stats.appendChild(makeTooltipSpan(trait, i < traits.length - 1 ? ", " : ""));
+          });
+        }
 
         line.appendChild(labelWrap);
         line.appendChild(stats);
@@ -300,36 +333,35 @@
       return;
     }
 
-    // Attack mode (melee or ranged:R) — show grouped summary
+    // Attack mode — grouped summary
     const filtered = filterWeaponsForMode(weapons, unitState.mode, unitState);
-    filtered.forEach((entry) => {
-      entry.activeCount = unitState.weapons[entry.key] || 0;
-    });
+    filtered.forEach((entry) => { entry.activeCount = unitState.weapons[entry.key] || 0; });
 
+    summary.classList.remove("d-none");
     if (filtered.length === 0) {
-      summary.classList.remove("d-none");
       const empty = document.createElement("div");
       empty.className = "text-muted small";
       empty.textContent = "Brak dostępnych ataków w tym trybie.";
       summary.appendChild(empty);
       return;
     }
-
-    summary.classList.remove("d-none");
     const groups = groupAttacks(filtered);
     groups.forEach((g) => {
       const row = document.createElement("div");
       row.className = "attack-summary-row";
-
       const total = document.createElement("span");
       total.className = "attack-summary-total";
       total.textContent = formatAttacks(g.totalAttacks) + " ataków";
-
       const meta = document.createElement("span");
       meta.className = "small";
-      const traitsText = g.traits.length ? g.traits.join(", ") : "bez cech";
-      meta.textContent = formatAp(g.ap) + " | " + traitsText;
-
+      meta.appendChild(document.createTextNode("AP" + g.ap + " | "));
+      if (g.traits.length === 0) {
+        meta.appendChild(document.createTextNode("bez cech"));
+      } else {
+        g.traits.forEach(function (trait, i) {
+          meta.appendChild(makeTooltipSpan(trait, i < g.traits.length - 1 ? ", " : ""));
+        });
+      }
       row.appendChild(total);
       row.appendChild(meta);
       summary.appendChild(row);
@@ -340,11 +372,7 @@
   function parseWeaponsCached(card) {
     if (_weaponsCache.has(card)) return _weaponsCache.get(card);
     let weapons = [];
-    try {
-      weapons = JSON.parse(card.dataset.weaponsJson || "[]") || [];
-    } catch (e) {
-      weapons = [];
-    }
+    try { weapons = JSON.parse(card.dataset.weaponsJson || "[]") || []; } catch (e) { weapons = []; }
     _weaponsCache.set(card, weapons);
     return weapons;
   }
@@ -352,92 +380,106 @@
   function reorderDefeated(state) {
     const sections = document.querySelectorAll("[data-battle-section]");
     sections.forEach((section) => {
-      const wrappers = Array.prototype.slice.call(
-        section.querySelectorAll("[data-battle-card-wrapper]")
-      );
+      const wrappers = Array.prototype.slice.call(section.querySelectorAll("[data-battle-card-wrapper]"));
       wrappers.sort((a, b) => {
-        const ca = a.querySelector("[data-battle-unit]");
-        const cb = b.querySelector("[data-battle-unit]");
-        const ida = ca && ca.dataset.rosterUnitId;
-        const idb = cb && cb.dataset.rosterUnitId;
-        const da = (state.units && state.units[ida] && state.units[ida].defeated) ? 1 : 0;
-        const db = (state.units && state.units[idb] && state.units[idb].defeated) ? 1 : 0;
+        const ida = a.querySelector("[data-battle-unit]")?.dataset.rosterUnitId;
+        const idb = b.querySelector("[data-battle-unit]")?.dataset.rosterUnitId;
+        const da = state.units?.[ida]?.defeated ? 1 : 0;
+        const db = state.units?.[idb]?.defeated ? 1 : 0;
         if (da !== db) return da - db;
-        // restore original roster position within same group (active or defeated)
         return parseInt(a.dataset.originalPosition || 0) - parseInt(b.dataset.originalPosition || 0);
       });
       wrappers.forEach((w) => section.appendChild(w));
     });
   }
 
-  function updateSummaryBadge(state) {
-    const cards = getCards();
-    const total = cards.length;
+  function updateSummaryBadge(state, cards) {
     let active = 0;
     cards.forEach((card) => {
-      const id = card.dataset.rosterUnitId;
-      const us = state.units[id];
-      if (!us || !us.defeated) active += 1;
+      if (!state.units?.[card.dataset.rosterUnitId]?.defeated) active += 1;
     });
     const a = document.querySelector("[data-active-units]");
     const t = document.querySelector("[data-total-units]");
     if (a) a.textContent = active;
-    if (t) t.textContent = total;
+    if (t) t.textContent = cards.length;
+  }
+
+  function updateRoundDisplay(state) {
+    const el = document.querySelector("[data-round-number]");
+    if (el) el.textContent = state.round || 1;
+  }
+
+  function applyAbilityStates(card, us) {
+    const struck = new Set(us.struckAbilities || []);
+    card.querySelectorAll("[data-ability-toggle]").forEach(function (span) {
+      span.classList.toggle("is-struck", struck.has(span.dataset.abilityToggle));
+    });
+  }
+
+  function initTooltips(root) {
+    if (typeof bootstrap === "undefined" || !bootstrap.Tooltip) return;
+    (root || document).querySelectorAll("[data-bs-toggle='tooltip']").forEach(function (el) {
+      if (!bootstrap.Tooltip.getInstance(el)) {
+        new bootstrap.Tooltip(el, { trigger: "hover" });
+      }
+    });
   }
 
   function init() {
     const root = document.querySelector("[data-battle-root]");
     if (!root) return;
     const rosterId = root.dataset.rosterId;
-
     const cards = getCards();
-    let state = loadState(rosterId) || { units: {} };
+
+    let state = loadState(rosterId) || { units: {}, round: 1 };
     if (!state.units) state.units = {};
+    if (!state.round) state.round = 1;
 
     cards.forEach((card) => {
       const id = card.dataset.rosterUnitId;
       const initial = unitInitialState(card);
-      // Merge stored state but keep weapon keys consistent with current data
       const stored = state.units[id];
       if (!stored) {
         state.units[id] = initial;
       } else {
-        // Merge weapons — only keep keys that exist now
+        // Merge: keep stored values, fill missing fields from initial
         const merged = {
           defeated: !!stored.defeated,
-          activeModels:
-            typeof stored.activeModels === "number"
-              ? stored.activeModels
-              : initial.activeModels,
+          pinned: !!stored.pinned,
+          fatigued: !!stored.fatigued,
+          entrenched: !!stored.entrenched,
+          activated: !!stored.activated,
+          activeModels: typeof stored.activeModels === "number" ? stored.activeModels : initial.activeModels,
+          woundsRemaining: typeof stored.woundsRemaining === "number" ? stored.woundsRemaining : initial.woundsRemaining,
           weapons: {},
           mode: stored.mode || "equipment",
+          struckAbilities: Array.isArray(stored.struckAbilities) ? stored.struckAbilities : [],
         };
         Object.keys(initial.weapons).forEach((k) => {
-          merged.weapons[k] =
-            stored.weapons && typeof stored.weapons[k] === "number"
-              ? stored.weapons[k]
-              : initial.weapons[k];
+          merged.weapons[k] = typeof stored.weapons?.[k] === "number" ? stored.weapons[k] : initial.weapons[k];
         });
         state.units[id] = merged;
       }
-      const weapons = parseWeaponsCached(card);
-      buildModeToolbar(card, weapons);
+      buildModeToolbar(card, parseWeaponsCached(card));
     });
 
     saveState(rosterId, state);
 
     function rerenderAll() {
       cards.forEach((card) => {
-        const id = card.dataset.rosterUnitId;
-        renderUnit(card, state.units[id]);
+        const us = state.units[card.dataset.rosterUnitId];
+        renderUnit(card, us);
+        applyAbilityStates(card, us);
       });
       reorderDefeated(state);
-      updateSummaryBadge(state);
+      updateSummaryBadge(state, cards);
+      updateRoundDisplay(state);
     }
 
     function commit() {
       saveState(rosterId, state);
       rerenderAll();
+      initTooltips();
     }
 
     function clamp(value, min, max) {
@@ -449,6 +491,7 @@
     cards.forEach((card) => {
       const id = card.dataset.rosterUnitId;
       const initialModels = parseInt(card.dataset.initialModels || "0", 10) || 0;
+      const toughness = parseInt(card.dataset.toughness || "1", 10) || 1;
       const weapons = parseWeaponsCached(card);
       const initialWeaponCounts = {};
       weapons.forEach((w, idx) => {
@@ -458,6 +501,23 @@
       });
 
       card.addEventListener("click", function (ev) {
+        // Ability toggle (span click — not a button)
+        const abilitySpan = ev.target.closest("[data-ability-toggle]");
+        if (abilitySpan) {
+          const us = state.units[id];
+          if (!us) return;
+          const label = abilitySpan.dataset.abilityToggle;
+          if (!Array.isArray(us.struckAbilities)) us.struckAbilities = [];
+          const idx = us.struckAbilities.indexOf(label);
+          if (idx >= 0) {
+            us.struckAbilities.splice(idx, 1);
+          } else {
+            us.struckAbilities.push(label);
+          }
+          commit();
+          return;
+        }
+
         const target = ev.target.closest("button");
         if (!target) return;
         const us = state.units[id];
@@ -470,10 +530,12 @@
               us.weapons[k] = Math.round(initialWeaponCounts[k] * newCount / initialModels);
             });
           }
+          us.woundsRemaining = clamp(us.woundsRemaining, 0, newCount * toughness);
           us.activeModels = newCount;
           commit();
           return;
         }
+
         if (target.matches("[data-models-increment]")) {
           const newCount = clamp(us.activeModels + 1, 0, initialModels);
           if (initialModels > 0) {
@@ -485,27 +547,79 @@
           commit();
           return;
         }
+
+        if (target.matches("[data-wounds-decrement]")) {
+          us.woundsRemaining = clamp(us.woundsRemaining - 1, 0, us.activeModels * toughness);
+          commit();
+          return;
+        }
+
+        if (target.matches("[data-wounds-increment]")) {
+          us.woundsRemaining = clamp(us.woundsRemaining + 1, 0, us.activeModels * toughness);
+          commit();
+          return;
+        }
+
         if (target.matches("[data-defeated-toggle]")) {
           us.defeated = !us.defeated;
           commit();
           return;
         }
-        const decKey = target.dataset.weaponDecrement;
-        if (decKey) {
-          const cap = initialWeaponCounts[decKey] || 0;
-          const cur = us.weapons[decKey] || 0;
-          us.weapons[decKey] = clamp(cur - 1, 0, cap);
+
+        const statusKey = target.dataset.statusToggle;
+        if (statusKey) {
+          const newVal = !us[statusKey];
+          us[statusKey] = newVal;
+          if (newVal) {
+            if (statusKey === "activated") us.entrenched = false;
+            else if (statusKey === "entrenched") us.pinned = false;
+          }
           commit();
           return;
         }
+
+        const decKey = target.dataset.weaponDecrement;
+        if (decKey) {
+          const cur = us.weapons[decKey] || 0;
+          if (cur <= 0) return;
+          us.weapons[decKey] = cur - 1;
+          const thisWeaponDec = weapons.find((w, idx) => weaponKey(w, idx) === decKey);
+          if (thisWeaponDec && !thisWeaponDec.is_primary) {
+            const decIsMelee = isMelee(thisWeaponDec);
+            weapons.some((w, idx) => {
+              if (!w.is_primary) return false;
+              if (isMelee(w) !== decIsMelee) return false;
+              const pk = weaponKey(w, idx);
+              us.weapons[pk] = (us.weapons[pk] || 0) + 1;
+              return true;
+            });
+          }
+          commit();
+          return;
+        }
+
         const incKey = target.dataset.weaponIncrement;
         if (incKey) {
           const cap = initialWeaponCounts[incKey] || 0;
           const cur = us.weapons[incKey] || 0;
-          us.weapons[incKey] = clamp(cur + 1, 0, cap);
+          if (cur >= cap) return;
+          us.weapons[incKey] = cur + 1;
+          const thisWeaponInc = weapons.find((w, idx) => weaponKey(w, idx) === incKey);
+          if (thisWeaponInc && !thisWeaponInc.is_primary) {
+            const incIsMelee = isMelee(thisWeaponInc);
+            weapons.some((w, idx) => {
+              if (!w.is_primary) return false;
+              if (isMelee(w) !== incIsMelee) return false;
+              const pk = weaponKey(w, idx);
+              const pcur = us.weapons[pk] || 0;
+              if (pcur > 0) { us.weapons[pk] = pcur - 1; return true; }
+              return false;
+            });
+          }
           commit();
           return;
         }
+
         const mode = target.dataset.mode;
         if (mode) {
           us.mode = mode;
@@ -515,25 +629,31 @@
       });
     });
 
+    // End round button
+    const endRoundBtn = document.querySelector("[data-battle-end-round]");
+    if (endRoundBtn) {
+      endRoundBtn.addEventListener("click", function () {
+        state.round = (state.round || 1) + 1;
+        Object.values(state.units).forEach((us) => { us.activated = false; });
+        commit();
+      });
+    }
+
+    // Reset button
     const resetBtn = document.querySelector("[data-battle-reset]");
     if (resetBtn) {
       resetBtn.addEventListener("click", function () {
-        const ok = window.confirm(
-          "Zakończyć starcie? Stan bitewny zostanie usunięty i przywrócony do wartości początkowych."
-        );
-        if (!ok) return;
+        if (!window.confirm("Zakończyć starcie? Stan bitewny zostanie usunięty i przywrócony do wartości początkowych.")) return;
         clearState(rosterId);
-        state = { units: {} };
-        cards.forEach((card) => {
-          const cid = card.dataset.rosterUnitId;
-          state.units[cid] = unitInitialState(card);
-        });
+        state = { units: {}, round: 1 };
+        cards.forEach((card) => { state.units[card.dataset.rosterUnitId] = unitInitialState(card); });
         saveState(rosterId, state);
         rerenderAll();
       });
     }
 
     rerenderAll();
+    initTooltips();
   }
 
   if (document.readyState === "loading") {

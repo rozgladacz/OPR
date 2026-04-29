@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import models
+from ..data.abilities import ABILITY_DEFINITIONS
 from ..db import get_db
 from ..paths import TEMPLATES_DIR
 from ..pdf_font_data import PDF_FONT_DATA
@@ -34,6 +35,8 @@ from .rosters import (
 
 router = APIRouter(prefix="/rosters", tags=["export"])
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+_ABILITY_DESC_MAP: dict[str, str] = {defn.name: defn.description for defn in ABILITY_DEFINITIONS if defn.description}
 
 PDF_BASE_FONT = "DejaVuSans"
 PDF_BOLD_FONT = "DejaVuSans-Bold"
@@ -92,6 +95,21 @@ def _army_rule_labels(army: models.Army | None) -> list[str]:
         if text:
             labels.append(text)
     return labels
+
+
+def _army_rule_detail(army: models.Army | None) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    for entry in costs.army_rules(army=army):
+        if not isinstance(entry, dict):
+            continue
+        slug = str(entry.get("slug") or "").strip()
+        if not slug or slug.startswith(utils.ARMY_RULE_OFF_PREFIX):
+            continue
+        label = entry.get("label") or entry.get("value") or slug
+        text = str(label).strip()
+        if text:
+            result.append({"label": text, "description": str(entry.get("description") or "").strip()})
+    return result
 
 
 def _ensure_pdf_fonts() -> None:
@@ -254,7 +272,16 @@ def roster_battle_state(
                 t.strip() for t in traits_raw.split(",") if t and t.strip()
             ]
     roster_groups = group_roster_items(roster_items, roster.army)
-    army_rules = _army_rule_labels(getattr(roster, "army", None))
+    army_rules_detail = _army_rule_detail(getattr(roster, "army", None))
+    ability_descriptions: dict[str, str] = dict(_ABILITY_DESC_MAP)
+    army_rule_labels: list[str] = [r["label"] for r in army_rules_detail]
+    army_has_zemsta = any("Zemsta" in lbl for lbl in army_rule_labels)
+    for entry in roster_items:
+        ability_descriptions.update(entry.get("active_descs") or {})
+        ability_descriptions.update(entry.get("aura_descs") or {})
+        passive_labels: list[str] = entry.get("passive_labels") or []
+        has_zemsta = army_has_zemsta or any("Zemsta" in lbl for lbl in passive_labels)
+        entry["show_wounds"] = ((entry.get("toughness") or 1) > 1) or has_zemsta
     return templates.TemplateResponse(
         "roster_battle_state.html",
         {
@@ -264,8 +291,8 @@ def roster_battle_state(
             "roster_items": roster_items,
             "roster_groups": roster_groups,
             "total_cost_rounded": utils.round_points(total_cost),
-            "generated_at": datetime.utcnow(),
-            "army_rules": army_rules,
+            "army_rules_detail": army_rules_detail,
+            "ability_descriptions": ability_descriptions,
         },
     )
 
