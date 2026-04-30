@@ -1886,6 +1886,25 @@ def _selected_ability_entries(
     return selected
 
 
+def _ability_base_label(entry: dict) -> str:
+    base = entry.get("label") or entry.get("raw") or entry.get("slug") or ""
+    custom = str(entry.get("custom_name") or "").strip()
+    if custom:
+        return f"{custom} [{base}]" if base else custom
+    return base
+
+
+def _expand_ability_labels(entries: list[dict]) -> list[str]:
+    labels: list[str] = []
+    for entry in entries:
+        if not entry:
+            continue
+        label = _ability_base_label(entry)
+        if label:
+            labels.extend([label] * max(_coerce_int(entry.get("count"), 0), 1))
+    return labels
+
+
 def _ability_label_with_count(entry: dict) -> str:
     base_label = entry.get("label") or entry.get("raw") or entry.get("slug") or ""
     custom = str(entry.get("custom_name") or "").strip()
@@ -2754,16 +2773,8 @@ def _roster_unit_export_data(
         for entry in selected_passives
         if entry
     ]
-    active_labels = [
-        _ability_label_with_count(entry)
-        for entry in selected_actives
-        if entry
-    ]
-    aura_labels = [
-        _ability_label_with_count(entry)
-        for entry in selected_auras
-        if entry
-    ]
+    active_labels = _expand_ability_labels(selected_actives)
+    aura_labels = _expand_ability_labels(selected_auras)
     # Single quote call services both totals_map (when not pre-supplied)
     # and selected_total. Previous version called _internal_roster_unit_quote
     # twice with identical args — wasted ~40-80ms per unit on exports.

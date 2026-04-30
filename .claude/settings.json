@@ -1,4 +1,14 @@
 {
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {"type": "command", "command": "python -m pytest -x --tb=short 2>&1 | tail -20"}
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash(make test)",
@@ -14,7 +24,12 @@
       "Bash(rg*)",
       "Bash(grep *)",
       "Bash(cat*)",
-      "Bash(sed*)"
+      "Bash(sed*)",
+      "mcp__Claude_Preview__preview_logs",
+      "mcp__Claude_Preview__preview_screenshot",
+      "mcp__Claude_Preview__preview_console_logs",
+      "mcp__Claude_Preview__preview_snapshot",
+      "mcp__Claude_Preview__preview_list"
     ]
   }
 }

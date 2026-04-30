@@ -177,10 +177,11 @@
     {% endif %}
   </div>
 
-  {% macro ability_span(label, toggleable=false) %}
+  {% macro ability_span(label, toggleable=false, idx=none) %}
     {%- set key = label.split('(')[0].split(' ×')[0].strip() -%}
     {%- set desc = ability_descriptions.get(label) or ability_descriptions.get(key) or '' -%}
-    <span{% if desc and toggleable %} class="ability-tip toggle-ability"{% elif desc %} class="ability-tip"{% elif toggleable %} class="toggle-ability"{% endif %}{% if desc %} data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="{{ desc | e }}"{% endif %}{% if toggleable %} data-ability-toggle="{{ label | e }}"{% endif %}>{{ label }}</span>
+    {%- set toggle_key = (label + '[' + idx|string + ']') if (toggleable and idx is not none) else label -%}
+    <span{% if desc and toggleable %} class="ability-tip toggle-ability"{% elif desc %} class="ability-tip"{% elif toggleable %} class="toggle-ability"{% endif %}{% if desc %} data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="{{ desc | e }}"{% endif %}{% if toggleable %} data-ability-toggle="{{ toggle_key | e }}"{% endif %}>{{ label }}</span>
   {%- endmacro %}
 
   <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 row-cols-xxl-4 g-3" data-battle-section>
@@ -263,10 +264,10 @@
             <div class="ability-line"><strong>Pasywne:</strong> {% for lbl in item.passive_labels %}{{ ability_span(lbl) }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
             {% endif %}
             {% if item.active_labels %}
-            <div class="ability-line"><strong>Aktywne:</strong> {% for lbl in item.active_labels %}{{ ability_span(lbl, toggleable=true) }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
+            <div class="ability-line"><strong>Aktywne:</strong> {% for lbl in item.active_labels %}{{ ability_span(lbl, toggleable=true, idx=loop.index0) }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
             {% endif %}
             {% if item.aura_labels %}
-            <div class="ability-line"><strong>Aury:</strong> {% for lbl in item.aura_labels %}{{ ability_span(lbl, toggleable=true) }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
+            <div class="ability-line"><strong>Aury:</strong> {% for lbl in item.aura_labels %}{{ ability_span(lbl, toggleable=true, idx=loop.index0) }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
             {% endif %}
           </div>
           {% endif %}

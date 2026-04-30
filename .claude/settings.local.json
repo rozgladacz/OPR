@@ -36,7 +36,10 @@
       "Bash(curl -s -c /tmp/opr_cookies.txt -X POST http://localhost:8000/auth/login -d \"username=admin&password=admin\" -L -o /dev/null -w \"%{http_code}\\\\n\")",
       "Bash(curl -s -b /tmp/opr_cookies.txt http://localhost:8000/rosters/3/battle-state -o /tmp/battle.html -w \"GET battle-state -> %{http_code}, size: %{size_download}\\\\n\")",
       "Read(//tmp/**)",
-      "Bash(\".venv/Scripts/python.exe\" -m pytest tests/ -x -q)"
+      "Bash(\".venv/Scripts/python.exe\" -m pytest tests/ -x -q)",
+      "Bash(make profile *)",
+      "Bash(python scripts/profile_quote.py 10)",
+      "Bash(PYTHONPATH=. python scripts/profile_quote.py 10)"
     ]
   }
 }
