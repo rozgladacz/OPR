@@ -71,6 +71,14 @@
     return s;
   }
 
+  function effectiveIsPrimary(weapon, idx, us) {
+    const key = weaponKey(weapon, idx);
+    if (us.primaryOverrides && key in us.primaryOverrides) {
+      return !!us.primaryOverrides[key];
+    }
+    return !!weapon.is_primary;
+  }
+
   function storageKey(rosterId) {
     return STORAGE_PREFIX + String(rosterId);
   }
@@ -121,6 +129,7 @@
       activeModels: initialModels,
       woundsRemaining: 0,
       weapons: weaponCounts,
+      primaryOverrides: {},
       mode: "equipment",
       struckAbilities: [],
     };
@@ -300,7 +309,10 @@
 
         const labelText = document.createElement("span");
         labelText.className = "weapon-label ms-2";
-        labelText.textContent = (w.is_primary ? "⚑ " : "") + (w.name || "Broń");
+        labelText.style.cursor = "pointer";
+        const isPrimary = effectiveIsPrimary(w, entry.idx, unitState);
+        labelText.textContent = (isPrimary ? "⚑ " : "") + (w.name || "Broń");
+        labelText.dataset.weaponPrimaryToggle = entry.key;
         const rangeDisp = parseRangeInt(w) || "wręcz";
         const trDisp = w.traits || "-";
         labelText.dataset.bsToggle = "tooltip";
@@ -452,6 +464,7 @@
           activeModels: typeof stored.activeModels === "number" ? stored.activeModels : initial.activeModels,
           woundsRemaining: typeof stored.woundsRemaining === "number" ? stored.woundsRemaining : initial.woundsRemaining,
           weapons: {},
+          primaryOverrides: (stored.primaryOverrides && typeof stored.primaryOverrides === "object") ? stored.primaryOverrides : {},
           mode: stored.mode || "equipment",
           struckAbilities: Array.isArray(stored.struckAbilities) ? stored.struckAbilities : [],
         };
@@ -501,7 +514,7 @@
       });
 
       card.addEventListener("click", function (ev) {
-        // Ability toggle (span click — not a button)
+        // Ability toggle (span click)
         const abilitySpan = ev.target.closest("[data-ability-toggle]");
         if (abilitySpan) {
           const us = state.units[id];
@@ -513,6 +526,32 @@
             us.struckAbilities.splice(idx, 1);
           } else {
             us.struckAbilities.push(label);
+          }
+          commit();
+          return;
+        }
+
+        // Primary weapon toggle (weapon name click)
+        const primaryToggleEl = ev.target.closest("[data-weapon-primary-toggle]");
+        if (primaryToggleEl) {
+          const us = state.units[id];
+          if (!us) return;
+          const key = primaryToggleEl.dataset.weaponPrimaryToggle;
+          const wIdx = weapons.findIndex((w, i) => weaponKey(w, i) === key);
+          if (wIdx < 0) return;
+          const w = weapons[wIdx];
+          const thisMelee = isMelee(w);
+          if (!us.primaryOverrides) us.primaryOverrides = {};
+          if (effectiveIsPrimary(w, wIdx, us)) {
+            us.primaryOverrides[key] = false;
+          } else {
+            weapons.forEach((ow, oi) => {
+              const ok = weaponKey(ow, oi);
+              if (ok !== key && isMelee(ow) === thisMelee && effectiveIsPrimary(ow, oi, us)) {
+                us.primaryOverrides[ok] = false;
+              }
+            });
+            us.primaryOverrides[key] = true;
           }
           commit();
           return;
@@ -583,11 +622,12 @@
           const cur = us.weapons[decKey] || 0;
           if (cur <= 0) return;
           us.weapons[decKey] = cur - 1;
-          const thisWeaponDec = weapons.find((w, idx) => weaponKey(w, idx) === decKey);
-          if (thisWeaponDec && !thisWeaponDec.is_primary) {
+          const decIdx = weapons.findIndex((w, i) => weaponKey(w, i) === decKey);
+          const thisWeaponDec = weapons[decIdx];
+          if (thisWeaponDec && !effectiveIsPrimary(thisWeaponDec, decIdx, us)) {
             const decIsMelee = isMelee(thisWeaponDec);
             weapons.some((w, idx) => {
-              if (!w.is_primary) return false;
+              if (!effectiveIsPrimary(w, idx, us)) return false;
               if (isMelee(w) !== decIsMelee) return false;
               const pk = weaponKey(w, idx);
               us.weapons[pk] = (us.weapons[pk] || 0) + 1;
@@ -604,11 +644,12 @@
           const cur = us.weapons[incKey] || 0;
           if (cur >= cap) return;
           us.weapons[incKey] = cur + 1;
-          const thisWeaponInc = weapons.find((w, idx) => weaponKey(w, idx) === incKey);
-          if (thisWeaponInc && !thisWeaponInc.is_primary) {
+          const incIdx = weapons.findIndex((w, i) => weaponKey(w, i) === incKey);
+          const thisWeaponInc = weapons[incIdx];
+          if (thisWeaponInc && !effectiveIsPrimary(thisWeaponInc, incIdx, us)) {
             const incIsMelee = isMelee(thisWeaponInc);
             weapons.some((w, idx) => {
-              if (!w.is_primary) return false;
+              if (!effectiveIsPrimary(w, idx, us)) return false;
               if (isMelee(w) !== incIsMelee) return false;
               const pk = weaponKey(w, idx);
               const pcur = us.weapons[pk] || 0;

@@ -1,5 +1,12 @@
 # AGENTS.md
 
+## Project Context
+- This is an OPR (One Page Rules) wargame tooling project. Tests live alongside Python rule logic; weapon/ability costs and rule parameters are SSOT-driven. After rule changes, verify both backend payloads and JS rendering layers.
+
+## Testing
+- ALWAYS run the full test suite (e.g., `pytest` or `make test`) after making code changes, before declaring a task complete. Do not wait for the user to ask.
+- Running `pytest` is **not optional** even for 'trivial' one-line changes. The PostToolUse hook enforces this; do not suppress hook output.
+
 ## Cel projektu
 Aplikacja służy do przygotowywania list (Rozpisek) do gry.
 
@@ -46,13 +53,21 @@ Zależności:
 - Dla zadań prostych wykonuj minimalny lokalny patch.
 - Nie przebudowuj architektury bez potrzeby.
 - Preferuj małe, odwracalne zmiany.
+- Before writing any code, list every layer this change touches (data model, backend payload, JS render, CSS, tests). Then implement each layer and run tests. After tests pass, walk me through how you verified each layer end-to-end.
+- As you work on a prolonged task, maintain a `HANDOFF.md` file with: current goal, files changed so far, hypotheses tested, what's still pending, and how to verify. Update it after every significant step so I can resume if interrupted.
+- If the user says 'nie', 'wrong', 'cofnij', or equivalent: **stop, revert the last change, ask for clarification** before attempting a new approach.
 
 ## Testy i weryfikacja
 - Po zmianie logiki uruchom testy związane z dotkniętym obszarem.
 - Po zmianie UI sprawdź też stan pusty, błędny i podstawowy scenariusz.
 - Jeśli testów brakuje, dodaj minimalny test regresji.
 - Nie uznawaj zadania za zakończone bez krótkiej weryfikacji diffu.
+- Before declaring task done, search the codebase for every other call site or case that touches the code you just modified. List each one and explain why your change does or doesn't affect it. Then run the full test suite.
 - Na początku analizy wymagań oceń, czy zlecone zadanie dezaktualizuje istniejące testy. Jeśli tak — popraw lub usuń je jako pierwszy krok, zanim zmienisz kod produkcyjny. Nieaktualne testy blokują pracę i generują fałszywe błędy.
+
+## String Handling
+- NEVER use typographic/smart quotes (U+201C, U+201D, U+2018, U+2019) as Python string delimiters. The codebase uses these characters as inch notation (e.g., 12") inside string literals — only use straight ASCII quotes (" or ') as delimiters. When using the Edit tool, double-check that quote characters in `new_string` match the original delimiter style.
+- **Encoding gate:** before any `Edit` or `Write` that modifies a `.py` file, verify `open(file, encoding='utf-8')` succeeds. Abort if it raises — never silently replace characters.
 
 ## Konwencje zmian
 - Nie zmieniaj formatowania poza zakresem zadania.
@@ -118,6 +133,10 @@ i zweryfikuj brak wywołań. W szczególności sprawdź łańcuch DOMContentLoad
 **Domknięcie `initRosterEditor`** (linia ~3590–5848): zawiera ~60 prywatnych funkcji współdzielących stan przez closure-scope (`loadoutState`, `activeItem`, `refreshRosterCostBadgesInProgress`, itp.). Zmiana jednej funkcji może mieć efekty uboczne w innych przez wspólne zmienne.
 
 **Konwencja `include_item_costs`:** badge-only calls do `/quote` zawsze przekazują `include_item_costs: false`. Tylko dedykowany quote aktywnego oddziału w `handleStateChange` przekazuje `true`. Naruszenie tej reguły przywróci wielokrotnie wolniejsze badge refresh.
+
+## Git Workflow
+- When the user asks to align branches to a previous commit, default to `git reset --hard <sha>` (not merge). Confirm which repository (e.g., OPR vs OPR_Prod) you are operating in before running destructive commands.
+- Before any destructive git command (`reset --hard`, `push --force`, `checkout .`), print `git remote -v` AND `git branch` so the repo identity is unambiguous.
 
 ## Komendy projektu
 - Install: `python -m venv .venv && source .venv/bin/activate && pip install -r requirements-dev.txt`
