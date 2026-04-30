@@ -1,5 +1,5 @@
 
-.PHONY: dev test test-fast lint smoke
+.PHONY: dev test test-fast lint smoke check safe-edit
 
 dev:
 	python -m uvicorn app.main:app --reload
@@ -12,6 +12,12 @@ test-fast:
 
 lint:
 	python -m ruff check app/
+
+check:
+	make lint && make test-fast
+
+safe-edit:
+	@python -c "import sys, pathlib; [open(f,'r',encoding='utf-8').read() for f in sys.argv[1:] if pathlib.Path(f).exists()]" $(FILES)
 
 smoke:
 	@echo "=== Smoke test checklist (ręczny) ==="
